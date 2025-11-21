@@ -8,8 +8,8 @@ export default function HowToGoPage() {
       {/* Hero Section */}
       <section className="bg-gradient-to-br from-primary/5 to-blue-50 py-20 px-4 sm:px-6 lg:px-10">
         <div className="max-w-4xl mx-auto text-center">
-          <div className="w-24 h-24 mx-auto mb-8 bg-white rounded-2xl shadow-xl flex items-center justify-center">
-            <span className="material-symbols-outlined text-5xl text-primary">help_outline</span>
+          <div className="w-24 h-24 mx-auto mb-8 bg-white rounded-2xl shadow-xl flex items-center justify-center overflow-hidden p-4">
+            <img src="/logo/5.png" alt="Logo" className="w-full h-full object-contain" />
           </div>
           <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6 leading-tight">
             如何運作？
@@ -55,7 +55,7 @@ export default function HowToGoPage() {
                     <td className="px-6 py-4 text-sm font-semibold text-gray-900">升級條件</td>
                     <td className="px-6 py-4 text-sm text-gray-600">註冊即為訪客</td>
                     <td className="px-6 py-4 text-sm text-gray-600 font-medium text-primary">儲值金 ≥ NT$1,500</td>
-                    <td className="px-6 py-4 text-sm text-gray-600 font-medium text-purple-700">儲值金 ≥ NT$5,000<br/>+ 代理費 NT$6,000</td>
+                    <td className="px-6 py-4 text-sm text-gray-600 font-medium text-purple-700">儲值金 ≥ NT$5,000<br/>+ 代理費 NT$6,000/年</td>
                   </tr>
                   <tr className="hover:bg-gray-50/50">
                     <td className="px-6 py-4 text-sm font-semibold text-gray-900">維持資格</td>
@@ -64,7 +64,7 @@ export default function HowToGoPage() {
                     <td className="px-6 py-4 text-sm text-gray-600">45日內消費 ≥ NT$300</td>
                   </tr>
                   <tr className="hover:bg-gray-50/50">
-                    <td className="px-6 py-4 text-sm font-semibold text-gray-900">未達標結果</td>
+                    <td className="px-6 py-4 text-sm font-semibold text-gray-900">未達標會員</td>
                     <td className="px-6 py-4 text-sm text-gray-400">-</td>
                     <td className="px-6 py-4 text-sm text-red-500 font-medium">關閉登入權限</td>
                     <td className="px-6 py-4 text-sm text-red-500 font-medium">關閉登入權限</td>
@@ -172,7 +172,7 @@ export default function HowToGoPage() {
             <ul className="space-y-4 flex-1 text-gray-600">
               <li className="flex items-start gap-3">
                 <span className="material-symbols-outlined text-purple-600 shrink-0">paid</span>
-                <span className="font-medium text-gray-900">升級條件：儲值 NT$5,000 + 代理費 NT$6,000。</span>
+                <span className="font-medium text-gray-900">升級條件：儲值 NT$5,000 + 代理費 NT$6,000/年。</span>
               </li>
               <li className="flex items-start gap-3">
                 <span className="material-symbols-outlined text-green-500 shrink-0">check_circle</span>
@@ -227,7 +227,7 @@ export default function HowToGoPage() {
         {/* FAQ / Contact */}
         <section className="text-center py-10">
           <h2 className="text-2xl font-bold text-gray-900 mb-6">還有疑問嗎？</h2>
-          <p className="text-gray-600 mb-8">如果您對會員制度有任何疑問，歡迎隨時聯繫我們的客服團隊。</p>
+          <p className="text-gray-600 mb-8">還有疑問嗎?</p>
           <div className="flex flex-wrap justify-center gap-6">
             <div className="flex items-center gap-2 text-gray-700 bg-white px-5 py-3 rounded-lg shadow-sm border border-gray-200">
               <span className="material-symbols-outlined text-primary">mail</span>
