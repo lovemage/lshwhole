@@ -1,26 +1,73 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* ============================================
+   LIGHT DESIGN SYSTEM - Global CSS Configuration
+   ============================================ */
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+/* ============================================
+   LIGHT THEME - Default for all pages
+   ============================================ */
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html, body {
+  height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: #f8f8f5;
+  color: #111318;
+  font-family: "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
 }
+
+/* ============================================
+   MATERIAL ICONS
+   ============================================ */
+
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+  font-variation-settings:
+    "FILL" 0,
+    "wght" 400,
+    "GRAD" 0,
+    "opsz" 24;
+}
+
+/* ============================================
+   LIGHT DESIGN UTILITY CLASSES
+   ============================================ */
+
+/* Background colors */
+.bg-light-primary { background-color: #fac638; }
+.bg-light-background { background-color: #f8f8f5; }
+.bg-light-white { background-color: #ffffff; }
+.bg-light-gray-50 { background-color: #f9fafb; }
+.bg-light-gray-100 { background-color: #f3f4f6; }
+.bg-light-gray-200 { background-color: #e5e7eb; }
+
+/* Text colors */
+.text-light-primary { color: #fac638; }
+.text-light-dark { color: #111318; }
+.text-light-gray-600 { color: #4b5563; }
+.text-light-gray-500 { color: #6b7280; }
+.text-light-gray-400 { color: #9ca3af; }
+
+/* Border colors */
+.border-light-gray-200 { border-color: #e5e7eb; }
+.border-light-gray-300 { border-color: #d1d5db; }
+
+/* Hover states */
+.hover-light-primary:hover { color: #fac638; }
+.hover-light-bg-gray:hover { background-color: #f3f4f6; }

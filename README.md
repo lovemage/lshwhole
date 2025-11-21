@@ -1,36 +1,64 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Lsx Wholesale - 前端應用
 
-## Getting Started
+這是 Lsx Wholesale 批發電商平台的 Next.js 前端應用。
 
-First, run the development server:
+## 快速開始
 
-```bash
+### 安裝依賴
+\\\ash
+npm install
+\\\
+
+### 配置環境變數
+在 \web\ 目錄建立 \.env.local\ 文件：
+\\\nv
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+ADMIN_JWT_SECRET=your_admin_jwt_secret
+\\\
+
+### 啟動開發伺服器
+\\\ash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+\\\
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+伺服器將在 \http://localhost:3000\ 啟動
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 常用命令
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| 命令 | 說明 |
+|------|------|
+| \
+pm run dev\ | 啟動開發伺服器 |
+| \
+pm run build\ | 構建生產版本 |
+| \
+pm start\ | 運行生產版本 |
+| \
+pm run type-check\ | TypeScript 類型檢查 |
 
-## Learn More
+## 頁面導航
 
-To learn more about Next.js, take a look at the following resources:
+| 頁面 | URL |
+|------|-----|
+| 首頁 | http://localhost:3000 |
+| 產品列表 | http://localhost:3000/products |
+| 產品詳情 | http://localhost:3000/products/1 |
+| 購物車 | http://localhost:3000/cart |
+| 結帳 | http://localhost:3000/checkout |
+| 登入 | http://localhost:3000/login |
+| 註冊 | http://localhost:3000/register |
+| 後台管理 | http://localhost:3000/admin |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 技術棧
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- **框架**：Next.js 14 (App Router)
+- **語言**：TypeScript
+- **樣式**：Tailwind CSS v4
+- **後端**：Supabase (Postgres + Auth)
+- **部署**：Vercel
 
-## Deploy on Vercel
+## 完整文檔
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+請查看根目錄的 \README.md\ 獲取完整的項目文檔。
