@@ -8,7 +8,7 @@ import { createClient } from "@supabase/supabase-js";
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params: paramsPromise }: { params: Promise<{ id: string }> }
 ) {
   try {
     const authHeader = request.headers.get("Authorization") || request.headers.get("authorization");
@@ -48,7 +48,7 @@ export async function PUT(
       return NextResponse.json({ error: "login_enabled 必須為 boolean" }, { status: 400 });
     }
 
-    const memberId = params.id;
+    const { id: memberId } = await paramsPromise;
 
     // 檢查目標會員是否存在
     const { data: targetMember, error: memberError } = await admin
@@ -117,7 +117,7 @@ export async function PUT(
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params: paramsPromise }: { params: Promise<{ id: string }> }
 ) {
   try {
     const authHeader = request.headers.get("Authorization") || request.headers.get("authorization");
@@ -150,7 +150,7 @@ export async function GET(
       return NextResponse.json({ error: "無權限執行此操作" }, { status: 403 });
     }
 
-    const memberId = params.id;
+    const { id: memberId } = await paramsPromise;
 
     // 查詢會員登入權限狀態
     const { data: profile, error: profileError } = await admin
@@ -170,4 +170,3 @@ export async function GET(
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
-
