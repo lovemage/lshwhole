@@ -230,7 +230,14 @@ export async function POST(request: NextRequest) {
 
     if (itemsError) {
       console.error("創建訂單項目失敗:", itemsError);
-      // 不中斷流程，訂單已創建
+      // 刪除已創建的訂單和相關記錄
+      await admin.from("orders").delete().eq("id", order.id);
+      await admin.from("wallet_holds").delete().eq("order_id", order.id);
+      await admin.from("wallet_ledger").delete().eq("external_ref", externalRef);
+      return NextResponse.json(
+        { error: "創建訂單項目失敗，請聯繫管理員" },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({
