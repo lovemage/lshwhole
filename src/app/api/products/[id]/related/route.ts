@@ -85,7 +85,7 @@ export async function GET(
     }
 
     // 5. 獲取商品封面圖片
-    const productIds = (products || []).map(p => p.id);
+    const productIds = (products || []).map((p: any) => p.id);
     let coverMap = new Map<number, string>();
     
     if (productIds.length > 0) {
