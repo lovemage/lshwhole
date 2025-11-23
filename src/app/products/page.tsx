@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import BannerCarousel from "@/components/BannerCarousel";
 import { supabase } from "@/lib/supabase";
-import CartBadge from "@/components/CartBadge";
 import { useMemberPermissions } from "@/lib/memberPermissions";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
 
 interface RetailProduct {
   id: number;
@@ -24,15 +24,11 @@ export default function ProductsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState("newest");
 
-  const router = useRouter();
-
   // 分類與標籤
   const [categoriesAll, setCategoriesAll] = useState<Category[]>([]);
   const [relations, setRelations] = useState<Relation[]>([]);
 
   const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [currentUser, setCurrentUser] = useState<{ email: string | null } | null>(null);
-  const [walletBalance, setWalletBalance] = useState<number | null>(null);
 
   // 會員權限
   const { loading: permissionsLoading, error: permissionsError, data: permissions } = useMemberPermissions();
@@ -41,24 +37,7 @@ export default function ProductsPage() {
     (async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user ?? null;
         setAccessToken(session?.access_token ?? null);
-        if (user) {
-          setCurrentUser({ email: user.email ?? null });
-          const { data: walletData, error: walletError } = await supabase
-            .from("wallets")
-            .select("balance_twd")
-            .eq("user_id", user.id)
-            .maybeSingle();
-          if (!walletError && walletData) {
-            setWalletBalance(walletData.balance_twd ?? 0);
-          } else {
-            setWalletBalance(0);
-          }
-        } else {
-          setCurrentUser(null);
-          setWalletBalance(null);
-        }
       } catch (e) {
         console.error("取得登入狀態失敗（商品列表）", e);
       }
@@ -66,17 +45,6 @@ export default function ProductsPage() {
   }, []);
 
   const [tags, setTags] = useState<Tag[]>([]);
-
-
-  const handleLogout = async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch (e) {
-      console.error("登出失敗", e);
-    } finally {
-      router.push("/");
-    }
-  };
 
   // 分類層級
   // 若後端有設定 retail_visible，則僅顯示零售端開放的 L1/L2 分類
@@ -242,67 +210,7 @@ export default function ProductsPage() {
 
   return (
     <div style={{ backgroundColor: "#f8f8f5" }} className="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden">
-      {/* Header */}
-      <header className="sticky top-0 z-50 w-full bg-white/80 backdrop-blur-sm">
-        <div className="flex items-center justify-between whitespace-nowrap border-b border-gray-200 px-4 sm:px-6 lg:px-10 py-3">
-          <div className="flex items-center gap-8">
-            <div className="flex items-center gap-3 text-gray-800">
-              <div className="size-6 text-primary">
-                <svg fill="none" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M44 11.2727C44 14.0109 39.8386 16.3957 33.69 17.6364C39.8386 18.877 44 21.2618 44 24C44 26.7382 39.8386 29.123 33.69 30.3636C39.8386 31.6043 44 33.9891 44 36.7273C44 40.7439 35.0457 44 24 44C12.9543 44 4 40.7439 4 36.7273C4 33.9891 8.16144 31.6043 14.31 30.3636C8.16144 29.123 4 26.7382 4 24C4 21.2618 8.16144 18.877 14.31 17.6364C8.16144 16.3957 4 14.0109 4 11.2727C4 7.25611 12.9543 4 24 4C35.0457 4 44 7.25611 44 11.2727Z" fill="currentColor"></path>
-                </svg>
-              </div>
-              <h2 className="text-gray-900 text-lg font-bold leading-tight tracking-[-0.015em]">Lsx wholesale</h2>
-            </div>
-            <nav className="hidden lg:flex items-center gap-8">
-              <Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="/">首頁</Link>
-              <Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="/products">商品</Link>
-              <Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="#">韓國</Link>
-              <Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="#">日本</Link>
-              <Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="#">泰國</Link>
-            </nav>
-          </div>
-          <div className="flex gap-2 items-center">
-            {currentUser ? (
-              <>
-                <span className="text-sm text-gray-700">
-                  儲值金：
-                  <span className="font-semibold">NT$ {walletBalance ?? 0}</span>
-                </span>
-                <Link
-                  href="/member"
-                  className="flex min-w-[96px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-200 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-300 transition-colors"
-                >
-                  <span className="truncate">會員中心</span>
-                </Link>
-                <button
-                  onClick={handleLogout}
-                  className="flex min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-100 text-gray-700 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-200 transition-colors"
-                >
-                  <span className="truncate">登出</span>
-                </button>
-                <CartBadge />
-              </>
-            ) : (
-              <>
-                <Link
-                  href="/register"
-                  className="flex min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-primary text-white text-sm font-bold leading-normal tracking-[0.015em] hover:bg-primary/90 transition-colors"
-                >
-                  <span className="truncate">註冊</span>
-                </Link>
-                <Link
-                  href="/login"
-                  className="flex min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-200 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-300 transition-colors"
-                >
-                  <span className="truncate">登入</span>
-                </Link>
-                <CartBadge />
-              </>
-            )}
-          </div>
-        </div>
-      </header>
+      <Header />
 
       {/* Main Content */}
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 py-8">
@@ -574,44 +482,7 @@ export default function ProductsPage() {
         </div>
       </main>
 
-      {/* Footer */}
-      <footer className="bg-white border-t border-gray-200 mt-12">
-        <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-10">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-gray-500 tracking-wider uppercase">網站導航</h3>
-              <ul className="space-y-2">
-                <li><Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="#">商品</Link></li>
-                <li><Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="#">韓國</Link></li>
-                <li><Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="#">日本</Link></li>
-                <li><Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="#">泰國</Link></li>
-              </ul>
-            </div>
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-gray-500 tracking-wider uppercase">客戶服務</h3>
-              <ul className="space-y-2">
-                <li><Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="#">聯絡我們</Link></li>
-                <li><Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="#">常見問題</Link></li>
-                <li><Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="#">運送資訊</Link></li>
-              </ul>
-            </div>
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-gray-500 tracking-wider uppercase">法律</h3>
-              <ul className="space-y-2">
-                <li><Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="/terms-of-service">服務條款</Link></li>
-                <li><Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="/privacy-policy">隱私政策</Link></li>
-              </ul>
-            </div>
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-gray-500 tracking-wider uppercase">電子報</h3>
-              <p className="text-gray-600 text-sm">獲取最新的產品更新和即將推出的銷售資訊。</p>
-            </div>
-          </div>
-          <div className="mt-12 border-t border-gray-200 pt-8 flex flex-col sm:flex-row items-center justify-between">
-            <p className="text-gray-600 text-sm">© {new Date().getFullYear()} Lsx 批發。版權所有。</p>
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }

@@ -13,7 +13,7 @@ export default function PrivacyPolicy() {
       sections: [
         {
           title: '1. 政策簡介',
-          content: '歡迎來到 Lsx wholesale。我們致力於保護您的隱私。本隱私政策說明我們在您訪問我們的網站時如何收集、使用、披露和保護您的信息。請仔細閱讀本隱私政策。如果您不同意本隱私政策的條款，請不要訪問該網站。'
+          content: '歡迎來到 LshWholesale。我們致力於保護您的隱私。本隱私政策說明我們在您訪問我們的網站時如何收集、使用、披露和保護您的信息。請仔細閱讀本隱私政策。如果您不同意本隱私政策的條款，請不要訪問該網站。'
         },
         {
           title: '2. 我們收集的數據',
@@ -59,7 +59,7 @@ export default function PrivacyPolicy() {
       sections: [
         {
           title: '1. Introduction',
-          content: 'Welcome to Lsx wholesale. We are committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you visit our website. Please read this privacy policy carefully. If you do not agree with the terms of this privacy policy, please do not access the site.'
+          content: 'Welcome to LshWholesale. We are committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you visit our website. Please read this privacy policy carefully. If you do not agree with the terms of this privacy policy, please do not access the site.'
         },
         {
           title: '2. Data We Collect',
@@ -114,7 +114,7 @@ export default function PrivacyPolicy() {
                 <path d="M44 11.2727C44 14.0109 39.8386 16.3957 33.69 17.6364C39.8386 18.877 44 21.2618 44 24C44 26.7382 39.8386 29.123 33.69 30.3636C39.8386 31.6043 44 33.9891 44 36.7273C44 40.7439 35.0457 44 24 44C12.9543 44 4 40.7439 4 36.7273C4 33.9891 8.16144 31.6043 14.31 30.3636C8.16144 29.123 4 26.7382 4 24C4 21.2618 8.16144 18.877 14.31 17.6364C8.16144 16.3957 4 14.0109 4 11.2727C4 7.25611 12.9543 4 24 4C35.0457 4 44 7.25611 44 11.2727Z" fill="currentColor"></path>
               </svg>
             </div>
-            <h1 className="text-lg font-bold text-text-primary-light">Lsx wholesale</h1>
+            <h1 className="text-lg font-bold text-text-primary-light">LshWholesale</h1>
           </Link>
 
           {/* Language Toggle */}
@@ -187,7 +187,7 @@ export default function PrivacyPolicy() {
           </div>
 
           <div className="border-t border-border-light pt-8 text-center">
-            <p className="text-text-secondary-light">© {new Date().getFullYear()} Lsx wholesale. 版權所有。</p>
+            <p className="text-text-secondary-light">© {new Date().getFullYear()} LshWholesale. 版權所有。</p>
           </div>
         </div>
       </footer>

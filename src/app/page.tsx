@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import BannerCarousel from "@/components/BannerCarousel";
 import { supabase } from "@/lib/supabase";
-import CartBadge from "@/components/CartBadge";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
 
 interface Announcement {
   id: number;
@@ -24,8 +24,6 @@ export default function HomePage() {
     cover_image_url: string | null;
   }
 
-  const router = useRouter();
-
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAnnouncements, setShowAnnouncements] = useState(true);
@@ -33,9 +31,7 @@ export default function HomePage() {
   const [bestsellers, setBestsellers] = useState<RetailProduct[]>([]);
   const [bsLoading, setBsLoading] = useState(true);
 
-  const [currentUser, setCurrentUser] = useState<{ email: string | null } | null>(null);
   const [userTier, setUserTier] = useState<string>("guest");
-  const [walletBalance, setWalletBalance] = useState<number | null>(null);
 
   const [displayProducts, setDisplayProducts] = useState<{
     popular: any[];
@@ -128,8 +124,6 @@ export default function HomePage() {
         const { data: { session } } = await supabase.auth.getSession();
         const user = session?.user ?? null;
         if (user) {
-          setCurrentUser({ email: user.email ?? null });
-
           // Fetch Profile for Tier
           const { data: profileData } = await supabase
             .from("profiles")
@@ -140,21 +134,8 @@ export default function HomePage() {
           if (profileData) {
             setUserTier(profileData.tier || "guest");
           }
-
-          const { data: walletData, error: walletError } = await supabase
-            .from("wallets")
-            .select("balance_twd")
-            .eq("user_id", user.id)
-            .maybeSingle();
-          if (!walletError && walletData) {
-            setWalletBalance(walletData.balance_twd ?? 0);
-          } else {
-            setWalletBalance(0);
-          }
         } else {
-          setCurrentUser(null);
           setUserTier("guest");
-          setWalletBalance(null);
         }
       } catch (e) {
         console.error("載入登入狀態失敗（首頁）", e);
@@ -162,99 +143,10 @@ export default function HomePage() {
     })();
   }, []);
 
-  const handleLogout = async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch (e) {
-      console.error("登出失敗", e);
-    } finally {
-      router.push("/");
-    }
-  };
-
   return (
     <div className="relative flex h-auto min-h-screen w-full flex-col group/design-root overflow-x-hidden" style={{ backgroundColor: '#f8f8f5' }}>
       <div className="layout-container flex h-full grow flex-col">
-        {/* Header */}
-        <header className="sticky top-0 z-50 w-full bg-white/80 backdrop-blur-sm">
-          <div className="flex items-center justify-between whitespace-nowrap border-b border-solid border-b-gray-200 px-4 sm:px-6 lg:px-10 py-3">
-            <div className="flex items-center gap-8">
-              <Link href="/" className="flex items-center gap-3 text-gray-800">
-                <div className="size-6 text-primary">
-                  <svg fill="none" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M44 11.2727C44 14.0109 39.8386 16.3957 33.69 17.6364C39.8386 18.877 44 21.2618 44 24C44 26.7382 39.8386 29.123 33.69 30.3636C39.8386 31.6043 44 33.9891 44 36.7273C44 40.7439 35.0457 44 24 44C12.9543 44 4 40.7439 4 36.7273C4 33.9891 8.16144 31.6043 14.31 30.3636C8.16144 29.123 4 26.7382 4 24C4 21.2618 8.16144 18.877 14.31 17.6364C8.16144 16.3957 4 14.0109 4 11.2727C4 7.25611 12.9543 4 24 4C35.0457 4 44 7.25611 44 11.2727Z" fill="currentColor"></path>
-                  </svg>
-                </div>
-                <h2 className="text-gray-900 text-lg font-bold leading-tight tracking-[-0.015em]">Lsx wholesale</h2>
-              </Link>
-              <nav className="hidden lg:flex items-center gap-8">
-                <Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="/">首頁</Link>
-                <Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="/products">商品</Link>
-                <Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="/products">韓國</Link>
-                <Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="/products">日本</Link>
-                <Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="/products">泰國</Link>
-                <Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="/howtogo">如何運作</Link>
-              </nav>
-            </div>
-            <div className="flex flex-1 justify-end items-center gap-2 sm:gap-4">
-              <label className="hidden md:flex flex-col min-w-40 !h-10 max-w-64">
-                <div className="flex w-full flex-1 items-stretch rounded-lg h-full">
-                  <div className="text-gray-500 flex bg-gray-100 items-center justify-center pl-3 rounded-l-lg border-r-0">
-                    <span className="material-symbols-outlined !text-xl">search</span>
-                  </div>
-                  <input
-                    className="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-gray-900 focus:outline-0 focus:ring-0 border-none bg-gray-100 focus:border-none h-full placeholder:text-gray-500 px-4 rounded-l-none border-l-0 pl-2 text-sm font-normal leading-normal"
-                    placeholder="搜尋"
-                    defaultValue=""
-                  />
-                </div>
-              </label>
-              <div className="hidden sm:flex items-center gap-3">
-                {currentUser ? (
-                  <>
-                    <span className="text-sm text-gray-700">
-                      儲值金：
-                      <span className="font-semibold">NT$ {walletBalance ?? 0}</span>
-                    </span>
-                    <Link
-                      href="/member"
-                      className="flex min-w-[96px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-200 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-300 transition-colors"
-                    >
-                      <span className="truncate">會員中心</span>
-                    </Link>
-                    <button
-                      onClick={handleLogout}
-                      className="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-100 text-gray-700 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-200 transition-colors"
-                    >
-                      <span className="truncate">登出</span>
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <Link
-                      href="/register"
-                      className="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-primary text-white text-sm font-bold leading-normal tracking-[0.015em] hover:bg-primary/90 transition-colors"
-                    >
-                      <span className="truncate">註冊</span>
-                    </Link>
-                    <Link
-                      href="/login"
-                      className="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-200 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-300 transition-colors"
-                    >
-                      <span className="truncate">登入</span>
-                    </Link>
-                  </>
-                )}
-              </div>
-              <div className="flex gap-2">
-                <button className="flex max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 bg-gray-200 text-gray-800 gap-2 text-sm font-bold leading-normal tracking-[0.015em] min-w-0 px-2.5">
-                  <span className="material-symbols-outlined !text-xl">favorite</span>
-                </button>
-                <CartBadge />
-              </div>
-            </div>
-          </div>
-        </header>
+        <Header />
 
         <main className="flex-1">
           {/* Announcements Section */}
@@ -554,49 +446,7 @@ export default function HomePage() {
           </div>
         </main>
 
-        {/* Footer */}
-        <footer className="bg-white border-t border-gray-200 mt-12">
-          <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-10">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-gray-500 tracking-wider uppercase">網站導航</h3>
-                <ul className="space-y-2">
-                  <li><a className="text-base text-gray-600 hover:text-primary" href="#">商品</a></li>
-                  <li><a className="text-base text-gray-600 hover:text-primary" href="#">韓國</a></li>
-                  <li><a className="text-base text-gray-600 hover:text-primary" href="#">日本</a></li>
-                  <li><a className="text-base text-gray-600 hover:text-primary" href="#">泰國</a></li>
-                </ul>
-              </div>
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-gray-500 tracking-wider uppercase">客戶服務</h3>
-                <ul className="space-y-2">
-                  <li><a className="text-base text-gray-600 hover:text-primary" href="#">聯絡我們</a></li>
-                  <li><a className="text-base text-gray-600 hover:text-primary" href="#">常見問題</a></li>
-                  <li><a className="text-base text-gray-600 hover:text-primary" href="#">運送資訊</a></li>
-                </ul>
-              </div>
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-gray-500 tracking-wider uppercase">法律</h3>
-                <ul className="space-y-2">
-                  <li><Link className="text-base text-gray-600 hover:text-primary" href="/terms-of-service">服務條款</Link></li>
-                  <li><Link className="text-base text-gray-600 hover:text-primary" href="/privacy-policy">隱私政策</Link></li>
-                </ul>
-              </div>
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-gray-500 tracking-wider uppercase">電子報</h3>
-                <p className="text-base text-gray-600">獲取最新的產品更新和即將推出的銷售資訊。</p>
-                <form className="flex flex-col sm:flex-row gap-2">
-                  <input className="form-input flex-1 w-full min-w-0 rounded-lg text-gray-900 bg-gray-100 border-gray-300 focus:ring-primary focus:border-primary" placeholder="輸入您的電子郵件" type="email" />
-                  <button className="flex items-center justify-center rounded-lg h-10 px-4 bg-primary text-white text-sm font-bold" type="submit">訂閱</button>
-                </form>
-              </div>
-            </div>
-            <div className="mt-12 border-t border-gray-200 pt-8 flex flex-col sm:flex-row items-center justify-between">
-              <p className="text-base text-gray-500">© {new Date().getFullYear()} Lsx 批發。版權所有。</p>
-              <div className="flex space-x-6 mt-4 sm:mt-0">{/* social icons */}</div>
-            </div>
-          </div>
-        </footer>
+        <Footer />
       </div>
     </div>
   );

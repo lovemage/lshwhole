@@ -1,4 +1,4 @@
-# Lsx Wholesale - Light Design System
+# LshWholesale - Light Design System
 
 ## 概述
 

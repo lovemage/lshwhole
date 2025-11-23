@@ -39,7 +39,7 @@ export default function BannerCarousel({ type, className = "" }: BannerCarouselP
           setBanners([{
             id: 0,
             image_url: "https://lh3.googleusercontent.com/aida-public/AB6AXuB9h8q2R6rrIzVaGdFUFVhWKZISeTfjaafGAExcbhGU6Xxnmo5mM2xGIC80bRtWdJ6cV3ls5iFeim4pyNR3Tu2T6qz0IADVlj1Or-X-ylogBm5t2GdwfKQ2gV54baigw6PbVYyk5noMbC8FoEJcDICg3ISrV7IDjW38QYecmgtpITA3hKZUOHtxri0jyqQlodNWNuqfMxevR3QzcqDCXw7zQqB2e_kWEeoS-diStfDpjuZ8PqfQ9LlqDs8_8seD1A1FgNR-dV3spfP6",
-            title: "Lsx 批發：您的全球採購夥伴",
+            title: "LshWholesale：您的全球採購夥伴",
             description: "來自韓國、日本和泰國的正品批發商品。",
             link_url: "/products",
             sort: 0,
@@ -61,7 +61,7 @@ export default function BannerCarousel({ type, className = "" }: BannerCarouselP
         setBanners([{
           id: 0,
           image_url: "https://lh3.googleusercontent.com/aida-public/AB6AXuB9h8q2R6rrIzVaGdFUFVhWKZISeTfjaafGAExcbhGU6Xxnmo5mM2xGIC80bRtWdJ6cV3ls5iFeim4pyNR3Tu2T6qz0IADVlj1Or-X-ylogBm5t2GdwfKQ2gV54baigw6PbVYyk5noMbC8FoEJcDICg3ISrV7IDjW38QYecmgtpITA3hKZUOHtxri0jyqQlodNWNuqfMxevR3QzcqDCXw7zQqB2e_kWEeoS-diStfDpjuZ8PqfQ9LlqDs8_8seD1A1FgNR-dV3spfP6",
-          title: "Lsx 批發：您的全球採購夥伴",
+          title: "LshWholesale：您的全球採購夥伴",
           description: "來自韓國、日本和泰國的正品批發商品。",
           link_url: "/products",
           sort: 0,

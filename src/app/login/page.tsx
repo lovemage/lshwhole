@@ -85,7 +85,9 @@ export default function LoginPage() {
 
       <div className="w-full max-w-md">
         <div className="mb-6 flex items-center justify-center">
-          <div className="h-10 w-10 rounded bg-primary/90 text-white flex items-center justify-center font-bold">L</div>
+          <div className="h-20 w-auto">
+            <img src="/logo/5.png" alt="LshWholesale" className="h-full w-auto object-contain" />
+          </div>
         </div>
 
         <div className="flex w-full flex-col rounded-xl border border-gray-200/80 bg-white/80 p-8 shadow-lg backdrop-blur-sm">
@@ -176,7 +178,7 @@ export default function LoginPage() {
         </div>
 
         <div className="mt-6 text-center text-xs text-gray-500">
-          © {new Date().getFullYear()} Lsx Wholesale ·
+          © {new Date().getFullYear()} LshWholesale ·
           <a href="#" className="ml-1 hover:underline">
             服務條款
           </a>
@@ -189,4 +191,3 @@ export default function LoginPage() {
     </div>
   );
 }
-

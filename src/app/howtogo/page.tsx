@@ -1,10 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
 
 export default function HowToGoPage() {
   return (
     <div className="min-h-screen bg-[#f8f8f5] flex flex-col">
+      <Header />
+      
       {/* Hero Section */}
       <section className="bg-gradient-to-br from-primary/5 to-blue-50 py-20 px-4 sm:px-6 lg:px-10">
         <div className="max-w-4xl mx-auto text-center">
@@ -15,7 +19,7 @@ export default function HowToGoPage() {
             如何運作？
           </h1>
           <p className="text-xl text-gray-600 mb-10 max-w-2xl mx-auto leading-relaxed">
-            歡迎來到 Lsx Wholesale！我們專營韓國、日本、泰國代購商品批發。
+            歡迎來到 LshWholesale！我們專營韓國、日本、泰國代購商品批發。
             <br />
             了解我們的會員分級制度，選擇最適合您的方案。
           </p>
@@ -30,7 +34,7 @@ export default function HowToGoPage() {
         </div>
       </section>
 
-      <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-10 py-16 space-y-20">
+      <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-10 py-16 space-y-20 flex-1">
         
         {/* 會員等級總覽表格 */}
         <section>
@@ -242,16 +246,7 @@ export default function HowToGoPage() {
 
       </div>
 
-      {/* Footer Link */}
-      <footer className="bg-white border-t border-gray-200 py-8 mt-auto">
-        <div className="max-w-7xl mx-auto px-4 text-center">
-          <Link href="/" className="text-primary font-medium hover:underline flex items-center justify-center gap-2">
-            <span className="material-symbols-outlined">arrow_back</span>
-            返回首頁
-          </Link>
-          <p className="text-gray-400 text-sm mt-4">© {new Date().getFullYear()} Lsx Wholesale. All rights reserved.</p>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }

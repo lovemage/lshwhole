@@ -467,7 +467,7 @@ export default function MemberPage() {
                 </svg>
               </div>
               <h2 className="text-gray-900 text-lg font-bold leading-tight tracking-[-0.015em]">
-                Lsx wholesale
+                LshWholesale
               </h2>
             </Link>
           </div>

@@ -13,7 +13,7 @@ export default function TermsOfService() {
       sections: [
         {
           title: '1. 服務條款接受',
-          content: '訪問或使用 Lsx wholesale 網站及其服務，即表示您同意受本服務條款和隱私政策的約束。如果您不同意所有條款和條件，您可能無法訪問網站或使用任何服務。'
+          content: '訪問或使用 LshWholesale 網站及其服務，即表示您同意受本服務條款和隱私政策的約束。如果您不同意所有條款和條件，您可能無法訪問網站或使用任何服務。'
         },
         {
           title: '2. 帳戶註冊與安全',
@@ -21,7 +21,7 @@ export default function TermsOfService() {
         },
         {
           title: '3. 訂單、定價和付款',
-          content: '通過網站下達的所有訂單均需 Lsx wholesale 接受。我們保留以任何理由拒絕或取消任何訂單的權利。我們產品的價格可能隨時更改，恕不另行通知。所有付款必須按照購買時指定的付款條款進行。'
+          content: '通過網站下達的所有訂單均需 LshWholesale 接受。我們保留以任何理由拒絕或取消任何訂單的權利。我們產品的價格可能隨時更改，恕不另行通知。所有付款必須按照購買時指定的付款條款進行。'
         },
         {
           title: '4. 運送方式',
@@ -37,7 +37,7 @@ export default function TermsOfService() {
         },
         {
           title: '7. 退貨政策',
-          content: 'Lsx wholesale 精選每一件商品，希望能夠與您分享這份精心挑選的喜悅。我們理解網購可能產生認知落差，若您對商品不滿意，請於收到商品隔日起 1-3 天內通知我們，並於 7 天內將商品退回。我們將盡快協助辦理退貨。'
+          content: 'LshWholesale 精選每一件商品，希望能夠與您分享這份精心挑選的喜悅。我們理解網購可能產生認知落差，若您對商品不滿意，請於收到商品隔日起 1-3 天內通知我們，並於 7 天內將商品退回。我們將盡快協助辦理退貨。'
         },
         {
           title: '8. 商品狀況',
@@ -53,11 +53,11 @@ export default function TermsOfService() {
         },
         {
           title: '11. 知識產權',
-          content: '網站及其原始內容、功能和功能是並將保持 Lsx wholesale 及其許可方的專有財產。我們的商標和商業外觀不得在未經 Lsx wholesale 事先書面同意的情況下與任何產品或服務相關聯。'
+          content: '網站及其原始內容、功能和功能是並將保持 LshWholesale 及其許可方的專有財產。我們的商標和商業外觀不得在未經 LshWholesale 事先書面同意的情況下與任何產品或服務相關聯。'
         },
         {
           title: '12. 責任限制',
-          content: '在任何情況下，Lsx wholesale 及其董事、員工、合作夥伴、代理人、供應商或附屬公司均不對任何間接、附帶、特殊、後果性或懲罰性損害賠償負責，包括但不限於利潤損失、數據、使用、商譽或其他無形損失。'
+          content: '在任何情況下，LshWholesale 及其董事、員工、合作夥伴、代理人、供應商或附屬公司均不對任何間接、附帶、特殊、後果性或懲罰性損害賠償負責，包括但不限於利潤損失、數據、使用、商譽或其他無形損失。'
         },
         {
           title: '13. 準據法',
@@ -75,7 +75,7 @@ export default function TermsOfService() {
       sections: [
         {
           title: '1. Acceptance of Terms',
-          content: 'By accessing or using the Lsx wholesale website and its services, you agree to be bound by these Terms of Service and our Privacy Policy. If you do not agree to all the terms and conditions, you may not access the website or use any of its services.'
+          content: 'By accessing or using the LshWholesale website and its services, you agree to be bound by these Terms of Service and our Privacy Policy. If you do not agree to all the terms and conditions, you may not access the website or use any of its services.'
         },
         {
           title: '2. Account Registration & Security',
@@ -83,7 +83,7 @@ export default function TermsOfService() {
         },
         {
           title: '3. Orders, Pricing, and Payment',
-          content: 'All orders placed through the website are subject to acceptance by Lsx wholesale. We reserve the right to refuse or cancel any order for any reason. Prices for our products are subject to change without notice. All payments must be made in accordance with the payment terms specified at the time of purchase.'
+          content: 'All orders placed through the website are subject to acceptance by LshWholesale. We reserve the right to refuse or cancel any order for any reason. Prices for our products are subject to change without notice. All payments must be made in accordance with the payment terms specified at the time of purchase.'
         },
         {
           title: '4. Shipping Methods',
@@ -99,7 +99,7 @@ export default function TermsOfService() {
         },
         {
           title: '7. Return Policy',
-          content: 'Lsx wholesale carefully selects every product, hoping to share this carefully curated joy with you. We understand that online shopping may create cognitive gaps. If you are not satisfied with the product, please notify us within 1-3 days after receiving the product and return the product within 7 days. We will assist with the return process as soon as possible.'
+          content: 'LshWholesale carefully selects every product, hoping to share this carefully curated joy with you. We understand that online shopping may create cognitive gaps. If you are not satisfied with the product, please notify us within 1-3 days after receiving the product and return the product within 7 days. We will assist with the return process as soon as possible.'
         },
         {
           title: '8. Product Condition',
@@ -115,11 +115,11 @@ export default function TermsOfService() {
         },
         {
           title: '11. Intellectual Property',
-          content: 'The website and its original content, features, and functionality are and will remain the exclusive property of Lsx wholesale and its licensors. Our trademarks and trade dress may not be used in connection with any product or service without the prior written consent of Lsx wholesale.'
+          content: 'The website and its original content, features, and functionality are and will remain the exclusive property of LshWholesale and its licensors. Our trademarks and trade dress may not be used in connection with any product or service without the prior written consent of LshWholesale.'
         },
         {
           title: '12. Limitation of Liability',
-          content: 'In no event shall Lsx wholesale, nor its directors, employees, partners, agents, suppliers, or affiliates, be liable for any indirect, incidental, special, consequential or punitive damages, including without limitation, loss of profits, data, use, goodwill, or other intangible losses, resulting from your access to or use of or inability to access or use the service.'
+          content: 'In no event shall LshWholesale, nor its directors, employees, partners, agents, suppliers, or affiliates, be liable for any indirect, incidental, special, consequential or punitive damages, including without limitation, loss of profits, data, use, goodwill, or other intangible losses, resulting from your access to or use of or inability to access or use the service.'
         },
         {
           title: '13. Governing Law',
@@ -146,7 +146,7 @@ export default function TermsOfService() {
                 <path d="M44 11.2727C44 14.0109 39.8386 16.3957 33.69 17.6364C39.8386 18.877 44 21.2618 44 24C44 26.7382 39.8386 29.123 33.69 30.3636C39.8386 31.6043 44 33.9891 44 36.7273C44 40.7439 35.0457 44 24 44C12.9543 44 4 40.7439 4 36.7273C4 33.9891 8.16144 31.6043 14.31 30.3636C8.16144 29.123 4 26.7382 4 24C4 21.2618 8.16144 18.877 14.31 17.6364C8.16144 16.3957 4 14.0109 4 11.2727C4 7.25611 12.9543 4 24 4C35.0457 4 44 7.25611 44 11.2727Z" fill="currentColor"></path>
               </svg>
             </div>
-            <h1 className="text-lg font-bold text-text-primary-light">Lsx wholesale</h1>
+            <h1 className="text-lg font-bold text-text-primary-light">LshWholesale</h1>
           </Link>
 
           {/* Language Toggle */}
@@ -218,7 +218,7 @@ export default function TermsOfService() {
           </div>
 
           <div className="border-t border-border-light pt-8 text-center">
-            <p className="text-text-secondary-light">© {new Date().getFullYear()} Lsx wholesale. 版權所有。</p>
+            <p className="text-text-secondary-light">© {new Date().getFullYear()} LshWholesale. 版權所有。</p>
           </div>
         </div>
       </footer>
