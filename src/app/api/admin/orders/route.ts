@@ -14,7 +14,15 @@ export async function GET(request: NextRequest) {
 
     let query = admin
       .from("orders")
-      .select("id, user_id, status, total_twd, created_at, updated_at, hold_id", {
+      .select(`
+        id, user_id, status, total_twd, created_at, updated_at, hold_id,
+        order_items (
+          id, product_id, qty, unit_price_twd,
+          products (
+            sku, title_zh, title_original, images
+          )
+        )
+      `, {
         count: "exact",
       })
       .order("created_at", { ascending: false })
@@ -69,4 +77,3 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
-

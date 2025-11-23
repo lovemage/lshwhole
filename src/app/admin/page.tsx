@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import IconPicker from "@/components/IconPicker";
@@ -211,6 +211,7 @@ function AdminDashboard() {
   const [ordersTotal, setOrdersTotal] = useState(0);
   const [ordersStatusFilter, setOrdersStatusFilter] = useState<string>("");
   const [ordersSearch, setOrdersSearch] = useState("");
+  const [expandedOrderIds, setExpandedOrderIds] = useState<Set<number>>(new Set());
   // 訂單詳情狀態
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [showOrderDetail, setShowOrderDetail] = useState(false);
@@ -1671,6 +1672,15 @@ function AdminDashboard() {
     setSelectedHotProductIds(prev =>
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     );
+  };
+
+  const toggleOrderExpand = (id: number) => {
+    setExpandedOrderIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   const fetchUpgradeSettings = async () => {
@@ -4225,6 +4235,7 @@ function AdminDashboard() {
                   <table className="w-full border-collapse">
                     <thead>
                       <tr className="border-b border-border-light">
+                        <th className="w-10 py-3 px-4"></th>
                         <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary-light">
                           訂單編號
                         </th>
@@ -4233,6 +4244,9 @@ function AdminDashboard() {
                         </th>
                         <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary-light">
                           會員名稱
+                        </th>
+                        <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary-light">
+                          商品明細
                         </th>
                         <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary-light">
                           金額 (NT$)
@@ -4250,65 +4264,132 @@ function AdminDashboard() {
                     </thead>
                     <tbody>
                       {orders.map((order) => (
-                        <tr key={order.id} className="border-b border-border-light hover:bg-gray-50">
-                          <td className="py-3 px-4 text-sm">{order.id}</td>
-                          <td className="py-3 px-4 text-sm">{order.user_email || "-"}</td>
-                          <td className="py-3 px-4 text-sm">{order.user_display_name || "-"}</td>
-                          <td className="py-3 px-4 text-sm">
-                            {typeof order.total_twd === "number"
-                              ? order.total_twd.toLocaleString("zh-TW")
-                              : "-"}
-                          </td>
-                          <td className="py-3 px-4 text-sm">
-                            <span
-                              className={`px-2 py-1 rounded text-xs font-medium ${order.status === "PENDING"
+                        <Fragment key={order.id}>
+                          <tr className={`border-b border-border-light hover:bg-gray-50 ${expandedOrderIds.has(order.id) ? "bg-gray-50" : ""}`}>
+                            <td className="py-3 px-4">
+                              <button
+                                onClick={() => toggleOrderExpand(order.id)}
+                                className="text-text-secondary-light hover:text-text-primary-light transition-colors"
+                              >
+                                <span className="material-symbols-outlined transform transition-transform duration-200" style={{ transform: expandedOrderIds.has(order.id) ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+                                  expand_more
+                                </span>
+                              </button>
+                            </td>
+                            <td className="py-3 px-4 text-sm font-medium">#{order.id}</td>
+                            <td className="py-3 px-4 text-sm">{order.user_email || "-"}</td>
+                            <td className="py-3 px-4 text-sm">{order.user_display_name || "-"}</td>
+                            <td className="py-3 px-4 text-sm max-w-xs">
+                              <div className="space-y-1">
+                                {order.order_items && order.order_items.length > 0 ? (
+                                  <span className="text-sm text-text-secondary-light">共 {order.order_items.length} 項商品</span>
+                                ) : (
+                                  <span className="text-gray-400 text-xs">無商品資料</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 text-sm">
+                              {typeof order.total_twd === "number"
+                                ? order.total_twd.toLocaleString("zh-TW")
+                                : "-"}
+                            </td>
+                            <td className="py-3 px-4 text-sm">
+                              <span className={`px-2 py-1 rounded text-xs font-medium ${order.status === "PENDING"
                                 ? "bg-yellow-100 text-yellow-800"
-                                : order.status === "PICKING"
+                                : order.status === "SHIPPED"
                                   ? "bg-blue-100 text-blue-800"
-                                  : order.status === "CHARGED"
-                                    ? "bg-purple-100 text-purple-800"
-                                    : order.status === "SHIPPED"
-                                      ? "bg-teal-100 text-teal-800"
-                                      : order.status === "RECEIVED"
-                                        ? "bg-green-100 text-green-800"
-                                        : order.status === "REFUNDED"
-                                          ? "bg-gray-100 text-gray-800"
-                                          : order.status === "CANCELLED"
-                                            ? "bg-red-100 text-red-800"
-                                            : "bg-gray-100 text-gray-800"
-                                }`}
-                            >
-                              {order.status === "PENDING"
-                                ? "待處理"
-                                : order.status === "PICKING"
-                                  ? "揀貨中"
-                                  : order.status === "CHARGED"
-                                    ? "已扣款"
-                                    : order.status === "SHIPPED"
-                                      ? "已出貨"
-                                      : order.status === "RECEIVED"
-                                        ? "已收貨"
-                                        : order.status === "REFUNDED"
-                                          ? "已退款"
-                                          : order.status === "CANCELLED"
-                                            ? "已取消"
-                                            : order.status}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-sm">
-                            {order.created_at
-                              ? new Date(order.created_at).toLocaleString("zh-TW")
-                              : "-"}
-                          </td>
-                          <td className="py-3 px-4 text-sm">
-                            <button
-                              onClick={() => openOrderDetail(order)}
-                              className="text-primary hover:underline font-medium"
-                            >
-                              詳情
-                            </button>
-                          </td>
-                        </tr>
+                                  : order.status === "COMPLETED"
+                                    ? "bg-green-100 text-green-800"
+                                    : "bg-gray-100 text-gray-800"
+                                }`}>
+                                {order.status === "PENDING"
+                                  ? "待處理"
+                                  : order.status === "PICKING"
+                                    ? "揀貨中"
+                                    : order.status === "CHARGED"
+                                      ? "已扣款"
+                                      : order.status === "SHIPPED"
+                                        ? "已出貨"
+                                        : order.status === "RECEIVED"
+                                          ? "已收貨"
+                                          : order.status === "REFUNDED"
+                                            ? "已退款"
+                                            : order.status === "CANCELLED"
+                                              ? "已取消"
+                                              : order.status}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-sm">
+                              {order.created_at
+                                ? new Date(order.created_at).toLocaleString("zh-TW")
+                                : "-"}
+                            </td>
+                            <td className="py-3 px-4 text-sm">
+                              <button
+                                onClick={() => openOrderDetail(order)}
+                                className="text-primary hover:underline font-medium"
+                              >
+                                詳情
+                              </button>
+                            </td>
+                          </tr>
+                          {expandedOrderIds.has(order.id) && (
+                            <tr className="bg-gray-50/50">
+                              <td colSpan={9} className="px-4 py-4 border-b border-border-light">
+                                <div className="bg-white rounded-lg border border-border-light p-4 shadow-sm">
+                                  <h4 className="text-sm font-bold text-text-primary-light mb-3">商品明細</h4>
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full text-left">
+                                      <thead className="bg-gray-50 text-xs text-text-secondary-light uppercase">
+                                        <tr>
+                                          <th className="p-3">商品</th>
+                                          <th className="p-3">單價</th>
+                                          <th className="p-3">數量</th>
+                                          <th className="p-3">小計</th>
+                                          <th className="p-3">狀態</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-border-light text-sm">
+                                        {order.order_items?.map((item: any) => (
+                                          <tr key={item.id}>
+                                            <td className="p-3">
+                                              <div className="flex items-center gap-3">
+                                                <div className="w-12 h-12 bg-gray-100 rounded overflow-hidden shrink-0 border border-border-light">
+                                                  {item.products?.images?.[0] ? (
+                                                    <img src={item.products.images[0]} className="w-full h-full object-cover" alt="" />
+                                                  ) : (
+                                                    <div className="w-full h-full flex items-center justify-center text-gray-300">
+                                                      <span className="material-symbols-outlined text-lg">image</span>
+                                                    </div>
+                                                  )}
+                                                </div>
+                                                <div>
+                                                  <p className="font-medium text-text-primary-light line-clamp-1">{item.products?.title_zh || item.products?.title_original || "未知商品"}</p>
+                                                  <p className="text-xs text-text-secondary-light">{item.products?.sku}</p>
+                                                </div>
+                                              </div>
+                                            </td>
+                                            <td className="p-3">NT$ {item.unit_price_twd?.toLocaleString()}</td>
+                                            <td className="p-3">{item.qty}</td>
+                                            <td className="p-3 font-medium">NT$ {(item.unit_price_twd * item.qty).toLocaleString()}</td>
+                                            <td className="p-3">
+                                              <span className={`px-2 py-1 rounded text-xs font-medium ${item.status === 'OUT_OF_STOCK' ? 'bg-red-100 text-red-800' :
+                                                  item.status === 'PARTIAL_OOS' ? 'bg-orange-100 text-orange-800' :
+                                                    'bg-green-100 text-green-800'
+                                                }`}>
+                                                {item.status === 'OUT_OF_STOCK' ? '缺貨' : item.status === 'PARTIAL_OOS' ? '部分缺貨' : '正常'}
+                                              </span>
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
                       ))}
                     </tbody>
                   </table>
