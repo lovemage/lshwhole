@@ -218,7 +218,7 @@ export async function POST(request: NextRequest) {
     // 8. 創建訂單項目
     const orderItemsInsert = orderItems.map((item) => ({
       order_id: order.id,
-      product_variant_id: item.product_id, // 注意：這裡簡化處理，實際應該用 variant_id
+      product_id: item.product_id,
       qty: item.qty,
       unit_price_twd: item.unit_price,
     }));
@@ -246,4 +246,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
