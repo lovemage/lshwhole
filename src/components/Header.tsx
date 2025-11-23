@@ -100,10 +100,10 @@ export default function Header() {
   };
 
   // Hierarchy Logic
-  const l1Categories = useMemo(() => categories.filter(c => c.level === 1 && c.retail_visible !== false).sort((a, b) => a.sort - b.sort), [categories]);
+  const l1Categories = useMemo(() => categories.filter(c => c.level === 1).sort((a, b) => a.sort - b.sort), [categories]);
   const getChildren = (parentId: number, level: number) => {
     const childIds = relations.filter(r => r.parent_category_id === parentId).map(r => r.child_category_id);
-    return categories.filter(c => c.level === level && childIds.includes(c.id) && c.retail_visible !== false).sort((a, b) => a.sort - b.sort);
+    return categories.filter(c => c.level === level && childIds.includes(c.id)).sort((a, b) => a.sort - b.sort);
   };
 
   return (
@@ -146,9 +146,10 @@ export default function Header() {
 
               {/* Mega Menu Panel */}
               {isMegaMenuOpen && (
-                <div className="absolute top-full left-0 w-[800px] bg-white shadow-xl border border-gray-100 rounded-xl mt-2 p-6 z-50 grid grid-cols-4 gap-6">
-                  {/* Categories by L1 */}
-                  {l1Categories.map(l1 => (
+                <div className="absolute top-full left-0 w-[800px] pt-2 z-50">
+                  <div className="bg-white shadow-xl border border-gray-100 rounded-xl p-6 grid grid-cols-4 gap-6">
+                    {/* Categories by L1 */}
+                    {l1Categories.map(l1 => (
                     <div key={l1.id} className="flex flex-col gap-2">
                       <Link href={`/products?category_id=${l1.id}`} className="font-bold text-gray-900 hover:text-primary mb-2 flex items-center gap-2">
                         {l1.icon && <span className="text-lg">{l1.icon}</span>}
@@ -174,15 +175,16 @@ export default function Header() {
                       </div>
                     </div>
                   ))}
-                  {/* Tags Column */}
-                  <div className="flex flex-col gap-2">
-                    <div className="font-bold text-gray-900 mb-2">熱門標籤</div>
-                    <div className="flex flex-wrap gap-2">
-                      {tags.map(tag => (
-                        <Link key={tag.id} href={`/products?tag_id=${tag.id}`} className="px-2 py-1 bg-gray-100 rounded text-xs text-gray-700 hover:bg-primary hover:text-white transition-colors">
-                          {tag.name}
-                        </Link>
-                      ))}
+                    {/* Tags Column */}
+                    <div className="flex flex-col gap-2">
+                      <div className="font-bold text-gray-900 mb-2">熱門標籤</div>
+                      <div className="flex flex-wrap gap-2">
+                        {tags.map(tag => (
+                          <Link key={tag.id} href={`/products?tag_id=${tag.id}`} className="px-2 py-1 bg-gray-100 rounded text-xs text-gray-700 hover:bg-primary hover:text-white transition-colors">
+                            {tag.name}
+                          </Link>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
