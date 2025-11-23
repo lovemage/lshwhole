@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { v2 as cloudinary } from "cloudinary";
 
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_URL?.split('@')[1] || 'dtoqyhhrc',
+  api_key: process.env.CLOUDINARY_URL?.split('://')[1]?.split(':')[0] || '442777697991838',
+  api_secret: process.env.CLOUDINARY_URL?.split(':')[2]?.split('@')[0] || 'gXjLJEwHZuwlFB2_VgNvB-FOb4s',
+});
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
