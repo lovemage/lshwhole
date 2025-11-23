@@ -1,10 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import CartBadge from "@/components/CartBadge";
+
+interface Category { id: number; name: string; level: number; sort: number; icon?: string; retail_visible?: boolean; slug: string; }
+interface Relation { parent_category_id: number; child_category_id: number; }
+interface Tag { id: number; name: string; slug: string; sort: number; }
 
 export default function Header() {
   const router = useRouter();
@@ -12,7 +16,31 @@ export default function Header() {
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  // Data for Mega Menu
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [relations, setRelations] = useState<Relation[]>([]);
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [isMegaMenuOpen, setIsMegaMenuOpen] = useState(false);
+  const [mobileCategoryOpen, setMobileCategoryOpen] = useState<number | null>(null); // For mobile accordion L1
+  const [mobileL2Open, setMobileL2Open] = useState<number | null>(null); // For mobile accordion L2
+
   useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [cRes, rRes, tRes] = await Promise.all([
+          fetch("/api/categories"),
+          fetch("/api/category-relations"),
+          fetch("/api/tags"),
+        ]);
+        if (cRes.ok) setCategories(await cRes.json());
+        if (rRes.ok) setRelations(await rRes.json());
+        if (tRes.ok) setTags(await tRes.json());
+      } catch (e) {
+        console.error("Failed to fetch menu data", e);
+      }
+    };
+    fetchData();
+
     const fetchUserStatus = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -71,8 +99,15 @@ export default function Header() {
     setIsMobileMenuOpen(!isMobileMenuOpen);
   };
 
+  // Hierarchy Logic
+  const l1Categories = useMemo(() => categories.filter(c => c.level === 1 && c.retail_visible !== false).sort((a, b) => a.sort - b.sort), [categories]);
+  const getChildren = (parentId: number, level: number) => {
+    const childIds = relations.filter(r => r.parent_category_id === parentId).map(r => r.child_category_id);
+    return categories.filter(c => c.level === level && childIds.includes(c.id) && c.retail_visible !== false).sort((a, b) => a.sort - b.sort);
+  };
+
   return (
-    <header className="sticky top-0 z-50 w-full bg-white/80 backdrop-blur-sm">
+    <header className="sticky top-0 z-50 w-full bg-white/80 backdrop-blur-sm shadow-sm">
       <div className="flex items-center justify-between whitespace-nowrap border-b border-solid border-b-gray-200 px-4 sm:px-6 lg:px-10 py-3">
         <div className="flex items-center gap-4 lg:gap-8">
           {/* Hamburger Menu Button (Mobile) */}
@@ -92,12 +127,68 @@ export default function Header() {
           </Link>
           
           {/* Desktop Navigation */}
-          <nav className="hidden lg:flex items-center gap-8">
+          <nav className="hidden lg:flex items-center gap-8 relative">
             <Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="/">首頁</Link>
-            <Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="/products">商品</Link>
-            <Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="/products">韓國</Link>
-            <Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="/products">日本</Link>
-            <Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="/products">泰國</Link>
+            
+            {/* Mega Menu Trigger */}
+            <div 
+              className="group"
+              onMouseEnter={() => setIsMegaMenuOpen(true)}
+              onMouseLeave={() => setIsMegaMenuOpen(false)}
+            >
+              <button 
+                className={`text-sm font-medium leading-normal transition-colors flex items-center gap-1 ${isMegaMenuOpen ? "text-primary" : "text-gray-700 hover:text-primary"}`}
+                onClick={() => router.push('/products')}
+              >
+                開始購物
+                <span className="material-symbols-outlined text-sm">expand_more</span>
+              </button>
+
+              {/* Mega Menu Panel */}
+              {isMegaMenuOpen && (
+                <div className="absolute top-full left-0 w-[800px] bg-white shadow-xl border border-gray-100 rounded-xl mt-2 p-6 z-50 grid grid-cols-4 gap-6">
+                  {/* Categories by L1 */}
+                  {l1Categories.map(l1 => (
+                    <div key={l1.id} className="flex flex-col gap-2">
+                      <Link href={`/products?category_id=${l1.id}`} className="font-bold text-gray-900 hover:text-primary mb-2 flex items-center gap-2">
+                        {l1.icon && <span className="text-lg">{l1.icon}</span>}
+                        {l1.name}
+                      </Link>
+                      <div className="flex flex-col gap-1 pl-2 border-l border-gray-100">
+                        {getChildren(l1.id, 2).map(l2 => (
+                          <div key={l2.id} className="group/l2">
+                            <Link href={`/products?category_id=${l2.id}`} className="text-sm text-gray-600 hover:text-primary block py-0.5">
+                              {l2.name}
+                            </Link>
+                            {/* L3 inside L2? Maybe just show top items or skip for clean look if too many */}
+                            {/* Let's list L3 inline or small */}
+                            <div className="pl-2 hidden group-hover/l2:block">
+                               {getChildren(l2.id, 3).map(l3 => (
+                                 <Link key={l3.id} href={`/products?category_id=${l3.id}`} className="text-xs text-gray-500 hover:text-primary block py-0.5">
+                                   - {l3.name}
+                                 </Link>
+                               ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  {/* Tags Column */}
+                  <div className="flex flex-col gap-2">
+                    <div className="font-bold text-gray-900 mb-2">熱門標籤</div>
+                    <div className="flex flex-wrap gap-2">
+                      {tags.map(tag => (
+                        <Link key={tag.id} href={`/products?tag_id=${tag.id}`} className="px-2 py-1 bg-gray-100 rounded text-xs text-gray-700 hover:bg-primary hover:text-white transition-colors">
+                          {tag.name}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="/howtogo">如何運作</Link>
           </nav>
         </div>
@@ -155,7 +246,8 @@ export default function Header() {
             )}
           </div>
           <div className="flex gap-2">
-            <button className="flex max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 bg-gray-200 text-gray-800 gap-2 text-sm font-bold leading-normal tracking-[0.015em] min-w-0 px-2.5">
+            {/* Heart Icon: Hidden on Mobile */}
+            <button className="hidden lg:flex max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 bg-gray-200 text-gray-800 gap-2 text-sm font-bold leading-normal tracking-[0.015em] min-w-0 px-2.5">
               <span className="material-symbols-outlined !text-xl">favorite</span>
             </button>
             <CartBadge />
@@ -181,10 +273,75 @@ export default function Header() {
             {/* Navigation Links */}
             <nav className="flex flex-col space-y-2">
               <Link onClick={() => setIsMobileMenuOpen(false)} className="text-gray-700 hover:text-primary font-medium py-2 border-b border-gray-100" href="/">首頁</Link>
-              <Link onClick={() => setIsMobileMenuOpen(false)} className="text-gray-700 hover:text-primary font-medium py-2 border-b border-gray-100" href="/products">商品</Link>
-              <Link onClick={() => setIsMobileMenuOpen(false)} className="text-gray-700 hover:text-primary font-medium py-2 border-b border-gray-100" href="/products">韓國</Link>
-              <Link onClick={() => setIsMobileMenuOpen(false)} className="text-gray-700 hover:text-primary font-medium py-2 border-b border-gray-100" href="/products">日本</Link>
-              <Link onClick={() => setIsMobileMenuOpen(false)} className="text-gray-700 hover:text-primary font-medium py-2 border-b border-gray-100" href="/products">泰國</Link>
+              
+              {/* Start Shopping Accordion */}
+              <div className="border-b border-gray-100">
+                <button 
+                  className="w-full flex justify-between items-center py-2 text-gray-700 font-medium hover:text-primary"
+                  onClick={() => setMobileCategoryOpen(mobileCategoryOpen === -1 ? null : -1)} // Toggle
+                >
+                  <span>開始購物</span>
+                  <span className="material-symbols-outlined">{mobileCategoryOpen === -1 ? 'expand_less' : 'expand_more'}</span>
+                </button>
+                
+                {/* L1 List */}
+                <div className={`pl-4 flex flex-col space-y-1 overflow-hidden transition-all duration-300 ${mobileCategoryOpen === -1 ? 'max-h-[1000px] pb-2' : 'max-h-0'}`}>
+                  {l1Categories.map(l1 => (
+                    <div key={l1.id}>
+                      <div className="flex justify-between items-center py-1">
+                        <Link href={`/products?category_id=${l1.id}`} onClick={() => setIsMobileMenuOpen(false)} className="text-sm text-gray-800 flex items-center gap-2">
+                          {l1.icon} {l1.name}
+                        </Link>
+                        <button onClick={(e) => { e.stopPropagation(); setMobileCategoryOpen(mobileCategoryOpen === l1.id ? null : l1.id); }} className="p-1">
+                           <span className="material-symbols-outlined text-base text-gray-400">{mobileCategoryOpen === l1.id ? 'remove' : 'add'}</span>
+                        </button>
+                      </div>
+                      
+                      {/* L2 List */}
+                      {mobileCategoryOpen === l1.id && (
+                        <div className="pl-4 flex flex-col space-y-1 border-l-2 border-gray-100 my-1">
+                          {getChildren(l1.id, 2).map(l2 => (
+                            <div key={l2.id}>
+                              <div className="flex justify-between items-center py-1">
+                                <Link href={`/products?category_id=${l2.id}`} onClick={() => setIsMobileMenuOpen(false)} className="text-xs text-gray-600">
+                                  {l2.name}
+                                </Link>
+                                <button onClick={(e) => { e.stopPropagation(); setMobileL2Open(mobileL2Open === l2.id ? null : l2.id); }} className="p-1">
+                                  <span className="material-symbols-outlined text-sm text-gray-300">{mobileL2Open === l2.id ? 'remove' : 'add'}</span>
+                                </button>
+                              </div>
+
+                              {/* L3 List */}
+                              {mobileL2Open === l2.id && (
+                                <div className="pl-3 flex flex-col space-y-1 pb-1">
+                                  {getChildren(l2.id, 3).map(l3 => (
+                                    <Link key={l3.id} href={`/products?category_id=${l3.id}`} onClick={() => setIsMobileMenuOpen(false)} className="text-xs text-gray-500 block py-0.5">
+                                      - {l3.name}
+                                    </Link>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  
+                  {/* Tags in Mobile */}
+                  <div className="mt-2 pt-2 border-t border-gray-100">
+                    <div className="text-xs font-bold text-gray-500 mb-1">標籤</div>
+                    <div className="flex flex-wrap gap-2">
+                      {tags.map(tag => (
+                        <Link key={tag.id} href={`/products?tag_id=${tag.id}`} onClick={() => setIsMobileMenuOpen(false)} className="px-2 py-1 bg-gray-100 rounded text-xs text-gray-700">
+                          {tag.name}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <Link onClick={() => setIsMobileMenuOpen(false)} className="text-gray-700 hover:text-primary font-medium py-2 border-b border-gray-100" href="/howtogo">如何運作</Link>
             </nav>
 

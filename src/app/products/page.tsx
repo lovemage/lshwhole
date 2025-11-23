@@ -49,15 +49,13 @@ export default function ProductsPage() {
   // 分類層級
   // 若後端有設定 retail_visible，則僅顯示零售端開放的 L1/L2 分類
   const l1Categories = useMemo(() => {
-    const hasRetailFlag = categoriesAll.some((c) => c.retail_visible !== undefined);
     return categoriesAll
-      .filter((c) => c.level === 1 && (!hasRetailFlag || c.retail_visible))
+      .filter((c) => c.level === 1 && c.retail_visible !== false)
       .sort((a, b) => a.sort - b.sort);
   }, [categoriesAll]);
   const l2Categories = useMemo(() => {
-    const hasRetailFlag = categoriesAll.some((c) => c.retail_visible !== undefined);
     return categoriesAll
-      .filter((c) => c.level === 2 && (!hasRetailFlag || c.retail_visible))
+      .filter((c) => c.level === 2 && c.retail_visible !== false)
       .sort((a, b) => a.sort - b.sort);
   }, [categoriesAll]);
   const l3Categories = useMemo(() => categoriesAll.filter((c) => c.level === 3).sort((a, b) => a.sort - b.sort), [categoriesAll]);
