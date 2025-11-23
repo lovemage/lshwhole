@@ -43,7 +43,8 @@ export async function GET(request: NextRequest) {
     const { data: orders, error, count } = await query;
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      console.error("Supabase query error:", error);
+      return NextResponse.json({ error: error.message, details: error }, { status: 400 });
     }
 
     const list = orders || [];

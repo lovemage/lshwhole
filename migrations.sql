@@ -20,6 +20,12 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS box_count INTEGER DEFAULT 0;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_number TEXT;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_method TEXT;
 
+-- Add hold_id to orders table if it doesn't exist (fixes 400 error in admin orders list)
+-- Note: wallet_holds table must exist.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS hold_id BIGINT;
+-- Optionally add FK constraint if wallet_holds exists
+-- ALTER TABLE orders ADD CONSTRAINT orders_hold_id_fkey FOREIGN KEY (hold_id) REFERENCES wallet_holds(id);
+
 -- Add columns for Order Items status (for Out of Stock handling) - now redundant but kept for safety
 
 -- Add columns for Member Tier if not exists (User mentioned "Update profiles.tier")
