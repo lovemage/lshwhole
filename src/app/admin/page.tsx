@@ -178,13 +178,31 @@ function AdminDashboard() {
   const [hotProducts, setHotProducts] = useState<any[]>([]);
   const [hotProductsLoading, setHotProductsLoading] = useState(false);
   const [showAddHotProduct, setShowAddHotProduct] = useState(false);
-  const [hotProductCandidates, setHotProductCandidates] = useState<any[]>([]); // 候選商品（用於新增熱銷）
-  const [hotProductSearch, setHotProductSearch] = useState("");
-  const [hotProductCandidatePage, setHotProductCandidatePage] = useState(0);
+  const [hotProductCandidates, setHotProductCandidates] = useState<any[]>([]);
   const [hotProductCandidateTotal, setHotProductCandidateTotal] = useState(0);
+  const [hotProductCandidatePage, setHotProductCandidatePage] = useState(0);
+  const [hotProductSearch, setHotProductSearch] = useState("");
   const [selectedHotCandidateIds, setSelectedHotCandidateIds] = useState<number[]>([]);
   const [addingHotProducts, setAddingHotProducts] = useState(false);
-  const [selectedHotProductIds, setSelectedHotProductIds] = useState<number[]>([]); // 用於移除熱銷
+  const [selectedHotProductIds, setSelectedHotProductIds] = useState<number[]>([]);
+
+  // 展示設定狀態 (Display Settings)
+  const [displaySettings, setDisplaySettings] = useState<{
+    popular: number[];
+    korea: number[];
+    japan: number[];
+    thailand: number[];
+  }>({ popular: [], korea: [], japan: [], thailand: [] });
+  const [showDisplaySettingsDrawer, setShowDisplaySettingsDrawer] = useState(false);
+  const [activeDisplayTab, setActiveDisplayTab] = useState<"popular" | "korea" | "japan" | "thailand">("popular");
+  const [displayCandidates, setDisplayCandidates] = useState<any[]>([]);
+  const [displayCandidateSearch, setDisplayCandidateSearch] = useState("");
+  const [displayCandidatePage, setDisplayCandidatePage] = useState(0);
+  const [displayCandidateTotal, setDisplayCandidateTotal] = useState(0);
+  const [selectedDisplayCandidateIds, setSelectedDisplayCandidateIds] = useState<number[]>([]);
+  const [savingDisplaySettings, setSavingDisplaySettings] = useState(false);
+  const [displaySettingsLoading, setDisplaySettingsLoading] = useState(false);
+
 
   // 訂單管理狀態
   const [orders, setOrders] = useState<any[]>([]);
@@ -250,10 +268,11 @@ function AdminDashboard() {
     }
   }, [activeNav]);
 
-  // Fetch hot products
+  // Fetch hot products and display settings
   useEffect(() => {
     if (activeNav === "hot_products") {
       fetchHotProducts();
+      fetchDisplaySettings();
     }
   }, [activeNav]);
 
@@ -454,16 +473,16 @@ function AdminDashboard() {
 
       const requestBody = editingCategoryId
         ? {
-            id: editingCategoryId,
-            ...categoryFormData,
-            level: categoryFormData.level,
-            icon: categoryFormData.icon || null,
-          }
+          id: editingCategoryId,
+          ...categoryFormData,
+          level: categoryFormData.level,
+          icon: categoryFormData.icon || null,
+        }
         : {
-            ...categoryFormData,
-            level: categoryFormData.level,
-            icon: categoryFormData.icon || null,
-          };
+          ...categoryFormData,
+          level: categoryFormData.level,
+          icon: categoryFormData.icon || null,
+        };
 
       const response = await fetch(url, {
         method,
@@ -685,7 +704,7 @@ function AdminDashboard() {
         const j = await res.json().catch(() => ({}));
         if (j?.data?.carousel_interval != null) setIndexInterval(Number(j.data.carousel_interval));
       }
-    } catch {}
+    } catch { }
   };
 
   const saveIndexInterval = async () => {
@@ -726,7 +745,7 @@ function AdminDashboard() {
   };
 
   const updateIndexBanner = async (id: number, patch: any) => {
-    const res = await fetch(`/api/banners/index?id=${id}` , {
+    const res = await fetch(`/api/banners/index?id=${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
@@ -1201,7 +1220,7 @@ function AdminDashboard() {
       // 根據現有 api route 寫法：它檢查 Authorization header。
       // 但我們在 client side fetch，通常不會手動帶 header 除非有儲存 token。
       // 暫時嘗試直接 fetch，如果不通再調整。
-      
+
       // 修正：我們使用 nextjs api route，通常依賴 cookie。原 api route 代碼使用了 createClient with auth header，
       // 這是因為 admin client 是 service role，但驗證使用者需要 user token。
       // 在我們目前的架構，前端 fetch 會自動帶 cookie，API route 應該從 cookie 讀取 (createServerComponentClient)。
@@ -1249,7 +1268,7 @@ function AdminDashboard() {
 
   const handleAddHotProducts = async () => {
     if (selectedHotCandidateIds.length === 0) return alert("請選擇商品");
-    
+
     try {
       setAddingHotProducts(true);
       const res = await fetch("/api/admin/hot-products", {
@@ -1257,7 +1276,7 @@ function AdminDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ product_ids: selectedHotCandidateIds }),
       });
-      
+
       if (res.ok) {
         alert("已加入熱銷商品");
         setSelectedHotCandidateIds([]);
@@ -1300,14 +1319,108 @@ function AdminDashboard() {
     }
   };
 
+  // 展示設定管理函數 (Display Settings Functions)
+  const fetchDisplaySettings = async () => {
+    try {
+      setDisplaySettingsLoading(true);
+      const res = await fetch("/api/display-settings");
+      if (res.ok) {
+        const data = await res.json();
+        setDisplaySettings(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch display settings:", err);
+    } finally {
+      setDisplaySettingsLoading(false);
+    }
+  };
+
+  const fetchDisplayCandidates = async (page: number = 0) => {
+    try {
+      const offset = page * pageSize;
+      let url = `/api/products?limit=${pageSize}&offset=${offset}&status=published`;
+      if (displayCandidateSearch) {
+        url += `&search=${encodeURIComponent(displayCandidateSearch)}`;
+      }
+      const res = await fetch(url);
+      if (res.ok) {
+        const j = await res.json();
+        // 標記已在當前分頁中的商品
+        const currentIds = displaySettings[activeDisplayTab] || [];
+        const candidates = (j.data || []).map((p: any) => ({
+          ...p,
+          is_already_added: currentIds.includes(p.id)
+        }));
+        setDisplayCandidates(candidates);
+        setDisplayCandidateTotal(j.count || 0);
+        setDisplayCandidatePage(page);
+      }
+    } catch (err) {
+      console.error("Failed to fetch display candidates:", err);
+    }
+  };
+
+  const saveDisplaySettings = async (newSettings: any) => {
+    try {
+      setSavingDisplaySettings(true);
+      const res = await fetch("/api/display-settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newSettings),
+      });
+      if (res.ok) {
+        setDisplaySettings(newSettings);
+        alert("設定已儲存");
+        setShowDisplaySettingsDrawer(false);
+      } else {
+        alert("儲存失敗");
+      }
+    } catch (err) {
+      console.error("Failed to save display settings:", err);
+      alert("儲存失敗");
+    } finally {
+      setSavingDisplaySettings(false);
+    }
+  };
+
+  const handleAddDisplayProducts = async () => {
+    if (selectedDisplayCandidateIds.length === 0) return;
+
+    const currentIds = displaySettings[activeDisplayTab] || [];
+    // Filter out duplicates just in case
+    const newIds = [...currentIds, ...selectedDisplayCandidateIds.filter(id => !currentIds.includes(id))];
+
+    const newSettings = {
+      ...displaySettings,
+      [activeDisplayTab]: newIds
+    };
+
+    await saveDisplaySettings(newSettings);
+    setSelectedDisplayCandidateIds([]);
+  };
+
+  const handleRemoveDisplayProducts = async (idsToRemove: number[]) => {
+    if (!confirm(`確定要移除選取的 ${idsToRemove.length} 個商品嗎？`)) return;
+
+    const currentIds = displaySettings[activeDisplayTab] || [];
+    const newIds = currentIds.filter(id => !idsToRemove.includes(id));
+
+    const newSettings = {
+      ...displaySettings,
+      [activeDisplayTab]: newIds
+    };
+
+    await saveDisplaySettings(newSettings);
+  };
+
   const toggleHotCandidate = (id: number) => {
-    setSelectedHotCandidateIds(prev => 
+    setSelectedHotCandidateIds(prev =>
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     );
   };
 
   const toggleHotProductSelect = (id: number) => {
-    setSelectedHotProductIds(prev => 
+    setSelectedHotProductIds(prev =>
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     );
   };
@@ -1574,7 +1687,7 @@ function AdminDashboard() {
         const obj = JSON.parse(saved);
         if (obj && typeof obj === "object") setExchangeRates((prev) => ({ ...prev, ...obj }));
       }
-    } catch {}
+    } catch { }
   }, [activeNav]);
 
   const saveSettings = () => {
@@ -1663,12 +1776,12 @@ function AdminDashboard() {
       const images = Array.isArray(it.images)
         ? it.images
         : Array.isArray(it.imgs)
-        ? it.imgs
-        : Array.isArray(it.imageUrls)
-        ? it.imageUrls
-        : it.image
-        ? [it.image]
-        : [];
+          ? it.imgs
+          : Array.isArray(it.imageUrls)
+            ? it.imageUrls
+            : it.image
+              ? [it.image]
+              : [];
       return {
         productCode: it.productCode || it.code || it.sku || it.id || "無代碼",
         title: it.title || it.name || "無標題",
@@ -1704,11 +1817,10 @@ function AdminDashboard() {
               <button
                 key={item.id}
                 onClick={() => setActiveNav(item.id)}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                  activeNav === item.id
-                    ? "bg-primary/20 text-primary"
-                    : "text-text-secondary-dark hover:bg-primary/10 hover:text-text-primary-dark"
-                }`}
+                className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${activeNav === item.id
+                  ? "bg-primary/20 text-primary"
+                  : "text-text-secondary-dark hover:bg-primary/10 hover:text-text-primary-dark"
+                  }`}
               >
                 <span className="material-symbols-outlined">{item.icon}</span>
                 <p className="text-sm font-medium">{item.label}</p>
@@ -1768,11 +1880,10 @@ function AdminDashboard() {
                     setEditingId(null);
                     setFormData({ title: "", content: "" });
                   }}
-                  className={`px-4 py-2 font-medium border-b-2 transition-colors ${
-                    !showForm
-                      ? "border-primary text-primary"
-                      : "border-transparent text-text-secondary-light hover:text-text-primary-light"
-                  }`}
+                  className={`px-4 py-2 font-medium border-b-2 transition-colors ${!showForm
+                    ? "border-primary text-primary"
+                    : "border-transparent text-text-secondary-light hover:text-text-primary-light"
+                    }`}
                 >
                   公告列表
                 </button>
@@ -1782,11 +1893,10 @@ function AdminDashboard() {
                     setEditingId(null);
                     setFormData({ title: "", content: "" });
                   }}
-                  className={`px-4 py-2 font-medium border-b-2 transition-colors ${
-                    showForm && !editingId
-                      ? "border-primary text-primary"
-                      : "border-transparent text-text-secondary-light hover:text-text-primary-light"
-                  }`}
+                  className={`px-4 py-2 font-medium border-b-2 transition-colors ${showForm && !editingId
+                    ? "border-primary text-primary"
+                    : "border-transparent text-text-secondary-light hover:text-text-primary-light"
+                    }`}
                 >
                   新增公告
                 </button>
@@ -1811,33 +1921,33 @@ function AdminDashboard() {
                 {activeNav === "announcements"
                   ? "公告管理"
                   : activeNav === "categories"
-                  ? "分類管理"
-                  : activeNav === "crawler"
-                  ? "爬蟲導入"
-                  : activeNav === "members"
-                  ? "會員管理"
-                  : activeNav === "orders"
-                  ? "訂單管理"
-                  : activeNav === "upgrade_settings"
-                  ? "批發升級申請資格設定"
-                  : "儀表板"}
+                    ? "分類管理"
+                    : activeNav === "crawler"
+                      ? "爬蟲導入"
+                      : activeNav === "members"
+                        ? "會員管理"
+                        : activeNav === "orders"
+                          ? "訂單管理"
+                          : activeNav === "upgrade_settings"
+                            ? "批發升級申請資格設定"
+                            : "儀表板"}
               </p>
               <p className="text-base text-text-secondary-light">
                 {activeNav === "announcements"
                   ? "管理和編輯公告內容"
                   : activeNav === "categories"
-                  ? "管理商品分類（L1/L2/L3）與標籤"
-                  : activeNav === "crawler"
-                  ? "上架前資料檢視與轉換（JSON / Excel 匯入、匯率換算、利潤率）"
-                  : activeNav === "members"
-                  ? "管理會員資料、會員資格與錢包儲值"
-                  : activeNav === "orders"
-                  ? "查看與管理會員訂單"
-                  : activeNav === "hot_products"
-                  ? "管理首頁與專區顯示的熱銷商品"
-                  : activeNav === "upgrade_settings"
-                  ? "管理會員升級為批發會員的申請資格、銀行帳號與代理費金額"
-                  : "歡迎回來，以下是您商店活動的摘要。"}
+                    ? "管理商品分類（L1/L2/L3）與標籤"
+                    : activeNav === "crawler"
+                      ? "上架前資料檢視與轉換（JSON / Excel 匯入、匯率換算、利潤率）"
+                      : activeNav === "members"
+                        ? "管理會員資料、會員資格與錢包儲值"
+                        : activeNav === "orders"
+                          ? "查看與管理會員訂單"
+                          : activeNav === "hot_products"
+                            ? "管理首頁與專區顯示的熱銷商品"
+                            : activeNav === "upgrade_settings"
+                              ? "管理會員升級為批發會員的申請資格、銀行帳號與代理費金額"
+                              : "歡迎回來，以下是您商店活動的摘要。"}
               </p>
             </div>
             {activeNav === "dashboard" && (
@@ -1889,11 +1999,10 @@ function AdminDashboard() {
                         <div
                           key={cat.id}
                           onClick={() => setSelectedL1(cat.id)}
-                          className={`p-3 rounded-lg cursor-pointer transition-colors ${
-                            selectedL1 === cat.id
-                              ? "bg-primary/20 border border-primary"
-                              : "bg-background-light border border-border-light hover:bg-primary/10"
-                          }`}
+                          className={`p-3 rounded-lg cursor-pointer transition-colors ${selectedL1 === cat.id
+                            ? "bg-primary/20 border border-primary"
+                            : "bg-background-light border border-border-light hover:bg-primary/10"
+                            }`}
                         >
                           <div className="flex justify-between items-start">
                             <div className="flex-1 flex items-center gap-3">
@@ -1970,11 +2079,10 @@ function AdminDashboard() {
                         <div
                           key={cat.id}
                           onClick={() => setSelectedL2(cat.id)}
-                          className={`p-3 rounded-lg cursor-pointer transition-colors ${
-                            selectedL2 === cat.id
-                              ? "bg-primary/20 border border-primary"
-                              : "bg-background-light border border-border-light hover:bg-primary/10"
-                          }`}
+                          className={`p-3 rounded-lg cursor-pointer transition-colors ${selectedL2 === cat.id
+                            ? "bg-primary/20 border border-primary"
+                            : "bg-background-light border border-border-light hover:bg-primary/10"
+                            }`}
                         >
                           <div className="flex justify-between items-start">
                             <div className="flex-1 flex items-center gap-3">
@@ -2759,11 +2867,10 @@ function AdminDashboard() {
                 {crawlerFiltered.map((p, idx) => (
                   <div
                     key={idx}
-                    className={`flex flex-col overflow-hidden rounded-xl border-2 transition-colors ${
-                      selectedCrawlerProducts.has(idx)
-                        ? "border-primary bg-primary/5"
-                        : "border-border-light bg-card-light"
-                    }`}
+                    className={`flex flex-col overflow-hidden rounded-xl border-2 transition-colors ${selectedCrawlerProducts.has(idx)
+                      ? "border-primary bg-primary/5"
+                      : "border-border-light bg-card-light"
+                      }`}
                   >
                     <div className="relative aspect-square w-full bg-gray-100 overflow-hidden">
                       <img src={p.images?.[0] || "https://placehold.co/600x600?text=No+Image"} alt={p.title} className="h-full w-full object-cover" />
@@ -2851,15 +2958,15 @@ function AdminDashboard() {
                       <div className="space-y-3">
                         <div>
                           <label className="text-sm text-text-secondary-light">SKU</label>
-                          <input value={publishForm.sku} onChange={(e)=>setPublishForm({...publishForm, sku: e.target.value})} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
+                          <input value={publishForm.sku} onChange={(e) => setPublishForm({ ...publishForm, sku: e.target.value })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
                         </div>
                         <div>
                           <label className="text-sm text-text-secondary-light">標題</label>
-                          <input value={publishForm.title} onChange={(e)=>setPublishForm({...publishForm, title: e.target.value})} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
+                          <input value={publishForm.title} onChange={(e) => setPublishForm({ ...publishForm, title: e.target.value })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
                         </div>
                         <div>
                           <label className="text-sm text-text-secondary-light">描述</label>
-                          <textarea value={publishForm.description} onChange={(e)=>setPublishForm({...publishForm, description: e.target.value})} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm min-h-24" />
+                          <textarea value={publishForm.description} onChange={(e) => setPublishForm({ ...publishForm, description: e.target.value })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm min-h-24" />
                         </div>
                         <div>
                           <div className="flex items-center justify-between mb-2">
@@ -2875,15 +2982,15 @@ function AdminDashboard() {
                           <div className="grid grid-cols-3 gap-2">
                             <div>
                               <label className="text-sm text-text-secondary-light">成本</label>
-                              <input type="number" step={1} min={0} value={publishForm.cost_twd} onChange={(e)=>setPublishForm({...publishForm, cost_twd: Math.max(0, Math.floor(Number(e.target.value||0)))})} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
+                              <input type="number" step={1} min={0} value={publishForm.cost_twd} onChange={(e) => setPublishForm({ ...publishForm, cost_twd: Math.max(0, Math.floor(Number(e.target.value || 0))) })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
                             </div>
                             <div>
                               <label className="text-sm text-text-secondary-light">批發價 (+25%)</label>
-                              <input type="number" step={1} min={0} value={publishForm.wholesale_price_twd} onChange={(e)=>setPublishForm({...publishForm, wholesale_price_twd: Math.max(0, Math.floor(Number(e.target.value||0)))})} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
+                              <input type="number" step={1} min={0} value={publishForm.wholesale_price_twd} onChange={(e) => setPublishForm({ ...publishForm, wholesale_price_twd: Math.max(0, Math.floor(Number(e.target.value || 0))) })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
                             </div>
                             <div>
                               <label className="text-sm text-text-secondary-light">零售價 (+35%)</label>
-                              <input type="number" step={1} min={0} value={publishForm.retail_price_twd} onChange={(e)=>setPublishForm({...publishForm, retail_price_twd: Math.max(0, Math.floor(Number(e.target.value||0)))})} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
+                              <input type="number" step={1} min={0} value={publishForm.retail_price_twd} onChange={(e) => setPublishForm({ ...publishForm, retail_price_twd: Math.max(0, Math.floor(Number(e.target.value || 0))) })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
                             </div>
                           </div>
                           <div className="mt-1 text-xs text-text-secondary-light">
@@ -2894,33 +3001,33 @@ function AdminDashboard() {
                         <div className="grid grid-cols-3 gap-2">
                           <div>
                             <label className="text-sm text-text-secondary-light">L1</label>
-                            <select value={publishForm.l1Id ?? ""} onChange={(e)=>setPublishForm({...publishForm, l1Id: e.target.value? Number(e.target.value): null, l2Id: null, l3Id: null})} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm">
+                            <select value={publishForm.l1Id ?? ""} onChange={(e) => setPublishForm({ ...publishForm, l1Id: e.target.value ? Number(e.target.value) : null, l2Id: null, l3Id: null })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm">
                               <option value="">未選擇</option>
-                              {categories.filter(c=>c.level===1).sort((a,b)=>a.sort-b.sort).map(c=> (
+                              {categories.filter(c => c.level === 1).sort((a, b) => a.sort - b.sort).map(c => (
                                 <option key={c.id} value={c.id}>{c.name}</option>
                               ))}
                             </select>
                           </div>
                           <div>
                             <label className="text-sm text-text-secondary-light">L2</label>
-                            <select value={publishForm.l2Id ?? ""} onChange={(e)=>setPublishForm({...publishForm, l2Id: e.target.value? Number(e.target.value): null, l3Id: null})} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm">
+                            <select value={publishForm.l2Id ?? ""} onChange={(e) => setPublishForm({ ...publishForm, l2Id: e.target.value ? Number(e.target.value) : null, l3Id: null })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm">
                               <option value="">未選擇</option>
-                              {categories.filter(c=>c.level===2)
-                                .filter(l2=>!publishForm.l1Id || categoryRelations.some((r:any)=>r.parent_category_id===publishForm.l1Id && r.child_category_id===l2.id))
-                                .sort((a,b)=>a.sort-b.sort)
-                                .map(c=> (
+                              {categories.filter(c => c.level === 2)
+                                .filter(l2 => !publishForm.l1Id || categoryRelations.some((r: any) => r.parent_category_id === publishForm.l1Id && r.child_category_id === l2.id))
+                                .sort((a, b) => a.sort - b.sort)
+                                .map(c => (
                                   <option key={c.id} value={c.id}>{c.name}</option>
                                 ))}
                             </select>
                           </div>
                           <div>
                             <label className="text-sm text-text-secondary-light">L3</label>
-                            <select value={publishForm.l3Id ?? ""} onChange={(e)=>setPublishForm({...publishForm, l3Id: e.target.value? Number(e.target.value): null})} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm">
+                            <select value={publishForm.l3Id ?? ""} onChange={(e) => setPublishForm({ ...publishForm, l3Id: e.target.value ? Number(e.target.value) : null })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm">
                               <option value="">未選擇</option>
-                              {categories.filter(c=>c.level===3)
-                                .filter(l3=>!publishForm.l2Id || categoryRelations.some((r:any)=>r.parent_category_id===publishForm.l2Id && r.child_category_id===l3.id))
-                                .sort((a,b)=>a.sort-b.sort)
-                                .map(c=> (
+                              {categories.filter(c => c.level === 3)
+                                .filter(l3 => !publishForm.l2Id || categoryRelations.some((r: any) => r.parent_category_id === publishForm.l2Id && r.child_category_id === l3.id))
+                                .sort((a, b) => a.sort - b.sort)
+                                .map(c => (
                                   <option key={c.id} value={c.id}>{c.name}</option>
                                 ))}
                             </select>
@@ -2930,16 +3037,16 @@ function AdminDashboard() {
                         <div>
                           <div className="text-sm text-text-secondary-light mb-1">標籤</div>
                           <div className="flex flex-wrap gap-2">
-                            {tags.map((t)=> (
+                            {tags.map((t) => (
                               <label key={t.id} className="inline-flex items-center gap-1 text-sm">
-                                <input type="checkbox" checked={selectedCrawlerTags.includes(t.id)} onChange={(e)=>{
+                                <input type="checkbox" checked={selectedCrawlerTags.includes(t.id)} onChange={(e) => {
                                   if (e.target.checked) setSelectedCrawlerTags([...selectedCrawlerTags, t.id]);
-                                  else setSelectedCrawlerTags(selectedCrawlerTags.filter(x=>x!==t.id));
+                                  else setSelectedCrawlerTags(selectedCrawlerTags.filter(x => x !== t.id));
                                 }} />
                                 <span>{t.name}</span>
                               </label>
                             ))}
-                            {tags.length===0 && <div className="text-xs text-text-secondary-light">尚無標籤</div>}
+                            {tags.length === 0 && <div className="text-xs text-text-secondary-light">尚無標籤</div>}
                           </div>
                         </div>
                       </div>
@@ -3114,11 +3221,10 @@ function AdminDashboard() {
                     setProductPage(0);
                     fetchProducts(0, null);
                   }}
-                  className={`px-4 py-2 font-medium border-b-2 transition-colors whitespace-nowrap ${
-                    selectedProductL1 === null
-                      ? "border-primary text-primary"
-                      : "border-transparent text-text-secondary-light hover:text-text-primary-light"
-                  }`}
+                  className={`px-4 py-2 font-medium border-b-2 transition-colors whitespace-nowrap ${selectedProductL1 === null
+                    ? "border-primary text-primary"
+                    : "border-transparent text-text-secondary-light hover:text-text-primary-light"
+                    }`}
                 >
                   全部
                 </button>
@@ -3133,11 +3239,10 @@ function AdminDashboard() {
                         setProductPage(0);
                         fetchProducts(0, l1.id);
                       }}
-                      className={`px-4 py-2 font-medium border-b-2 transition-colors whitespace-nowrap ${
-                        selectedProductL1 === l1.id
-                          ? "border-primary text-primary"
-                          : "border-transparent text-text-secondary-light hover:text-text-primary-light"
-                      }`}
+                      className={`px-4 py-2 font-medium border-b-2 transition-colors whitespace-nowrap ${selectedProductL1 === l1.id
+                        ? "border-primary text-primary"
+                        : "border-transparent text-text-secondary-light hover:text-text-primary-light"
+                        }`}
                     >
                       {l1.name}
                     </button>
@@ -3185,7 +3290,7 @@ function AdminDashboard() {
                   <thead className="bg-background-light border-b border-border-light">
                     <tr>
                       <th className="px-4 py-3 text-left text-sm font-medium text-text-primary-light">
-                        <input type="checkbox" checked={selectedProductIds.length === products.length && products.length>0} onChange={toggleSelectAll} />
+                        <input type="checkbox" checked={selectedProductIds.length === products.length && products.length > 0} onChange={toggleSelectAll} />
                       </th>
                       <th className="px-4 py-3 text-left text-sm font-medium text-text-primary-light">商品代碼</th>
                       <th className="px-4 py-3 text-left text-sm font-medium text-text-primary-light">商品名稱</th>
@@ -3221,11 +3326,10 @@ function AdminDashboard() {
                           <td className="px-4 py-3 text-sm text-text-primary-light">NT${Number(product.wholesale_price_twd || 0).toLocaleString()}</td>
                           <td className="px-4 py-3 text-sm text-text-primary-light">NT${Number(product.cost_twd || 0).toLocaleString()}</td>
                           <td className="px-4 py-3 text-sm">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              product.status === 'published'
-                                ? "bg-success/20 text-success"
-                                : "bg-danger/20 text-danger"
-                            }`}>
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${product.status === 'published'
+                              ? "bg-success/20 text-success"
+                              : "bg-danger/20 text-danger"
+                              }`}>
                               {product.status === 'published' ? "上架" : "草稿"}
                             </span>
                           </td>
@@ -3251,11 +3355,11 @@ function AdminDashboard() {
                     <div className="mt-4 grid grid-cols-1 gap-4">
                       <div>
                         <label className="text-sm text-text-secondary-light">SKU</label>
-                        <input value={productEditForm.sku} onChange={(e)=>setProductEditForm({...productEditForm, sku:e.target.value})} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
+                        <input value={productEditForm.sku} onChange={(e) => setProductEditForm({ ...productEditForm, sku: e.target.value })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
                       </div>
                       <div>
                         <label className="text-sm text-text-secondary-light">商品名稱</label>
-                        <input value={productEditForm.title_zh} onChange={(e)=>setProductEditForm({...productEditForm, title_zh:e.target.value})} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
+                        <input value={productEditForm.title_zh} onChange={(e) => setProductEditForm({ ...productEditForm, title_zh: e.target.value })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
                       </div>
                       <div>
                         <div className="flex items-center justify-between mb-2">
@@ -3271,15 +3375,15 @@ function AdminDashboard() {
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           <div>
                             <label className="text-sm text-text-secondary-light">成本 (TWD)</label>
-                            <input type="number" step={1} min={0} value={productEditForm.cost_twd} onChange={(e)=>setProductEditForm({...productEditForm, cost_twd: Math.max(0, Math.floor(Number(e.target.value||0)))})} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
+                            <input type="number" step={1} min={0} value={productEditForm.cost_twd} onChange={(e) => setProductEditForm({ ...productEditForm, cost_twd: Math.max(0, Math.floor(Number(e.target.value || 0))) })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
                           </div>
                           <div>
                             <label className="text-sm text-text-secondary-light">批發價 (+25%)</label>
-                            <input type="number" step={1} min={0} value={productEditForm.wholesale_price_twd} onChange={(e)=>setProductEditForm({...productEditForm, wholesale_price_twd: Math.max(0, Math.floor(Number(e.target.value||0)))})} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
+                            <input type="number" step={1} min={0} value={productEditForm.wholesale_price_twd} onChange={(e) => setProductEditForm({ ...productEditForm, wholesale_price_twd: Math.max(0, Math.floor(Number(e.target.value || 0))) })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
                           </div>
                           <div>
                             <label className="text-sm text-text-secondary-light">零售價 (+35%)</label>
-                            <input type="number" step={1} min={0} value={productEditForm.retail_price_twd} onChange={(e)=>setProductEditForm({...productEditForm, retail_price_twd: Math.max(0, Math.floor(Number(e.target.value||0)))})} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
+                            <input type="number" step={1} min={0} value={productEditForm.retail_price_twd} onChange={(e) => setProductEditForm({ ...productEditForm, retail_price_twd: Math.max(0, Math.floor(Number(e.target.value || 0))) })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
                           </div>
                         </div>
                         <div className="mt-1 text-xs text-text-secondary-light">
@@ -3288,7 +3392,7 @@ function AdminDashboard() {
                       </div>
                       <div>
                         <label className="text-sm text-text-secondary-light">狀態</label>
-                        <select value={productEditForm.status} onChange={(e)=>setProductEditForm({...productEditForm, status: e.target.value as any})} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm">
+                        <select value={productEditForm.status} onChange={(e) => setProductEditForm({ ...productEditForm, status: e.target.value as any })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm">
                           <option value="published">上架</option>
                           <option value="draft">草稿</option>
                         </select>
@@ -3341,21 +3445,19 @@ function AdminDashboard() {
               <div className="flex gap-2 border-b border-border-light overflow-x-auto pb-2">
                 <button
                   onClick={() => setBannerTab("index")}
-                  className={`px-4 py-2 font-medium border-b-2 transition-colors whitespace-nowrap ${
-                    bannerTab === "index"
-                      ? "border-primary text-primary"
-                      : "border-transparent text-text-secondary-light hover:text-text-primary-light"
-                  }`}
+                  className={`px-4 py-2 font-medium border-b-2 transition-colors whitespace-nowrap ${bannerTab === "index"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-text-secondary-light hover:text-text-primary-light"
+                    }`}
                 >
                   首頁橫幅
                 </button>
                 <button
                   onClick={() => setBannerTab("products")}
-                  className={`px-4 py-2 font-medium border-b-2 transition-colors whitespace-nowrap ${
-                    bannerTab === "products"
-                      ? "border-primary text-primary"
-                      : "border-transparent text-text-secondary-light hover:text-text-primary-light"
-                  }`}
+                  className={`px-4 py-2 font-medium border-b-2 transition-colors whitespace-nowrap ${bannerTab === "products"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-text-secondary-light hover:text-text-primary-light"
+                    }`}
                 >
                   商品頁橫幅
                 </button>
@@ -3373,7 +3475,7 @@ function AdminDashboard() {
                           min={1}
                           step={1}
                           value={indexInterval}
-                          onChange={(e)=> setIndexInterval(Math.max(1, Math.floor(Number(e.target.value||1))))}
+                          onChange={(e) => setIndexInterval(Math.max(1, Math.floor(Number(e.target.value || 1))))}
                           className="mt-1 w-32 rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
                         />
                       </div>
@@ -3387,26 +3489,26 @@ function AdminDashboard() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="text-sm text-text-secondary-light">圖片網址</label>
-                        <input value={newIndexBanner.image_url} onChange={(e)=>setNewIndexBanner({...newIndexBanner, image_url:e.target.value})} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
+                        <input value={newIndexBanner.image_url} onChange={(e) => setNewIndexBanner({ ...newIndexBanner, image_url: e.target.value })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
                       </div>
                       <div>
                         <label className="text-sm text-text-secondary-light">連結（可選）</label>
-                        <input value={newIndexBanner.link_url} onChange={(e)=>setNewIndexBanner({...newIndexBanner, link_url:e.target.value})} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
+                        <input value={newIndexBanner.link_url} onChange={(e) => setNewIndexBanner({ ...newIndexBanner, link_url: e.target.value })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
                       </div>
                       <div>
                         <label className="text-sm text-text-secondary-light">標題（可選）</label>
-                        <input value={newIndexBanner.title} onChange={(e)=>setNewIndexBanner({...newIndexBanner, title:e.target.value})} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
+                        <input value={newIndexBanner.title} onChange={(e) => setNewIndexBanner({ ...newIndexBanner, title: e.target.value })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
                       </div>
                       <div>
                         <label className="text-sm text-text-secondary-light">描述（可選）</label>
-                        <input value={newIndexBanner.description} onChange={(e)=>setNewIndexBanner({...newIndexBanner, description:e.target.value})} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
+                        <input value={newIndexBanner.description} onChange={(e) => setNewIndexBanner({ ...newIndexBanner, description: e.target.value })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
                       </div>
                       <div>
                         <label className="text-sm text-text-secondary-light">排序（數字越小越前面）</label>
-                        <input type="number" value={newIndexBanner.sort} onChange={(e)=>setNewIndexBanner({...newIndexBanner, sort: Number(e.target.value||0)})} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
+                        <input type="number" value={newIndexBanner.sort} onChange={(e) => setNewIndexBanner({ ...newIndexBanner, sort: Number(e.target.value || 0) })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
                       </div>
                       <label className="mt-6 inline-flex items-center gap-2 text-sm">
-                        <input type="checkbox" checked={newIndexBanner.active} onChange={(e)=>setNewIndexBanner({...newIndexBanner, active:e.target.checked})} />
+                        <input type="checkbox" checked={newIndexBanner.active} onChange={(e) => setNewIndexBanner({ ...newIndexBanner, active: e.target.checked })} />
                         啟用
                       </label>
                     </div>
@@ -3428,20 +3530,20 @@ function AdminDashboard() {
                           <div key={b.id} className="flex gap-3 items-start">
                             <img src={b.image_url} alt="" className="h-16 w-28 object-cover border border-border-light bg-background-light" />
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1">
-                              <input value={b.image_url} onChange={(e)=>setIndexBanners(prev => prev.map((x:any,i:number)=> i===idx ? {...x, image_url:e.target.value} : x))} placeholder="圖片網址" className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
-                              <input value={b.title || ""} onChange={(e)=>setIndexBanners(prev => prev.map((x:any,i:number)=> i===idx ? {...x, title:e.target.value} : x))} placeholder="標題（可選）" className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
-                              <input value={b.description || ""} onChange={(e)=>setIndexBanners(prev => prev.map((x:any,i:number)=> i===idx ? {...x, description:e.target.value} : x))} placeholder="描述（可選）" className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
-                              <input value={b.link_url || ""} onChange={(e)=>setIndexBanners(prev => prev.map((x:any,i:number)=> i===idx ? {...x, link_url:e.target.value} : x))} placeholder="連結（可選）" className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
+                              <input value={b.image_url} onChange={(e) => setIndexBanners(prev => prev.map((x: any, i: number) => i === idx ? { ...x, image_url: e.target.value } : x))} placeholder="圖片網址" className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
+                              <input value={b.title || ""} onChange={(e) => setIndexBanners(prev => prev.map((x: any, i: number) => i === idx ? { ...x, title: e.target.value } : x))} placeholder="標題（可選）" className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
+                              <input value={b.description || ""} onChange={(e) => setIndexBanners(prev => prev.map((x: any, i: number) => i === idx ? { ...x, description: e.target.value } : x))} placeholder="描述（可選）" className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
+                              <input value={b.link_url || ""} onChange={(e) => setIndexBanners(prev => prev.map((x: any, i: number) => i === idx ? { ...x, link_url: e.target.value } : x))} placeholder="連結（可選）" className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
                               <label className="inline-flex items-center gap-2 text-sm">
-                                <input type="checkbox" checked={!!b.active} onChange={(e)=>setIndexBanners(prev => prev.map((x:any,i:number)=> i===idx ? {...x, active:e.target.checked} : x))} />
+                                <input type="checkbox" checked={!!b.active} onChange={(e) => setIndexBanners(prev => prev.map((x: any, i: number) => i === idx ? { ...x, active: e.target.checked } : x))} />
                                 啟用
                               </label>
                             </div>
                             <div className="flex flex-col gap-2">
-                              <button onClick={()=> moveIndexOrder(idx, -1)} disabled={idx===0} className="px-3 py-1 rounded-lg border border-border-light text-sm disabled:opacity-50">上移</button>
-                              <button onClick={()=> moveIndexOrder(idx, 1)} disabled={idx===indexBanners.length-1} className="px-3 py-1 rounded-lg border border-border-light text-sm disabled:opacity-50">下移</button>
-                              <button onClick={()=> updateIndexBanner(b.id, { image_url: b.image_url, title: b.title, description: b.description, link_url: b.link_url, active: b.active })} className="px-3 py-1 rounded-lg bg-primary text-white text-sm">更新</button>
-                              <button onClick={()=> deleteIndexBanner(b.id)} className="px-3 py-1 rounded-lg border border-danger text-danger text-sm">刪除</button>
+                              <button onClick={() => moveIndexOrder(idx, -1)} disabled={idx === 0} className="px-3 py-1 rounded-lg border border-border-light text-sm disabled:opacity-50">上移</button>
+                              <button onClick={() => moveIndexOrder(idx, 1)} disabled={idx === indexBanners.length - 1} className="px-3 py-1 rounded-lg border border-border-light text-sm disabled:opacity-50">下移</button>
+                              <button onClick={() => updateIndexBanner(b.id, { image_url: b.image_url, title: b.title, description: b.description, link_url: b.link_url, active: b.active })} className="px-3 py-1 rounded-lg bg-primary text-white text-sm">更新</button>
+                              <button onClick={() => deleteIndexBanner(b.id)} className="px-3 py-1 rounded-lg border border-danger text-danger text-sm">刪除</button>
                             </div>
                           </div>
                         ))}
@@ -3460,14 +3562,14 @@ function AdminDashboard() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="text-sm text-text-secondary-light">圖片網址</label>
-                        <input value={newProductsBanner.image_url} onChange={(e)=>setNewProductsBanner({...newProductsBanner, image_url:e.target.value})} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
+                        <input value={newProductsBanner.image_url} onChange={(e) => setNewProductsBanner({ ...newProductsBanner, image_url: e.target.value })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
                       </div>
                       <div>
                         <label className="text-sm text-text-secondary-light">排序（數字越小越前面）</label>
-                        <input type="number" value={newProductsBanner.sort} onChange={(e)=>setNewProductsBanner({...newProductsBanner, sort: Number(e.target.value||0)})} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
+                        <input type="number" value={newProductsBanner.sort} onChange={(e) => setNewProductsBanner({ ...newProductsBanner, sort: Number(e.target.value || 0) })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
                       </div>
                       <label className="mt-6 inline-flex items-center gap-2 text-sm">
-                        <input type="checkbox" checked={newProductsBanner.active} onChange={(e)=>setNewProductsBanner({...newProductsBanner, active:e.target.checked})} />
+                        <input type="checkbox" checked={newProductsBanner.active} onChange={(e) => setNewProductsBanner({ ...newProductsBanner, active: e.target.checked })} />
                         啟用
                       </label>
                     </div>
@@ -3489,17 +3591,17 @@ function AdminDashboard() {
                           <div key={b.id} className="flex gap-3 items-start">
                             <img src={b.image_url} alt="" className="h-16 w-28 object-cover border border-border-light bg-background-light" />
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1">
-                              <input value={b.image_url} onChange={(e)=>setProductsBanners(prev => prev.map((x:any,i:number)=> i===idx ? {...x, image_url:e.target.value} : x))} placeholder="圖片網址" className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
+                              <input value={b.image_url} onChange={(e) => setProductsBanners(prev => prev.map((x: any, i: number) => i === idx ? { ...x, image_url: e.target.value } : x))} placeholder="圖片網址" className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
                               <label className="inline-flex items-center gap-2 text-sm">
-                                <input type="checkbox" checked={!!b.active} onChange={(e)=>setProductsBanners(prev => prev.map((x:any,i:number)=> i===idx ? {...x, active:e.target.checked} : x))} />
+                                <input type="checkbox" checked={!!b.active} onChange={(e) => setProductsBanners(prev => prev.map((x: any, i: number) => i === idx ? { ...x, active: e.target.checked } : x))} />
                                 啟用
                               </label>
                             </div>
                             <div className="flex flex-col gap-2">
-                              <button onClick={()=> moveProductsOrder(idx, -1)} disabled={idx===0} className="px-3 py-1 rounded-lg border border-border-light text-sm disabled:opacity-50">上移</button>
-                              <button onClick={()=> moveProductsOrder(idx, 1)} disabled={idx===productsBanners.length-1} className="px-3 py-1 rounded-lg border border-border-light text-sm disabled:opacity-50">下移</button>
-                              <button onClick={()=> updateProductsBanner(b.id, { image_url: b.image_url, active: b.active })} className="px-3 py-1 rounded-lg bg-primary text-white text-sm">更新</button>
-                              <button onClick={()=> deleteProductsBanner(b.id)} className="px-3 py-1 rounded-lg border border-danger text-danger text-sm">刪除</button>
+                              <button onClick={() => moveProductsOrder(idx, -1)} disabled={idx === 0} className="px-3 py-1 rounded-lg border border-border-light text-sm disabled:opacity-50">上移</button>
+                              <button onClick={() => moveProductsOrder(idx, 1)} disabled={idx === productsBanners.length - 1} className="px-3 py-1 rounded-lg border border-border-light text-sm disabled:opacity-50">下移</button>
+                              <button onClick={() => updateProductsBanner(b.id, { image_url: b.image_url, active: b.active })} className="px-3 py-1 rounded-lg bg-primary text-white text-sm">更新</button>
+                              <button onClick={() => deleteProductsBanner(b.id)} className="px-3 py-1 rounded-lg border border-danger text-danger text-sm">刪除</button>
                             </div>
                           </div>
                         ))}
@@ -3678,39 +3780,38 @@ function AdminDashboard() {
                           </td>
                           <td className="py-3 px-4 text-sm">
                             <span
-                              className={`px-2 py-1 rounded text-xs font-medium ${
-                                order.status === "PENDING"
-                                  ? "bg-yellow-100 text-yellow-800"
-                                  : order.status === "PICKING"
+                              className={`px-2 py-1 rounded text-xs font-medium ${order.status === "PENDING"
+                                ? "bg-yellow-100 text-yellow-800"
+                                : order.status === "PICKING"
                                   ? "bg-blue-100 text-blue-800"
                                   : order.status === "CHARGED"
-                                  ? "bg-purple-100 text-purple-800"
-                                  : order.status === "SHIPPED"
-                                  ? "bg-teal-100 text-teal-800"
-                                  : order.status === "RECEIVED"
-                                  ? "bg-green-100 text-green-800"
-                                  : order.status === "REFUNDED"
-                                  ? "bg-gray-100 text-gray-800"
-                                  : order.status === "CANCELLED"
-                                  ? "bg-red-100 text-red-800"
-                                  : "bg-gray-100 text-gray-800"
-                              }`}
+                                    ? "bg-purple-100 text-purple-800"
+                                    : order.status === "SHIPPED"
+                                      ? "bg-teal-100 text-teal-800"
+                                      : order.status === "RECEIVED"
+                                        ? "bg-green-100 text-green-800"
+                                        : order.status === "REFUNDED"
+                                          ? "bg-gray-100 text-gray-800"
+                                          : order.status === "CANCELLED"
+                                            ? "bg-red-100 text-red-800"
+                                            : "bg-gray-100 text-gray-800"
+                                }`}
                             >
                               {order.status === "PENDING"
                                 ? "待處理"
                                 : order.status === "PICKING"
-                                ? "揀貨中"
-                                : order.status === "CHARGED"
-                                ? "已扣款"
-                                : order.status === "SHIPPED"
-                                ? "已出貨"
-                                : order.status === "RECEIVED"
-                                ? "已收貨"
-                                : order.status === "REFUNDED"
-                                ? "已退款"
-                                : order.status === "CANCELLED"
-                                ? "已取消"
-                                : order.status}
+                                  ? "揀貨中"
+                                  : order.status === "CHARGED"
+                                    ? "已扣款"
+                                    : order.status === "SHIPPED"
+                                      ? "已出貨"
+                                      : order.status === "RECEIVED"
+                                        ? "已收貨"
+                                        : order.status === "REFUNDED"
+                                          ? "已退款"
+                                          : order.status === "CANCELLED"
+                                            ? "已取消"
+                                            : order.status}
                             </span>
                           </td>
                           <td className="py-3 px-4 text-sm">
@@ -3823,38 +3924,36 @@ function AdminDashboard() {
                           <td className="py-3 px-4 text-sm">{member.phone || "-"}</td>
                           <td className="py-3 px-4 text-sm">
                             <span
-                              className={`px-2 py-1 rounded text-xs font-medium ${
-                                member.tier === "vip"
-                                  ? "bg-yellow-100 text-yellow-800"
-                                  : member.tier === "wholesale"
+                              className={`px-2 py-1 rounded text-xs font-medium ${member.tier === "vip"
+                                ? "bg-yellow-100 text-yellow-800"
+                                : member.tier === "wholesale"
                                   ? "bg-purple-100 text-purple-800"
                                   : member.tier === "retail"
-                                  ? "bg-blue-100 text-blue-800"
-                                  : "bg-gray-100 text-gray-800"
-                              }`}
+                                    ? "bg-blue-100 text-blue-800"
+                                    : "bg-gray-100 text-gray-800"
+                                }`}
                             >
                               {member.tier === "vip"
                                 ? "VIP會員"
                                 : member.tier === "wholesale"
-                                ? "批發會員"
-                                : member.tier === "retail"
-                                ? "零售會員"
-                                : "訪客會員"}
+                                  ? "批發會員"
+                                  : member.tier === "retail"
+                                    ? "零售會員"
+                                    : "訪客會員"}
                             </span>
                           </td>
                           <td className="py-3 px-4 text-sm font-medium">NT$ {member.balance_twd || 0}</td>
                           <td className="py-3 px-4 text-sm text-text-secondary-light">
-                            {member.last_purchase_date 
+                            {member.last_purchase_date
                               ? new Date(member.last_purchase_date).toLocaleDateString("zh-TW")
                               : "無"}
                           </td>
                           <td className="py-3 px-4 text-sm">
                             <span
-                              className={`px-2 py-1 rounded text-xs font-medium ${
-                                member.login_enabled
-                                  ? "bg-green-100 text-green-800"
-                                  : "bg-red-100 text-red-800"
-                              }`}
+                              className={`px-2 py-1 rounded text-xs font-medium ${member.login_enabled
+                                ? "bg-green-100 text-green-800"
+                                : "bg-red-100 text-red-800"
+                                }`}
                             >
                               {member.login_enabled ? "可登入" : "已關閉"}
                             </span>
@@ -4035,12 +4134,12 @@ function AdminDashboard() {
                     <thead className="bg-background-light border-b border-border-light">
                       <tr>
                         <th className="px-4 py-3 text-left w-10">
-                          <input 
-                            type="checkbox" 
-                            checked={selectedHotProductIds.length === hotProducts.length && hotProducts.length > 0} 
-                            onChange={()=>{
+                          <input
+                            type="checkbox"
+                            checked={selectedHotProductIds.length === hotProducts.length && hotProducts.length > 0}
+                            onChange={() => {
                               if (selectedHotProductIds.length === hotProducts.length) setSelectedHotProductIds([]);
-                              else setSelectedHotProductIds(hotProducts.map(p=>p.id));
+                              else setSelectedHotProductIds(hotProducts.map(p => p.id));
                             }}
                           />
                         </th>
@@ -4055,10 +4154,10 @@ function AdminDashboard() {
                       {hotProducts.map((p, idx) => (
                         <tr key={p.id} className="border-b border-border-light hover:bg-background-light">
                           <td className="px-4 py-3">
-                            <input 
-                              type="checkbox" 
-                              checked={selectedHotProductIds.includes(p.id)} 
-                              onChange={()=>toggleHotProductSelect(p.id)}
+                            <input
+                              type="checkbox"
+                              checked={selectedHotProductIds.includes(p.id)}
+                              onChange={() => toggleHotProductSelect(p.id)}
                             />
                           </td>
                           <td className="px-4 py-3 text-sm font-mono">{idx + 1}</td>
@@ -4113,7 +4212,7 @@ function AdminDashboard() {
                         <thead className="bg-background-light sticky top-0">
                           <tr>
                             <th className="px-4 py-2 text-left w-10">
-                              <input 
+                              <input
                                 type="checkbox"
                                 checked={hotProductCandidates.length > 0 && hotProductCandidates.every(p => p.is_already_hot || selectedHotCandidateIds.includes(p.id))}
                                 onChange={(e) => {
@@ -4187,13 +4286,185 @@ function AdminDashboard() {
 
                     <div className="mt-4 flex justify-end gap-3 pt-4 border-t border-border-light">
                       <button onClick={() => setShowAddHotProduct(false)} className="px-4 py-2 rounded-lg border border-border-light text-sm">取消</button>
-                      <button 
-                        onClick={handleAddHotProducts} 
+                      <button
+                        onClick={handleAddHotProducts}
                         disabled={addingHotProducts || selectedHotCandidateIds.length === 0}
                         className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-bold disabled:opacity-50"
                       >
                         {addingHotProducts ? "加入中..." : `加入選取 (${selectedHotCandidateIds.length})`}
                       </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {/* 展示設定 (Display Settings) */}
+              <div className="mt-8 border-t border-border-light pt-6">
+                <div className="flex justify-between items-center mb-4">
+                  <div>
+                    <h3 className="text-xl font-bold text-text-primary-light">展示設定</h3>
+                    <p className="text-sm text-text-secondary-light mt-1">編輯首頁人氣商品與各國熱銷專區顯示</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {[
+                    { id: "popular", label: "首頁人氣商品", count: displaySettings.popular?.length || 0 },
+                    { id: "korea", label: "韓國熱銷商品", count: displaySettings.korea?.length || 0 },
+                    { id: "japan", label: "日本熱銷商品", count: displaySettings.japan?.length || 0 },
+                    { id: "thailand", label: "泰國趨勢商品", count: displaySettings.thailand?.length || 0 },
+                  ].map((item) => (
+                    <div key={item.id} className="p-4 rounded-xl border border-border-light bg-card-light flex flex-col gap-3">
+                      <div className="flex justify-between items-start">
+                        <h4 className="font-bold text-text-primary-light">{item.label}</h4>
+                        <span className="bg-primary/10 text-primary text-xs font-bold px-2 py-1 rounded-full">
+                          {item.count} 商品
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setActiveDisplayTab(item.id as any);
+                          setShowDisplaySettingsDrawer(true);
+                          fetchDisplayCandidates(0);
+                          setSelectedDisplayCandidateIds([]);
+                        }}
+                        className="w-full py-2 rounded-lg border border-border-light text-sm font-medium hover:bg-gray-50 transition-colors"
+                      >
+                        編輯內容
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 展示設定抽屜 (Drawer) */}
+              {showDisplaySettingsDrawer && (
+                <div className="fixed inset-0 z-50 flex justify-end bg-black/40">
+                  <div className="w-full max-w-2xl h-full bg-white shadow-xl flex flex-col animate-in slide-in-from-right duration-300">
+                    <div className="flex items-center justify-between p-6 border-b border-border-light">
+                      <div>
+                        <h3 className="text-xl font-bold text-text-primary-light">
+                          {activeDisplayTab === "popular" ? "首頁人氣商品" :
+                            activeDisplayTab === "korea" ? "韓國熱銷商品" :
+                              activeDisplayTab === "japan" ? "日本熱銷商品" : "泰國趨勢商品"}
+                        </h3>
+                        <p className="text-sm text-text-secondary-light mt-1">
+                          已選擇 {displaySettings[activeDisplayTab]?.length || 0} 個商品
+                        </p>
+                      </div>
+                      <button onClick={() => setShowDisplaySettingsDrawer(false)} className="text-text-secondary-light hover:text-text-primary-light">
+                        <span className="material-symbols-outlined">close</span>
+                      </button>
+                    </div>
+
+                    <div className="p-4 border-b border-border-light bg-gray-50">
+                      <div className="flex gap-3">
+                        <input
+                          type="text"
+                          placeholder="搜尋商品..."
+                          value={displayCandidateSearch}
+                          onChange={(e) => {
+                            setDisplayCandidateSearch(e.target.value);
+                            setDisplayCandidatePage(0);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") fetchDisplayCandidates(0);
+                          }}
+                          className="flex-1 rounded-lg border border-border-light px-3 py-2 text-sm"
+                        />
+                        <button
+                          onClick={() => fetchDisplayCandidates(0)}
+                          className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium"
+                        >
+                          搜尋
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-4">
+                      {displayCandidates.length === 0 ? (
+                        <div className="text-center py-10 text-text-secondary-light">查無商品</div>
+                      ) : (
+                        <div className="space-y-2">
+                          {displayCandidates.map((p) => (
+                            <div key={p.id} className={`flex items-center gap-3 p-3 rounded-lg border ${p.is_already_added || selectedDisplayCandidateIds.includes(p.id) ? "border-primary/30 bg-primary/5" : "border-border-light bg-white"}`}>
+                              <input
+                                type="checkbox"
+                                checked={p.is_already_added || selectedDisplayCandidateIds.includes(p.id)}
+                                onChange={() => {
+                                  if (p.is_already_added) {
+                                    // 如果已經添加，則移除
+                                    handleRemoveDisplayProducts([p.id]);
+                                    // 更新本地狀態顯示
+                                    p.is_already_added = false;
+                                  } else {
+                                    // 如果未添加，則加入選取
+                                    setSelectedDisplayCandidateIds(prev =>
+                                      prev.includes(p.id) ? prev.filter(id => id !== p.id) : [...prev, p.id]
+                                    );
+                                  }
+                                }}
+                                className="w-5 h-5 text-primary rounded focus:ring-primary"
+                              />
+                              <div className="w-12 h-12 bg-gray-100 rounded-md flex-shrink-0 overflow-hidden">
+                                {p.cover_image_url ? (
+                                  <img src={p.cover_image_url} alt="" className="w-full h-full object-cover" />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center text-gray-300">
+                                    <span className="material-symbols-outlined text-lg">image</span>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-text-primary-light truncate">{p.title_zh || p.title_original}</p>
+                                <p className="text-xs text-text-secondary-light">{p.sku}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm font-bold text-primary">NT$ {p.retail_price_twd}</p>
+                                {p.is_already_added && <span className="text-xs text-success font-medium">已加入</span>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Pagination */}
+                      {displayCandidateTotal > pageSize && (
+                        <div className="flex justify-center gap-2 mt-6">
+                          <button
+                            onClick={() => fetchDisplayCandidates(displayCandidatePage - 1)}
+                            disabled={displayCandidatePage === 0}
+                            className="px-3 py-1 rounded border border-border-light text-sm disabled:opacity-50"
+                          >
+                            上一頁
+                          </button>
+                          <span className="text-sm py-1">
+                            {displayCandidatePage + 1} / {Math.ceil(displayCandidateTotal / pageSize)}
+                          </span>
+                          <button
+                            onClick={() => fetchDisplayCandidates(displayCandidatePage + 1)}
+                            disabled={(displayCandidatePage + 1) * pageSize >= displayCandidateTotal}
+                            className="px-3 py-1 rounded border border-border-light text-sm disabled:opacity-50"
+                          >
+                            下一頁
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="p-4 border-t border-border-light bg-white flex justify-between items-center">
+                      <span className="text-sm text-text-secondary-light">
+                        已選取 {selectedDisplayCandidateIds.length} 個新商品
+                      </span>
+                      <div className="flex gap-3">
+                        <button onClick={() => setShowDisplaySettingsDrawer(false)} className="px-4 py-2 rounded-lg border border-border-light text-sm">關閉</button>
+                        <button
+                          onClick={handleAddDisplayProducts}
+                          disabled={selectedDisplayCandidateIds.length === 0 || savingDisplaySettings}
+                          className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-bold disabled:opacity-50"
+                        >
+                          {savingDisplaySettings ? "儲存中..." : "確認加入"}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -4216,49 +4487,49 @@ function AdminDashboard() {
 
           {/* Charts Section - Only show on dashboard */}
           {activeNav === "dashboard" && (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
-            {/* Sales Chart */}
-            <div className="flex flex-col gap-2 rounded-xl border border-border-light bg-card-light p-6 lg:col-span-3">
-              <p className="text-lg font-medium text-text-primary-light">銷售趨勢</p>
-              <div className="flex items-baseline gap-2">
-                <p className="text-4xl font-bold tracking-tight text-text-primary-light">$8,492</p>
-                <p className="text-base font-medium text-success">+12.8%</p>
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
+              {/* Sales Chart */}
+              <div className="flex flex-col gap-2 rounded-xl border border-border-light bg-card-light p-6 lg:col-span-3">
+                <p className="text-lg font-medium text-text-primary-light">銷售趨勢</p>
+                <div className="flex items-baseline gap-2">
+                  <p className="text-4xl font-bold tracking-tight text-text-primary-light">$8,492</p>
+                  <p className="text-base font-medium text-success">+12.8%</p>
+                </div>
+                <p className="text-base text-text-secondary-light">最近 30 天</p>
+                <div className="mt-4 flex h-64 w-full flex-col">
+                  <svg fill="none" preserveAspectRatio="none" viewBox="0 0 478 150" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M0 109C18.1538 109 18.1538 21 36.3077 21C54.4615 21 54.4615 41 72.6154 41C90.7692 41 90.7692 93 108.923 93C127.077 93 127.077 33 145.231 33C163.385 33 163.385 101 181.538 101C199.692 101 199.692 61 217.846 61C236 61 236 45 254.154 45C272.308 45 272.308 121 290.462 121C308.615 121 308.615 149 326.769 149C344.923 149 344.923 1 363.077 1C381.231 1 381.231 81 399.385 81C417.538 81 417.538 129 435.692 129C453.846 129 453.846 25 472 25V149H0V109Z" fill="url(#paint0_linear_chart)"></path>
+                    <path d="M0 109C18.1538 109 18.1538 21 36.3077 21C54.4615 21 54.4615 41 72.6154 41C90.7692 41 90.7692 93 108.923 93C127.077 93 127.077 33 145.231 33C163.385 33 163.385 101 181.538 101C199.692 101 199.692 61 217.846 61C236 61 236 45 254.154 45C272.308 45 272.308 121 290.462 121C308.615 121 308.615 149 326.769 149C344.923 149 344.923 1 363.077 1C381.231 1 381.231 81 399.385 81C417.538 81 417.538 129 435.692 129C453.846 129 453.846 25 472 25" stroke="#3182CE" strokeLinecap="round" strokeWidth="3"></path>
+                    <defs>
+                      <linearGradient gradientUnits="userSpaceOnUse" id="paint0_linear_chart" x1="236" x2="236" y1="1" y2="149">
+
+
+                        <stop stopColor="#3182CE" stopOpacity="0.2"></stop>
+                        <stop offset="1" stopColor="#3182CE" stopOpacity="0"></stop>
+                      </linearGradient>
+                    </defs>
+                  </svg>
+                </div>
               </div>
-              <p className="text-base text-text-secondary-light">最近 30 天</p>
-              <div className="mt-4 flex h-64 w-full flex-col">
-                <svg fill="none" preserveAspectRatio="none" viewBox="0 0 478 150" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M0 109C18.1538 109 18.1538 21 36.3077 21C54.4615 21 54.4615 41 72.6154 41C90.7692 41 90.7692 93 108.923 93C127.077 93 127.077 33 145.231 33C163.385 33 163.385 101 181.538 101C199.692 101 199.692 61 217.846 61C236 61 236 45 254.154 45C272.308 45 272.308 121 290.462 121C308.615 121 308.615 149 326.769 149C344.923 149 344.923 1 363.077 1C381.231 1 381.231 81 399.385 81C417.538 81 417.538 129 435.692 129C453.846 129 453.846 25 472 25V149H0V109Z" fill="url(#paint0_linear_chart)"></path>
-                  <path d="M0 109C18.1538 109 18.1538 21 36.3077 21C54.4615 21 54.4615 41 72.6154 41C90.7692 41 90.7692 93 108.923 93C127.077 93 127.077 33 145.231 33C163.385 33 163.385 101 181.538 101C199.692 101 199.692 61 217.846 61C236 61 236 45 254.154 45C272.308 45 272.308 121 290.462 121C308.615 121 308.615 149 326.769 149C344.923 149 344.923 1 363.077 1C381.231 1 381.231 81 399.385 81C417.538 81 417.538 129 435.692 129C453.846 129 453.846 25 472 25" stroke="#3182CE" strokeLinecap="round" strokeWidth="3"></path>
-                  <defs>
-                    <linearGradient gradientUnits="userSpaceOnUse" id="paint0_linear_chart" x1="236" x2="236" y1="1" y2="149">
 
-
-                      <stop stopColor="#3182CE" stopOpacity="0.2"></stop>
-                      <stop offset="1" stopColor="#3182CE" stopOpacity="0"></stop>
-                    </linearGradient>
-                  </defs>
-                </svg>
+              {/* Categories Chart */}
+              <div className="flex flex-col gap-4 rounded-xl border border-border-light bg-card-light p-6 lg:col-span-2">
+                <p className="text-lg font-medium text-text-primary-light">分類銷售排行</p>
+                <div className="flex flex-col gap-4">
+                  {categoryStats.map((cat, idx) => (
+                    <div key={idx} className="flex flex-col gap-1">
+                      <div className="flex justify-between text-sm font-medium text-text-secondary-light">
+                        <span>{cat.name}</span>
+                        <span>{cat.percentage}%</span>
+                      </div>
+                      <div className="h-2 w-full rounded-full bg-primary/20">
+                        <div className="h-2 rounded-full bg-primary" style={{ width: `${cat.percentage}%` }}></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
-
-            {/* Categories Chart */}
-            <div className="flex flex-col gap-4 rounded-xl border border-border-light bg-card-light p-6 lg:col-span-2">
-              <p className="text-lg font-medium text-text-primary-light">分類銷售排行</p>
-              <div className="flex flex-col gap-4">
-                {categoryStats.map((cat, idx) => (
-                  <div key={idx} className="flex flex-col gap-1">
-                    <div className="flex justify-between text-sm font-medium text-text-secondary-light">
-                      <span>{cat.name}</span>
-                      <span>{cat.percentage}%</span>
-                    </div>
-                    <div className="h-2 w-full rounded-full bg-primary/20">
-                      <div className="h-2 rounded-full bg-primary" style={{ width: `${cat.percentage}%` }}></div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
           )}
         </div>
       </main>
@@ -4318,7 +4589,7 @@ function AdminDashboard() {
                   <div>
                     <p className="text-sm text-text-secondary-light">最後消費日期</p>
                     <p className="font-medium">
-                      {selectedMember.profile.last_purchase_date 
+                      {selectedMember.profile.last_purchase_date
                         ? new Date(selectedMember.profile.last_purchase_date).toLocaleDateString("zh-TW")
                         : "無紀錄"}
                     </p>
@@ -4371,10 +4642,10 @@ function AdminDashboard() {
                     {selectedMember.profile.wholesale_upgrade_status === "PENDING"
                       ? "申請中"
                       : selectedMember.profile.wholesale_upgrade_status === "APPROVED"
-                      ? "已通過"
-                      : selectedMember.profile.wholesale_upgrade_status === "REJECTED"
-                      ? "已拒絕"
-                      : "尚未申請"}
+                        ? "已通過"
+                        : selectedMember.profile.wholesale_upgrade_status === "REJECTED"
+                          ? "已拒絕"
+                          : "尚未申請"}
                   </span>
                 </p>
                 {selectedMember.profile.wholesale_upgrade_requested_at && (

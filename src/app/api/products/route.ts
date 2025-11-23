@@ -9,10 +9,11 @@ export async function GET(request: NextRequest) {
     const offset = searchParams.get("offset") || "0";
     const search = searchParams.get("search") || "";
     const categoryId = searchParams.get("category_id");
+    const idsParam = searchParams.get("ids");
 
     let query = admin
       .from("products")
-      .select("id, sku, title_zh, title_original, desc_zh, desc_original, retail_price_twd, wholesale_price_twd, cost_twd, status, created_at", { count: "exact" })
+      .select("id, sku, title_zh, title_original, desc_zh, desc_original, retail_price_twd, wholesale_price_twd, cost_twd, status, created_at, product_images(url, sort)", { count: "exact" })
       .order("created_at", { ascending: false })
       .range(Number(offset), Number(offset) + Number(limit) - 1);
 
@@ -35,13 +36,34 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    if (idsParam) {
+      const ids = idsParam.split(",").map(id => id.trim()).filter(Boolean);
+      if (ids.length > 0) {
+        query = query.in("id", ids);
+      }
+    }
+
     const { data, error, count } = await query;
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    return NextResponse.json({ data: data || [], count: count || 0 });
+    // Process data to add cover_image_url
+    const processedData = (data || []).map((p: any) => {
+      let coverImage = null;
+      if (p.product_images && Array.isArray(p.product_images) && p.product_images.length > 0) {
+        const sortedImages = p.product_images.sort((a: any, b: any) => (a.sort || 0) - (b.sort || 0));
+        coverImage = sortedImages[0].url;
+      }
+      return {
+        ...p,
+        cover_image_url: coverImage,
+        product_images: undefined // Optional: remove the raw images array if not needed to reduce payload
+      };
+    });
+
+    return NextResponse.json({ data: processedData, count: count || 0 });
   } catch (err) {
     console.error("GET /api/products error:", err);
     return NextResponse.json(

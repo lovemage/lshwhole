@@ -143,7 +143,7 @@ async function getRandomProducts(admin: any, excludeId: string, limit: number) {
 
     // 隨機選擇商品
     const shuffled = shuffleArray(products || []).slice(0, limit);
-    const productIds = shuffled.map(p => p.id);
+    const productIds = shuffled.map((p: any) => p.id);
 
     // 獲取封面圖片
     let coverMap = new Map<number, string>();

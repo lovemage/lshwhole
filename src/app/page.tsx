@@ -17,12 +17,12 @@ interface Announcement {
 
 export default function HomePage() {
 
-interface RetailProduct {
-  id: number;
-  title: string;
-  retail_price_twd: number | null;
-  cover_image_url: string | null;
-}
+  interface RetailProduct {
+    id: number;
+    title: string;
+    retail_price_twd: number | null;
+    cover_image_url: string | null;
+  }
 
   const router = useRouter();
 
@@ -34,7 +34,15 @@ interface RetailProduct {
   const [bsLoading, setBsLoading] = useState(true);
 
   const [currentUser, setCurrentUser] = useState<{ email: string | null } | null>(null);
+  const [userTier, setUserTier] = useState<string>("guest");
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
+
+  const [displayProducts, setDisplayProducts] = useState<{
+    popular: any[];
+    korea: any[];
+    japan: any[];
+    thailand: any[];
+  }>({ popular: [], korea: [], japan: [], thailand: [] });
 
   useEffect(() => {
     const fetchAnnouncements = async () => {
@@ -74,6 +82,46 @@ interface RetailProduct {
     fetchBestsellers();
   }, []);
 
+  // Fetch Display Settings and Products
+  useEffect(() => {
+    const fetchDisplayData = async () => {
+      try {
+        // 1. Fetch settings
+        const settingsRes = await fetch("/api/display-settings");
+        if (!settingsRes.ok) return;
+        const settings = await settingsRes.json();
+
+        // 2. Collect all IDs
+        const allIds = new Set<number>([
+          ...(settings.popular || []),
+          ...(settings.korea || []),
+          ...(settings.japan || []),
+          ...(settings.thailand || [])
+        ]);
+
+        if (allIds.size === 0) return;
+
+        // 3. Fetch products
+        const productsRes = await fetch(`/api/products?ids=${Array.from(allIds).join(",")}&limit=100`);
+        if (!productsRes.ok) return;
+        const productsJson = await productsRes.json();
+        const productsMap = new Map(productsJson.data.map((p: any) => [p.id, p]));
+
+        // 4. Map back to categories
+        setDisplayProducts({
+          popular: (settings.popular || []).map((id: number) => productsMap.get(id)).filter(Boolean),
+          korea: (settings.korea || []).map((id: number) => productsMap.get(id)).filter(Boolean),
+          japan: (settings.japan || []).map((id: number) => productsMap.get(id)).filter(Boolean),
+          thailand: (settings.thailand || []).map((id: number) => productsMap.get(id)).filter(Boolean),
+        });
+
+      } catch (e) {
+        console.error("Failed to fetch display data:", e);
+      }
+    };
+    fetchDisplayData();
+  }, []);
+
   useEffect(() => {
     (async () => {
       try {
@@ -81,6 +129,18 @@ interface RetailProduct {
         const user = session?.user ?? null;
         if (user) {
           setCurrentUser({ email: user.email ?? null });
+
+          // Fetch Profile for Tier
+          const { data: profileData } = await supabase
+            .from("profiles")
+            .select("tier")
+            .eq("user_id", user.id)
+            .single();
+
+          if (profileData) {
+            setUserTier(profileData.tier || "guest");
+          }
+
           const { data: walletData, error: walletError } = await supabase
             .from("wallets")
             .select("balance_twd")
@@ -93,6 +153,7 @@ interface RetailProduct {
           }
         } else {
           setCurrentUser(null);
+          setUserTier("guest");
           setWalletBalance(null);
         }
       } catch (e) {
@@ -330,100 +391,36 @@ interface RetailProduct {
                 </div>
                 <div className="flex overflow-x-auto [-ms-scrollbar-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden -mx-4">
                   <div className="flex items-stretch p-4 gap-4">
-                    {/* Popular Product Card 1 */}
-                    <div className="flex h-full flex-1 flex-col gap-4 rounded-xl bg-white shadow-sm border border-gray-200 min-w-60 overflow-hidden">
-                      <div
-                        className="w-full bg-center bg-no-repeat aspect-square bg-cover"
-                        style={{
-                          backgroundImage: 'url("https://via.placeholder.com/300x300?text=Popular+Product+1")',
-                        }}
-                      />
-                      <div className="flex flex-col flex-1 justify-between p-4 pt-0 gap-4">
-                        <div>
-                          <p className="text-gray-800 text-base font-medium leading-normal">人氣商品 1</p>
-                          <p className="text-gray-500 text-sm font-normal leading-normal">MOQ: 10 units</p>
+                    {displayProducts.popular.length === 0 ? (
+                      <div className="p-4 text-gray-500">尚無人氣商品</div>
+                    ) : (
+                      displayProducts.popular.map((product) => (
+                        <div key={product.id} className="flex h-full flex-1 flex-col gap-4 rounded-xl bg-white shadow-sm border border-gray-200 min-w-60 overflow-hidden">
+                          <div
+                            className="w-full bg-center bg-no-repeat aspect-square bg-cover"
+                            style={{
+                              backgroundImage: `url("${product.cover_image_url || 'https://via.placeholder.com/300'}")`,
+                            }}
+                          />
+                          <div className="flex flex-col flex-1 justify-between p-4 pt-0 gap-4">
+                            <div>
+                              <p className="text-gray-800 text-base font-medium leading-normal line-clamp-2">{product.title_zh || product.title_original}</p>
+                              <p className="text-gray-500 text-sm font-normal leading-normal">{product.sku}</p>
+                              {userTier !== "guest" && (
+                                <p className="text-primary text-lg font-bold leading-normal mt-1">
+                                  {(userTier === "wholesale" || userTier === "vip")
+                                    ? (product.wholesale_price_twd ? `NT$ ${product.wholesale_price_twd}` : `NT$ ${product.retail_price_twd}`)
+                                    : (product.retail_price_twd ? `NT$ ${product.retail_price_twd}` : '價格待定')}
+                                </p>
+                              )}
+                            </div>
+                            <Link href={`/products/${product.id}`} className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-100 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-200 transition-colors">
+                              <span className="truncate">查看詳情</span>
+                            </Link>
+                          </div>
                         </div>
-                        <button className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-100 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-200 transition-colors">
-                          <span className="truncate">查看詳情</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Popular Product Card 2 */}
-                    <div className="flex h-full flex-1 flex-col gap-4 rounded-xl bg-white shadow-sm border border-gray-200 min-w-60 overflow-hidden">
-                      <div
-                        className="w-full bg-center bg-no-repeat aspect-square bg-cover"
-                        style={{
-                          backgroundImage: 'url("https://via.placeholder.com/300x300?text=Popular+Product+2")',
-                        }}
-                      />
-                      <div className="flex flex-col flex-1 justify-between p-4 pt-0 gap-4">
-                        <div>
-                          <p className="text-gray-800 text-base font-medium leading-normal">人氣商品 2</p>
-                          <p className="text-gray-500 text-sm font-normal leading-normal">MOQ: 5 cases</p>
-                        </div>
-                        <button className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-100 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-200 transition-colors">
-                          <span className="truncate">查看詳情</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Popular Product Card 3 */}
-                    <div className="flex h-full flex-1 flex-col gap-4 rounded-xl bg-white shadow-sm border border-gray-200 min-w-60 overflow-hidden">
-                      <div
-                        className="w-full bg-center bg-no-repeat aspect-square bg-cover"
-                        style={{
-                          backgroundImage: 'url("https://via.placeholder.com/300x300?text=Popular+Product+3")',
-                        }}
-                      />
-                      <div className="flex flex-col flex-1 justify-between p-4 pt-0 gap-4">
-                        <div>
-                          <p className="text-gray-800 text-base font-medium leading-normal">人氣商品 3</p>
-                          <p className="text-gray-500 text-sm font-normal leading-normal">MOQ: 20 pieces</p>
-                        </div>
-                        <button className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-100 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-200 transition-colors">
-                          <span className="truncate">查看詳情</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Popular Product Card 4 */}
-                    <div className="flex h-full flex-1 flex-col gap-4 rounded-xl bg-white shadow-sm border border-gray-200 min-w-60 overflow-hidden">
-                      <div
-                        className="w-full bg-center bg-no-repeat aspect-square bg-cover"
-                        style={{
-                          backgroundImage: 'url("https://via.placeholder.com/300x300?text=Popular+Product+4")',
-                        }}
-                      />
-                      <div className="flex flex-col flex-1 justify-between p-4 pt-0 gap-4">
-                        <div>
-                          <p className="text-gray-800 text-base font-medium leading-normal">人氣商品 4</p>
-                          <p className="text-gray-500 text-sm font-normal leading-normal">MOQ: 100 units</p>
-                        </div>
-                        <button className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-100 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-200 transition-colors">
-                          <span className="truncate">查看詳情</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Popular Product Card 5 */}
-                    <div className="flex h-full flex-1 flex-col gap-4 rounded-xl bg-white shadow-sm border border-gray-200 min-w-60 overflow-hidden">
-                      <div
-                        className="w-full bg-center bg-no-repeat aspect-square bg-cover"
-                        style={{
-                          backgroundImage: 'url("https://via.placeholder.com/300x300?text=Popular+Product+5")',
-                        }}
-                      />
-                      <div className="flex flex-col flex-1 justify-between p-4 pt-0 gap-4">
-                        <div>
-                          <p className="text-gray-800 text-base font-medium leading-normal">人氣商品 5</p>
-                          <p className="text-gray-500 text-sm font-normal leading-normal">MOQ: 50 units</p>
-                        </div>
-                        <button className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-100 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-200 transition-colors">
-                          <span className="truncate">查看詳情</span>
-                        </button>
-                      </div>
-                    </div>
+                      ))
+                    )}
                   </div>
                 </div>
               </section>
@@ -436,110 +433,36 @@ interface RetailProduct {
                 </div>
                 <div className="flex overflow-x-auto [-ms-scrollbar-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden -mx-4">
                   <div className="flex items-stretch p-4 gap-4">
-                    {/* Card 1 */}
-                    <div className="flex h-full flex-1 flex-col gap-4 rounded-xl bg-white shadow-sm border border-gray-200 min-w-60 overflow-hidden">
-                      <div
-                        className="w-full bg-center bg-no-repeat aspect-square bg-cover"
-                        data-alt="A sleek, minimalist skincare set with white and gold packaging."
-                        style={{
-                          backgroundImage:
-                            'url("https://lh3.googleusercontent.com/aida-public/AB6AXuDuC5KA7jEUC4-RZTYN7v15-jS1O9G6I0guesjKzZRfeb8v249y42ivRahkz5g2FKH09JQSm7qSOiG17QDSZGDLNlvvEYBAx2MIyfLZvYKzI9ZRG5lRqY8k0xDcYwZRW13ykjplIvcW5Nzyg7cRYXfrBiIXt1Pc73icjHitQCgkIFy2Mt_v0mTF-_EdCr_JGgZvB-EfoBkSIi4X-oMXxcsv0pVKZqtkgemWDI4hv2J1-x7jeNab5NkFke6I44mSkIxJUbmlR7u68mwl")',
-                        }}
-                      />
-                      <div className="flex flex-col flex-1 justify-between p-4 pt-0 gap-4">
-                        <div>
-                          <p className="text-gray-800 text-base font-medium leading-normal">護膚組合</p>
-                          <p className="text-gray-500 text-sm font-normal leading-normal">MOQ: 10 units</p>
+                    {displayProducts.korea.length === 0 ? (
+                      <div className="p-4 text-gray-500">尚無韓國熱銷商品</div>
+                    ) : (
+                      displayProducts.korea.map((product) => (
+                        <div key={product.id} className="flex h-full flex-1 flex-col gap-4 rounded-xl bg-white shadow-sm border border-gray-200 min-w-60 overflow-hidden">
+                          <div
+                            className="w-full bg-center bg-no-repeat aspect-square bg-cover"
+                            style={{
+                              backgroundImage: `url("${product.cover_image_url || 'https://via.placeholder.com/300'}")`,
+                            }}
+                          />
+                          <div className="flex flex-col flex-1 justify-between p-4 pt-0 gap-4">
+                            <div>
+                              <p className="text-gray-800 text-base font-medium leading-normal line-clamp-2">{product.title_zh || product.title_original}</p>
+                              <p className="text-gray-500 text-sm font-normal leading-normal">{product.sku}</p>
+                              {userTier !== "guest" && (
+                                <p className="text-primary text-lg font-bold leading-normal mt-1">
+                                  {(userTier === "wholesale" || userTier === "vip")
+                                    ? (product.wholesale_price_twd ? `NT$ ${product.wholesale_price_twd}` : `NT$ ${product.retail_price_twd}`)
+                                    : (product.retail_price_twd ? `NT$ ${product.retail_price_twd}` : '價格待定')}
+                                </p>
+                              )}
+                            </div>
+                            <Link href={`/products/${product.id}`} className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-100 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-200 transition-colors">
+                              <span className="truncate">查看詳情</span>
+                            </Link>
+                          </div>
                         </div>
-                        <button className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-100 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-200 transition-colors">
-                          <span className="truncate">查看詳情</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Card 2 */}
-                    <div className="flex h-full flex-1 flex-col gap-4 rounded-xl bg-white shadow-sm border border-gray-200 min-w-60 overflow-hidden">
-                      <div
-                        className="w-full bg-center bg-no-repeat aspect-square bg-cover"
-                        data-alt="A steaming bowl of spicy Korean ramen noodles."
-                        style={{
-                          backgroundImage:
-                            'url("https://lh3.googleusercontent.com/aida-public/AB6AXuCzCiDNg-FjqgDC8JZfS3nyxocAYVK-hiQ-JKnSlFmUw11ODMCpRzXmwkIP0P0uhLCRBp_LMFD5I5oOz1YJVketWc14zyVwtUFNLt3bfNKuPWSz6eNlaOTr6dhymLxhZdNmylEXX6ekIb1oC7ikkVdiF3Ji7Fo74K6fmKWerKYEtGHBn-aNtYVX3n7IRMeVPIJjCyXBZmssaLvd-TktQ01zPANMfoCmyF99Nk0XyiRipShhqvXuTPsHWN0VSi_W6DnaMzcux-LDAATE")',
-                        }}
-                      />
-                      <div className="flex flex-col flex-1 justify-between p-4 pt-0 gap-4">
-                        <div>
-                          <p className="text-gray-800 text-base font-medium leading-normal">辣味麵條</p>
-                          <p className="text-gray-500 text-sm font-normal leading-normal">MOQ: 5 cases</p>
-                        </div>
-                        <button className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-100 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-200 transition-colors">
-                          <span className="truncate">查看詳情</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Card 3 */}
-                    <div className="flex h-full flex-1 flex-col gap-4 rounded-xl bg-white shadow-sm border border-gray-200 min-w-60 overflow-hidden">
-                      <div
-                        className="w-full bg-center bg-no-repeat aspect-square bg-cover"
-                        data-alt="A trendy, oversized black bomber jacket."
-                        style={{
-                          backgroundImage:
-                            'url("https://lh3.googleusercontent.com/aida-public/AB6AXuCnKWg0sE1-bhC63_wW8vjPodOM6fAosP005zLVTphyH0PPZzMxcFvtSZ5E9mMTHOBuovV5tXFEFD8Jcd-LGPW-QgM1vhjeZmy7UbjvZPI4quV6qqyexBsiEhJeWHURX5cOYaLeYxLTZif3uCYm1V-xv4jL9zuQlYhDcs-j8Y6oYWk56C5-XnzGSTBRpOHzEM3JKba_BwLqG_HTfeqe0oNfz5_E6IYoMUqHF9Qm7HhNGVi79cpZyXBAGJOcDR9uAT8o1N4TVmuCzKiV")',
-                        }}
-                      />
-                      <div className="flex flex-col flex-1 justify-between p-4 pt-0 gap-4">
-                        <div>
-                          <p className="text-gray-800 text-base font-medium leading-normal">轟炸機夾克</p>
-                          <p className="text-gray-500 text-sm font-normal leading-normal">MOQ: 20 pieces</p>
-                        </div>
-                        <button className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-100 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-200 transition-colors">
-                          <span className="truncate">查看詳情</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Card 4 */}
-                    <div className="flex h-full flex-1 flex-col gap-4 rounded-xl bg-white shadow-sm border border-gray-200 min-w-60 overflow-hidden">
-                      <div
-                        className="w-full bg-center bg-no-repeat aspect-square bg-cover"
-                        data-alt="A stack of individually packaged Korean face masks."
-                        style={{
-                          backgroundImage:
-                            'url("https://lh3.googleusercontent.com/aida-public/AB6AXuCcMJy01dx6cJvWFqpyS31u20hW7ND8jL6w6PeIlX3O6LrNkOmQ2aSwCMxqHZ_AWNMfL5aHJDnJQ3l1yh9Oe9snNlWdxce2X6SQbKiRaws6Ml8OZTCabwCmsQFKXd__YeHsbaNHK6YV0gN7tfr7ad-rLxsWudeGFzFkhGoKBFAV2VR0vH3KAKPTpptiQlkhb-IpBcmY1f773B8o2T1KyRYnlkYdcl7kQXvE7RjOm7BvR00s8oQmFaIiUqUo766kz_vdRi-drmUKzrq2")',
-                        }}
-                      />
-                      <div className="flex flex-col flex-1 justify-between p-4 pt-0 gap-4">
-                        <div>
-                          <p className="text-gray-800 text-base font-medium leading-normal">面膜</p>
-                          <p className="text-gray-500 text-sm font-normal leading-normal">MOQ: 100 masks</p>
-                        </div>
-                        <button className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-100 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-200 transition-colors">
-                          <span className="truncate">查看詳情</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Card 5 */}
-                    <div className="flex h-full flex-1 flex-col gap-4 rounded-xl bg-white shadow-sm border border-gray-200 min-w-60 overflow-hidden">
-                      <div
-                        className="w-full bg-center bg-no-repeat aspect-square bg-cover"
-                        data-alt="A velvet tint lipstick in a vibrant red shade."
-                        style={{
-                          backgroundImage:
-                            'url("https://lh3.googleusercontent.com/aida-public/AB6AXuD-nh8-ye4UL4QhjDnLzCd618xS07651bt18EldHmc2J5tnbyG_XZ60hRedks0CoZGfgZC9vAKMZiYhIiXQ9wROQFMLUcI2q1GM2laPT_wTQcv-1xna7crOuyiaFogzrulpqi0vw00El_PoF9KY1LdzVz3cwhGSCkwuKY3PcYpssSbLvglaK2IaQToHFDbPN4vcly4D9chAZmi2MZdnfDexSv-92sR9uhM6fF3aMS6YZ_f1IQLKd2O2aLSsNfrnRw6P61jDv90K4YOn")',
-                        }}
-                      />
-                      <div className="flex flex-col flex-1 justify-between p-4 pt-0 gap-4">
-                        <div>
-                          <p className="text-gray-800 text-base font-medium leading-normal">絲絨色調唇膏</p>
-                          <p className="text-gray-500 text-sm font-normal leading-normal">MOQ: 50 units</p>
-                        </div>
-                        <button className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-100 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-200 transition-colors">
-                          <span className="truncate">查看詳情</span>
-                        </button>
-                      </div>
-                    </div>
+                      ))
+                    )}
                   </div>
                 </div>
               </section>
@@ -552,89 +475,36 @@ interface RetailProduct {
                 </div>
                 <div className="flex overflow-x-auto [-ms-scrollbar-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden -mx-4">
                   <div className="flex items-stretch p-4 gap-4">
-                    {/* Japan Card 1 */}
-                    <div className="flex h-full flex-1 flex-col gap-4 rounded-xl bg-white shadow-sm border border-gray-200 min-w-60 overflow-hidden">
-                      <div
-                        className="w-full bg-center bg-no-repeat aspect-square bg-cover"
-                        data-alt="A collection of colorful Japanese snacks and candies."
-                        style={{
-                          backgroundImage:
-                            'url("https://lh3.googleusercontent.com/aida-public/AB6AXuCo-JiBl0M9jacsG5f3Ir85REl3yJ_Fm6YbWshxxlCmIx60UeQ-akIN2QVfGLpjIyw8jsjPcIbiaq4SvAtPm3aSV28LCOk_Zt7j3Jf_bdlUo0AmfNJpJSIA9p5cTV0SZ4nR6Oo48T7QqqeVsnfofjMU9Ru-xJyT49jGnx1KYh4YB-MSRLhGKI0yDGFS8zYesp4THUAwvE2oTlgiqLAAbXUVWqDyvkvgUv-zTyG-FV8tku7-ymxop8lD4cERWrX7Kp_yKZDCLWylLWej")',
-                        }}
-                      />
-                      <div className="flex flex-col flex-1 justify-between p-4 pt-0 gap-4">
-                        <div>
-                          <p className="text-gray-800 text-base font-medium leading-normal">零食盒</p>
-                          <p className="text-gray-500 text-sm font-normal leading-normal">MOQ: 10 boxes</p>
+                    {displayProducts.japan.length === 0 ? (
+                      <div className="p-4 text-gray-500">尚無日本熱銷商品</div>
+                    ) : (
+                      displayProducts.japan.map((product) => (
+                        <div key={product.id} className="flex h-full flex-1 flex-col gap-4 rounded-xl bg-white shadow-sm border border-gray-200 min-w-60 overflow-hidden">
+                          <div
+                            className="w-full bg-center bg-no-repeat aspect-square bg-cover"
+                            style={{
+                              backgroundImage: `url("${product.cover_image_url || 'https://via.placeholder.com/300'}")`,
+                            }}
+                          />
+                          <div className="flex flex-col flex-1 justify-between p-4 pt-0 gap-4">
+                            <div>
+                              <p className="text-gray-800 text-base font-medium leading-normal line-clamp-2">{product.title_zh || product.title_original}</p>
+                              <p className="text-gray-500 text-sm font-normal leading-normal">{product.sku}</p>
+                              {userTier !== "guest" && (
+                                <p className="text-primary text-lg font-bold leading-normal mt-1">
+                                  {(userTier === "wholesale" || userTier === "vip")
+                                    ? (product.wholesale_price_twd ? `NT$ ${product.wholesale_price_twd}` : `NT$ ${product.retail_price_twd}`)
+                                    : (product.retail_price_twd ? `NT$ ${product.retail_price_twd}` : '價格待定')}
+                                </p>
+                              )}
+                            </div>
+                            <Link href={`/products/${product.id}`} className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-100 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-200 transition-colors">
+                              <span className="truncate">查看詳情</span>
+                            </Link>
+                          </div>
                         </div>
-                        <button className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-100 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-200 transition-colors">
-                          <span className="truncate">查看詳情</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Japan Card 2 */}
-                    <div className="flex h-full flex-1 flex-col gap-4 rounded-xl bg-white shadow-sm border border-gray-200 min-w-60 overflow-hidden">
-                      <div
-                        className="w-full bg-center bg-no-repeat aspect-square bg-cover"
-                        data-alt="A set of high-quality Japanese pens and notebooks."
-                        style={{
-                          backgroundImage:
-                            'url("https://lh3.googleusercontent.com/aida-public/AB6AXuAEmUMMBoufKOqlxiTiLbMbNjugFA2mRneE9NifFLUIWkOQ9JGCNkn7nVvrw-b0SmkrLCGKYL69LvMU0f-c6NqNxn0FN01jC5w3YHb4rpMJTYuvwWyj4IwrgbRKvkEI2EE7xcu8CB42Nwu02_L_4KCGO5sdQhuaPakp0XuQ5oPLNDZdgfSIH1s2xLEZdNmEaL6WcjzJgzzvCvXJW_tnT2XLL4CjnshV8xL5CUbTD6BgAXI3HOmmpMbmfU-np-IlYsPvNKYKCnxIk8ze")',
-                        }}
-                      />
-                      <div className="flex flex-col flex-1 justify-between p-4 pt-0 gap-4">
-                        <div>
-                          <p className="text-gray-800 text-base font-medium leading-normal">文具組</p>
-                          <p className="text-gray-500 text-sm font-normal leading-normal">MOQ: 20 sets</p>
-                        </div>
-                        <button className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-100 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-200 transition-colors">
-                          <span className="truncate">查看詳情</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Japan Card 3 */}
-                    <div className="flex h-full flex-1 flex-col gap-4 rounded-xl bg-white shadow-sm border border-gray-200 min-w-60 overflow-hidden">
-                      <div
-                        className="w-full bg-center bg-no-repeat aspect-square bg-cover"
-                        data-alt="A sleek, modern portable gaming console."
-                        style={{
-                          backgroundImage:
-                            'url("https://lh3.googleusercontent.com/aida-public/AB6AXuB0EQMMJLAQ3Lug2fQUhjnyKDmGinCFJ1UBc9mv_1wLYkWVMOnp9bTjbqQ7qXcHI5u5jEh_3DtWaJAVY40DCPOuUFBeh6O99Ssod7UstmRV6qNooPM33NU4aOJIx4CNk7BumrOS_7BhoL3jMY71ljOwC6WzT2FzRssNipF2zs9J5XzVlEUMYlezDe2FYKB6FTaw1TTIrrSlQyfGDEY4HPNUv3yVnSO4MDqrCVymgaPAvU2qhTvarecGYHJ_yYaJNkOwn_Z5oHBJWFoF")',
-                        }}
-                      />
-                      <div className="flex flex-col flex-1 justify-between p-4 pt-0 gap-4">
-                        <div>
-                          <p className="text-gray-800 text-base font-medium leading-normal">遊戲機</p>
-                          <p className="text-gray-500 text-sm font-normal leading-normal">MOQ: 5 units</p>
-                        </div>
-                        <button className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-100 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-200 transition-colors">
-                          <span className="truncate">查看詳情</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Japan Card 4 */}
-                    <div className="flex h-full flex-1 flex-col gap-4 rounded-xl bg-white shadow-sm border border-gray-200 min-w-60 overflow-hidden">
-                      <div
-                        className="w-full bg-center bg-no-repeat aspect-square bg-cover"
-                        data-alt="A bottle of Japanese facial cleansing oil."
-                        style={{
-                          backgroundImage:
-                            'url("https://lh3.googleusercontent.com/aida-public/AB6AXuBahgNfd1xGIx6ha9vc4CKMOjGEXlZZ5BaW_0IjGEA3BWUxHzFdL-v3jV5Nl2Xu1YlXg7xha_h7B4BlX2PRdBYMv35K957OjIXf2rNAnOB2qSNOotAFtm-xj5H7UE1DPcUK5q2AlKBxvx7-OI0VVzvYjSpPr4NKqhLdnFYAzP2ApHxrEBHnti-3oMKjTgaC3C_pJ7iPtG1hKF3wr0gOrObmp2qzwQ0taZbPPZtxtR_hF-ZUuTeqYDOJp7bAaPnvjP3TAsCAlkNTC9oX")',
-                        }}
-                      />
-                      <div className="flex flex-col flex-1 justify-between p-4 pt-0 gap-4">
-                        <div>
-                          <p className="text-gray-800 text-base font-medium leading-normal">卸妝油</p>
-                          <p className="text-gray-500 text-sm font-normal leading-normal">MOQ: 30 units</p>
-                        </div>
-                        <button className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-100 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-200 transition-colors">
-                          <span className="truncate">查看詳情</span>
-                        </button>
-                      </div>
-                    </div>
+                      ))
+                    )}
                   </div>
                 </div>
               </section>
@@ -647,89 +517,36 @@ interface RetailProduct {
                 </div>
                 <div className="flex overflow-x-auto [-ms-scrollbar-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden -mx-4">
                   <div className="flex items-stretch p-4 gap-4">
-                    {/* Thailand Card 1 */}
-                    <div className="flex h-full flex-1 flex-col gap-4 rounded-xl bg-white shadow-sm border border-gray-200 min-w-60 overflow-hidden">
-                      <div
-                        className="w-full bg-center bg-no-repeat aspect-square bg-cover"
-                        data-alt="A set of aromatic Thai spa products with herbs and oils."
-                        style={{
-                          backgroundImage:
-                            'url("https://lh3.googleusercontent.com/aida-public/AB6AXuB29oEPgQddi5qFdjm0IAzZGoW3oKbg4mx6SYUDP2l6HqpMMNEgt7eN2-_XI-riFUWPA5yye2aONcyYuI6qs80oAZVOKvUx5WBDqwTuDJMH58GRVzdSZ7iSu36A_LJGvPG4tZ3EzV6nXgidhT4FSyoDOuORBSGdPpi4G-01Bw2wW531s6cwBXujMCxM-wV-JvKj-GUk18LLMl6DApsWWISIK1duIXyMx4eMHyJZY7TSj8-hP_mxkpdhitogtlyCX4lfY3VViTW00rw9")',
-                        }}
-                      />
-                      <div className="flex flex-col flex-1 justify-between p-4 pt-0 gap-4">
-                        <div>
-                          <p className="text-gray-800 text-base font-medium leading-normal">草本 SPA 組</p>
-                          <p className="text-gray-500 text-sm font-normal leading-normal">MOQ: 15 sets</p>
+                    {displayProducts.thailand.length === 0 ? (
+                      <div className="p-4 text-gray-500">尚無泰國趨勢商品</div>
+                    ) : (
+                      displayProducts.thailand.map((product) => (
+                        <div key={product.id} className="flex h-full flex-1 flex-col gap-4 rounded-xl bg-white shadow-sm border border-gray-200 min-w-60 overflow-hidden">
+                          <div
+                            className="w-full bg-center bg-no-repeat aspect-square bg-cover"
+                            style={{
+                              backgroundImage: `url("${product.cover_image_url || 'https://via.placeholder.com/300'}")`,
+                            }}
+                          />
+                          <div className="flex flex-col flex-1 justify-between p-4 pt-0 gap-4">
+                            <div>
+                              <p className="text-gray-800 text-base font-medium leading-normal line-clamp-2">{product.title_zh || product.title_original}</p>
+                              <p className="text-gray-500 text-sm font-normal leading-normal">{product.sku}</p>
+                              {userTier !== "guest" && (
+                                <p className="text-primary text-lg font-bold leading-normal mt-1">
+                                  {(userTier === "wholesale" || userTier === "vip")
+                                    ? (product.wholesale_price_twd ? `NT$ ${product.wholesale_price_twd}` : `NT$ ${product.retail_price_twd}`)
+                                    : (product.retail_price_twd ? `NT$ ${product.retail_price_twd}` : '價格待定')}
+                                </p>
+                              )}
+                            </div>
+                            <Link href={`/products/${product.id}`} className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-100 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-200 transition-colors">
+                              <span className="truncate">查看詳情</span>
+                            </Link>
+                          </div>
                         </div>
-                        <button className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-100 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-200 transition-colors">
-                          <span className="truncate">查看詳情</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Thailand Card 2 */}
-                    <div className="flex h-full flex-1 flex-col gap-4 rounded-xl bg-white shadow-sm border border-gray-200 min-w-60 overflow-hidden">
-                      <div
-                        className="w-full bg-center bg-no-repeat aspect-square bg-cover"
-                        data-alt="Packaged Thai dried mango slices."
-                        style={{
-                          backgroundImage:
-                            'url("https://lh3.googleusercontent.com/aida-public/AB6AXuDzsltKUQL32ikB68SOAoLiIR3uxUmMypiYa_12-e9DijcDxmDxRI3PRgXaOuGwPAM58BBq4zjFT0wp8WbSk0m-rQ_XUr1HQfxHghfRjlA98Y4gT3PRaUm5R1cSbXiFW8Q9qkA7LWFHqgT_TTK9yaFuIWiym_pljpN8ir1x1KxaPHwKv-hbdi8hNbqObtDXyUUBD2-O7Afmf5gH_8y6HJmOV-z3RX36DI2ld3vTay0AiFyMYriJ9pSRTo8JIbjWw2L-SesmvuK4RDg5")',
-                        }}
-                      />
-                      <div className="flex flex-col flex-1 justify-between p-4 pt-0 gap-4">
-                        <div>
-                          <p className="text-gray-800 text-base font-medium leading-normal">乾芒果</p>
-                          <p className="text-gray-500 text-sm font-normal leading-normal">MOQ: 10 kg</p>
-                        </div>
-                        <button className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-100 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-200 transition-colors">
-                          <span className="truncate">查看詳情</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Thailand Card 3 */}
-                    <div className="flex h-full flex-1 flex-col gap-4 rounded-xl bg-white shadow-sm border border-gray-200 min-w-60 overflow-hidden">
-                      <div
-                        className="w-full bg-center bg-no-repeat aspect-square bg-cover"
-                        data-alt="An intricately woven rattan handbag."
-                        style={{
-                          backgroundImage:
-                            'url("https://lh3.googleusercontent.com/aida-public/AB6AXuDmumG_TIr5a6jyDLQmwiCaCT_4-Tztnp8sHMJ2F7AkMjWGK5YmM6KvhF3PpH38TJxqlQV1xYyqZKWhLnvHlucYzHR_qAo4GqAw2BJJc5crXJP___KFBDzuNrRFRSlq5K0nOsKEsZqVQSJZe_MpTcURKCsM_7XtcUvfnDhV3wBflk2MtVdJePWsjKSIEGMsf1cGN_5pOdoRx6cRKoQ2uBbDZ7U2jZRXbZUWecUitKIQNUmt9Np3PqnnVEM6xvHZMjziDAdaeQ-x3SP4")',
-                        }}
-                      />
-                      <div className="flex flex-col flex-1 justify-between p-4 pt-0 gap-4">
-                        <div>
-                          <p className="text-gray-800 text-base font-medium leading-normal">手工包</p>
-                          <p className="text-gray-500 text-sm font-normal leading-normal">MOQ: 25 pieces</p>
-                        </div>
-                        <button className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-100 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-200 transition-colors">
-                          <span className="truncate">查看詳情</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Thailand Card 4 */}
-                    <div className="flex h-full flex-1 flex-col gap-4 rounded-xl bg-white shadow-sm border border-gray-200 min-w-60 overflow-hidden">
-                      <div
-                        className="w-full bg-center bg-no-repeat aspect-square bg-cover"
-                        data-alt="A variety of Thai curry paste jars."
-                        style={{
-                          backgroundImage:
-                            'url("https://lh3.googleusercontent.com/aida-public/AB6AXuAf1R9D_t5B7aM9YUfqasHU1NtP9AtCfHgg5Dt-dNy8RHIO10Prrb20BsO01QeYJWxHi1gR3yg1KsDNl6FspPRv44Lt_WXBGitc0L8eMFPnIXAkgMM65z5fcb1RMWEqCFAOt9z0r1F1DF_-vCkFIQT5cCTaX3SkInd8FG31zK20AYla-uBRNrT74vb6kBwRNxK9fPaIds9cjeeQVKDqfiXI4QSBt1agnp02CMz7qcFay52kfSfu0e2GaXw1d_92sVwRdMJ-b_Rb7L9k")',
-                        }}
-                      />
-                      <div className="flex flex-col flex-1 justify-between p-4 pt-0 gap-4">
-                        <div>
-                          <p className="text-gray-800 text-base font-medium leading-normal">咖哩醬</p>
-                          <p className="text-gray-500 text-sm font-normal leading-normal">MOQ: 5 cases</p>
-                        </div>
-                        <button className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-100 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-200 transition-colors">
-                          <span className="truncate">查看詳情</span>
-                        </button>
-                      </div>
-                    </div>
+                      ))
+                    )}
                   </div>
                 </div>
               </section>

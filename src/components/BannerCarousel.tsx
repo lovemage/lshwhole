@@ -21,7 +21,7 @@ interface BannerCarouselProps {
 export default function BannerCarousel({ type, className = "" }: BannerCarouselProps) {
   const [banners, setBanners] = useState<Banner[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [interval, setInterval] = useState(5);
+  const [carouselInterval, setCarouselInterval] = useState(5);
   const [loading, setLoading] = useState(true);
 
   // 獲取橫幅資料
@@ -80,7 +80,7 @@ export default function BannerCarousel({ type, className = "" }: BannerCarouselP
       const res = await fetch(`/api/banner-settings?page_type=${pageType}`);
       if (res.ok) {
         const data = await res.json();
-        setInterval(data.data?.carousel_interval || 5);
+        setCarouselInterval(data.data?.carousel_interval || 5);
       }
     } catch (error) {
       console.error("Failed to fetch banner settings:", error);
@@ -98,10 +98,10 @@ export default function BannerCarousel({ type, className = "" }: BannerCarouselP
 
     const timer = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % banners.length);
-    }, interval * 1000);
+    }, carouselInterval * 1000);
 
     return () => clearInterval(timer);
-  }, [banners.length, interval]);
+  }, [banners.length, carouselInterval]);
 
   // 手動切換
   const goToSlide = (index: number) => {

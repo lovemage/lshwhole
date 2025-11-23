@@ -80,7 +80,7 @@ export default function CheckoutPage() {
           // 載入會員資料（收件資訊）
           const profileResponse = await fetch("/api/profile", {
             headers: {
-              Authorization: `Bearer ${session.access_token}`,
+              Authorization: `Bearer ${session!.access_token}`,
             },
           });
 
@@ -110,7 +110,7 @@ export default function CheckoutPage() {
   const tax = Math.floor(subtotal * 0.05);
   const total = Math.floor(subtotal + shipping + tax);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
@@ -650,4 +650,3 @@ export default function CheckoutPage() {
     </div>
   );
 }
-
