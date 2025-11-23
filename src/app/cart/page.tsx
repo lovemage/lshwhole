@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
 
 interface CartItem {
   id: string;
@@ -39,26 +40,10 @@ const saveCartToStorage = (items: CartItem[]) => {
 
 export default function CartPage() {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [currentUser, setCurrentUser] = useState<{ email: string | null } | null>(null);
 
   useEffect(() => {
     const initialItems = loadCartFromStorage();
     setCartItems(initialItems);
-
-    // 載入會員資訊
-    (async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user ?? null;
-        if (user) {
-          setCurrentUser({ email: user.email ?? null });
-        } else {
-          setCurrentUser(null);
-        }
-      } catch (e) {
-        console.error("載入登入狀態失敗", e);
-      }
-    })();
   }, []);
 
   const updateQuantity = (id: string, newQuantity: number) => {
@@ -90,51 +75,7 @@ export default function CartPage() {
 
   return (
     <div style={{ backgroundColor: "#f8f8f5" }} className="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden">
-      {/* Header */}
-      <header className="sticky top-0 z-50 w-full bg-white/80 backdrop-blur-sm">
-        <div className="flex items-center justify-between whitespace-nowrap border-b border-gray-200 px-4 sm:px-6 lg:px-10 py-3">
-          <div className="flex items-center gap-8">
-            <Link href="/" className="flex items-center gap-3 text-gray-800">
-              <div className="size-6 text-primary">
-                <svg fill="none" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M44 11.2727C44 14.0109 39.8386 16.3957 33.69 17.6364C39.8386 18.877 44 21.2618 44 24C44 26.7382 39.8386 29.123 33.69 30.3636C39.8386 31.6043 44 33.9891 44 36.7273C44 40.7439 35.0457 44 24 44C12.9543 44 4 40.7439 4 36.7273C4 33.9891 8.16144 31.6043 14.31 30.3636C8.16144 29.123 4 26.7382 4 24C4 21.2618 8.16144 18.877 14.31 17.6364C8.16144 16.3957 4 14.0109 4 11.2727C4 7.25611 12.9543 4 24 4C35.0457 4 44 7.25611 44 11.2727Z" fill="currentColor"></path>
-                </svg>
-              </div>
-              <h2 className="text-gray-900 text-lg font-bold leading-tight tracking-[-0.015em]">LshWholesale</h2>
-            </Link>
-          </div>
-          <div className="flex gap-2 items-center">
-            {currentUser ? (
-              <>
-                <span className="text-sm text-gray-700 mr-2">
-                  {currentUser.email}
-                </span>
-                <Link href="/profile" className="flex min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-200 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-300 transition-colors">
-                  <span className="truncate">會員中心</span>
-                </Link>
-                <button
-                  onClick={async () => {
-                    await supabase.auth.signOut();
-                    window.location.href = "/";
-                  }}
-                  className="flex min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-200 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-300 transition-colors"
-                >
-                  <span className="truncate">登出</span>
-                </button>
-              </>
-            ) : (
-              <>
-                <Link href="/register" className="flex min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-primary text-white text-sm font-bold leading-normal tracking-[0.015em] hover:bg-primary/90 transition-colors">
-                  <span className="truncate">註冊</span>
-                </Link>
-                <Link href="/login" className="flex min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-200 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-300 transition-colors">
-                  <span className="truncate">登入</span>
-                </Link>
-              </>
-            )}
-          </div>
-        </div>
-      </header>
+      <Header />
 
       {/* Main Content */}
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 py-8">
@@ -276,45 +217,7 @@ export default function CartPage() {
         </div>
       </main>
 
-      {/* Footer */}
-      <footer className="bg-white border-t border-gray-200 mt-12">
-        <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-10">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-gray-500 tracking-wider uppercase">網站導航</h3>
-              <ul className="space-y-2">
-                <li><Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="#">商品</Link></li>
-                <li><Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="#">韓國</Link></li>
-                <li><Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="#">日本</Link></li>
-                <li><Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="#">泰國</Link></li>
-              </ul>
-            </div>
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-gray-500 tracking-wider uppercase">客戶服務</h3>
-              <ul className="space-y-2">
-                <li><Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="#">聯絡我們</Link></li>
-                <li><Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="#">常見問題</Link></li>
-                <li><Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="#">運送資訊</Link></li>
-              </ul>
-            </div>
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-gray-500 tracking-wider uppercase">公司</h3>
-              <ul className="space-y-2">
-                <li><Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="#">關於我們</Link></li>
-                <li><Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="#">如何運作</Link></li>
-              </ul>
-            </div>
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-gray-500 tracking-wider uppercase">電子報</h3>
-              <p className="text-gray-600 text-sm">獲取最新的產品更新和即將推出的銷售資訊。</p>
-            </div>
-          </div>
-          <div className="mt-12 border-t border-gray-200 pt-8 flex flex-col sm:flex-row items-center justify-between">
-            <p className="text-gray-600 text-sm">© {new Date().getFullYear()} LshWholesale。版權所有。</p>
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }
-
