@@ -4355,8 +4355,8 @@ function AdminDashboard() {
                                             <td className="p-3">
                                               <div className="flex items-center gap-3">
                                                 <div className="w-12 h-12 bg-gray-100 rounded overflow-hidden shrink-0 border border-border-light">
-                                                  {item.products?.images?.[0] ? (
-                                                    <img src={item.products.images[0]} className="w-full h-full object-cover" alt="" />
+                                                  {item.product?.images?.[0] ? (
+                                                    <img src={item.product.images[0]} className="w-full h-full object-cover" alt="" />
                                                   ) : (
                                                     <div className="w-full h-full flex items-center justify-center text-gray-300">
                                                       <span className="material-symbols-outlined text-lg">image</span>
@@ -4364,8 +4364,8 @@ function AdminDashboard() {
                                                   )}
                                                 </div>
                                                 <div>
-                                                  <p className="font-medium text-text-primary-light line-clamp-1">{item.products?.title_zh || item.products?.title_original || "未知商品"}</p>
-                                                  <p className="text-xs text-text-secondary-light">{item.products?.sku}</p>
+                                                  <p className="font-medium text-text-primary-light line-clamp-1">{item.product?.title_zh || item.product?.title_original || "未知商品"}</p>
+                                                  <p className="text-xs text-text-secondary-light">{item.product?.sku}</p>
                                                 </div>
                                               </div>
                                             </td>
