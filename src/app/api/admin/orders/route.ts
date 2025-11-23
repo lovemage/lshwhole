@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
         order_items (
           id, product_id, qty, unit_price_twd,
           products (
-            sku, title_zh, title_original, images
+            sku, title_zh, title_original
           )
         )
       `, {
@@ -48,8 +48,10 @@ export async function GET(request: NextRequest) {
 
     const list = orders || [];
     const userIds = list.map((o: any) => o.user_id).filter(Boolean);
+    const productIds = list.flatMap((o: any) => o.order_items?.map((item: any) => item.product_id) || []).filter(Boolean);
 
     let profileMap = new Map<string, { email: string | null; display_name: string | null }>();
+    let imageMap = new Map<number, string[]>();
 
     if (userIds.length > 0) {
       const { data: profiles } = await admin
@@ -62,12 +64,50 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Fetch product images
+    if (productIds.length > 0) {
+      const { data: imgs, error: imgErr } = await admin
+        .from("product_images")
+        .select("product_id, url, sort")
+        .in("product_id", productIds)
+        .order("sort", { ascending: true });
+
+      if (!imgErr && imgs) {
+        const byProduct = new Map<number, { url: string; sort: number }[]>();
+        imgs.forEach((img: any) => {
+          if (!byProduct.has(img.product_id)) {
+            byProduct.set(img.product_id, []);
+          }
+          byProduct.get(img.product_id)!.push({ url: img.url, sort: img.sort });
+        });
+
+        // Sort images by sort order and take URLs
+        byProduct.forEach((images, productId) => {
+          const sortedUrls = images
+            .sort((a, b) => a.sort - b.sort)
+            .map(img => img.url);
+          imageMap.set(productId, sortedUrls);
+        });
+      }
+    }
+
     const result = list.map((o: any) => {
       const profile = profileMap.get(o.user_id) || { email: null, display_name: null };
+
+      // Add images to order items
+      const orderItemsWithImages = o.order_items?.map((item: any) => ({
+        ...item,
+        product: {
+          ...item.products,
+          images: imageMap.get(item.product_id) || []
+        }
+      })) || [];
+
       return {
         ...o,
         user_email: profile.email,
         user_display_name: profile.display_name,
+        order_items: orderItemsWithImages,
       };
     });
 
