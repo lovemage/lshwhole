@@ -220,6 +220,20 @@ function AdminDashboard() {
   } | null>(null);
   const [upgradeSettingsLoading, setUpgradeSettingsLoading] = useState(false);
 
+  // Sub-accounts state
+  const [subAccounts, setSubAccounts] = useState<any[]>([]);
+  const [subAccountsLoading, setSubAccountsLoading] = useState(false);
+  const [showSubAccountModal, setShowSubAccountModal] = useState(false);
+  const [editingSubAccount, setEditingSubAccount] = useState<any>(null);
+  const [subAccountForm, setSubAccountForm] = useState({
+    email: "",
+    password: "",
+    name: "",
+    permissions: [] as string[],
+  });
+  const [currentUserPermissions, setCurrentUserPermissions] = useState<string[] | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
   useEffect(() => {
     // 當 L1 改變時重置 L2/L3
     setSelectedCrawlerL2(null);
@@ -310,6 +324,38 @@ function AdminDashboard() {
       fetchTags();
     }
   }, [activeNav]);
+
+  // Fetch sub-accounts
+  useEffect(() => {
+    if (activeNav === "sub_accounts") {
+      fetchSubAccounts();
+    }
+  }, [activeNav]);
+
+  // Check permissions
+  useEffect(() => {
+    const checkPermissions = async () => {
+      try {
+        const { data: { user } } = await import("@/lib/supabase").then(m => m.supabase.auth.getUser());
+        if (user) {
+          setCurrentUserId(user.id);
+          const res = await fetch("/api/admin/sub-accounts");
+          if (res.ok) {
+            const accounts = await res.json();
+            const myAccount = accounts.find((acc: any) => acc.user_id === user.id);
+            if (myAccount) {
+              setCurrentUserPermissions(myAccount.permissions || []);
+            } else {
+              setCurrentUserPermissions(null);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to check permissions:", err);
+      }
+    };
+    checkPermissions();
+  }, []);
 
   const fetchAnnouncements = async () => {
     try {
@@ -1194,11 +1240,6 @@ function AdminDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "reject" }),
       });
-      const j = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        alert(j?.error || "拒絕申請失敗");
-        return;
-      }
       alert("已拒絕此會員的升級申請");
       openMemberDetail({ user_id: userId });
       fetchMembers(memberPage);
@@ -1206,6 +1247,84 @@ function AdminDashboard() {
       console.error("Failed to reject upgrade:", err);
       alert("拒絕申請失敗");
     }
+  };
+
+  // Sub-account handlers
+  const fetchSubAccounts = async () => {
+    try {
+      setSubAccountsLoading(true);
+      const res = await fetch("/api/admin/sub-accounts");
+      if (res.ok) {
+        const data = await res.json();
+        setSubAccounts(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch sub-accounts:", err);
+    } finally {
+      setSubAccountsLoading(false);
+    }
+  };
+
+  const handleSaveSubAccount = async () => {
+    if (!subAccountForm.email || (!editingSubAccount && !subAccountForm.password)) {
+      alert("請填寫必要欄位");
+      return;
+    }
+
+    try {
+      setSubAccountsLoading(true);
+      const method = editingSubAccount ? "PUT" : "POST";
+      const body = editingSubAccount
+        ? { ...subAccountForm, user_id: editingSubAccount.user_id }
+        : subAccountForm;
+
+      const res = await fetch("/api/admin/sub-accounts", {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (res.ok) {
+        alert(editingSubAccount ? "子帳戶已更新" : "子帳戶已建立");
+        setShowSubAccountModal(false);
+        setEditingSubAccount(null);
+        setSubAccountForm({ email: "", password: "", name: "", permissions: [] });
+        fetchSubAccounts();
+      } else {
+        const j = await res.json().catch(() => ({}));
+        alert(j?.error || "操作失敗");
+      }
+    } catch (err) {
+      console.error("Failed to save sub-account:", err);
+      alert("操作失敗");
+    } finally {
+      setSubAccountsLoading(false);
+    }
+  };
+
+  const handleDeleteSubAccount = async (userId: string) => {
+    if (!confirm("確定要刪除此子帳戶嗎？")) return;
+    try {
+      const res = await fetch(`/api/admin/sub-accounts?user_id=${userId}`, { method: "DELETE" });
+      if (res.ok) {
+        alert("子帳戶已刪除");
+        fetchSubAccounts();
+      } else {
+        alert("刪除失敗");
+      }
+    } catch (err) {
+      console.error("Failed to delete sub-account:", err);
+      alert("刪除失敗");
+    }
+  };
+
+  const togglePermission = (navId: string) => {
+    setSubAccountForm(prev => {
+      const perms = prev.permissions.includes(navId)
+        ? prev.permissions.filter(p => p !== navId)
+        : [...prev.permissions, navId];
+      return { ...prev, permissions: perms };
+    });
   };
 
   // 熱銷商品管理函數
@@ -1664,20 +1783,24 @@ function AdminDashboard() {
   ];
 
   const navItems = [
-    { id: "dashboard", label: "儀表板", icon: "dashboard" },
-    { id: "announcements", label: "公告", icon: "campaign" },
-    { id: "categories", label: "分類", icon: "category" },
+    { id: "dashboard", label: "儀表看板", icon: "dashboard" },
+    { id: "announcements", label: "公告管理", icon: "campaign" },
+    { id: "categories", label: "分類管理", icon: "category" },
     { id: "crawler", label: "爬蟲導入", icon: "cloud_download" },
-    { id: "products", label: "商品", icon: "inventory_2" },
-    { id: "exchange", label: "匯率", icon: "currency_exchange" },
-    { id: "members", label: "會員", icon: "group" },
+    { id: "products", label: "商品管理", icon: "inventory_2" },
+    { id: "members", label: "會員管理", icon: "group" },
     { id: "upgrade_settings", label: "申請資格", icon: "description" },
-    { id: "orders", label: "訂單", icon: "receipt_long" },
-    { id: "hot_products", label: "熱銷商品", icon: "whatshot" }, // 新增
-    { id: "subaccounts", label: "子帳戶", icon: "manage_accounts" },
-    { id: "banners", label: "橫幅", icon: "view_carousel" },
+    { id: "orders", label: "訂單管理", icon: "receipt_long" },
+    { id: "hot_products", label: "熱銷商品", icon: "whatshot" },
+    { id: "sub_accounts", label: "子帳管理", icon: "manage_accounts" },
+    { id: "banners", label: "橫幅管理", icon: "view_carousel" },
     { id: "settings", label: "系統設置", icon: "settings" },
   ];
+
+  // Filter nav items based on permissions
+  const filteredNavItems = navItems.filter(item =>
+    currentUserPermissions === null || currentUserPermissions.includes(item.id)
+  );
   // 爬蟲導入：載入本地設定
   useEffect(() => {
     if (activeNav !== "crawler") return;
@@ -1798,6 +1921,212 @@ function AdminDashboard() {
   };
 
 
+  // Sub-account Modal
+  const renderSubAccountModal = () => (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl max-w-lg w-full p-6 space-y-6 max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center">
+          <h2 className="text-xl font-bold">{editingSubAccount ? "編輯子帳戶" : "新增子帳戶"}</h2>
+          <button onClick={() => setShowSubAccountModal(false)} className="text-text-secondary-light hover:text-text-primary-light">
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">Email (帳號)</label>
+            <input
+              type="email"
+              value={subAccountForm.email}
+              onChange={(e) => setSubAccountForm({ ...subAccountForm, email: e.target.value })}
+              disabled={!!editingSubAccount}
+              className="w-full px-3 py-2 border border-border-light rounded-lg disabled:bg-gray-100"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">密碼 {editingSubAccount && "(不修改請留空)"}</label>
+            <input
+              type="password"
+              value={subAccountForm.password}
+              onChange={(e) => setSubAccountForm({ ...subAccountForm, password: e.target.value })}
+              className="w-full px-3 py-2 border border-border-light rounded-lg"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">姓名</label>
+            <input
+              type="text"
+              value={subAccountForm.name}
+              onChange={(e) => setSubAccountForm({ ...subAccountForm, name: e.target.value })}
+              className="w-full px-3 py-2 border border-border-light rounded-lg"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">權限設定 (勾選可見頁面)</label>
+            <div className="grid grid-cols-2 gap-2">
+              {navItems.map(item => (
+                <label key={item.id} className="flex items-center gap-2 p-2 border border-border-light rounded bg-gray-50 cursor-pointer hover:bg-gray-100">
+                  <input
+                    type="checkbox"
+                    checked={subAccountForm.permissions.includes(item.id)}
+                    onChange={() => togglePermission(item.id)}
+                    className="rounded text-primary focus:ring-primary"
+                  />
+                  <span className="text-sm">{item.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-3 pt-2">
+          <button
+            onClick={() => setShowSubAccountModal(false)}
+            className="flex-1 px-4 py-2 border border-border-light rounded-lg font-medium hover:bg-gray-50"
+          >
+            取消
+          </button>
+          <button
+            onClick={handleSaveSubAccount}
+            disabled={subAccountsLoading}
+            className="flex-1 px-4 py-2 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 disabled:opacity-50"
+          >
+            {subAccountsLoading ? "處理中..." : "確認儲存"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Sub-accounts List
+  if (activeNav === "sub_accounts") {
+    return (
+      <div className="flex h-screen bg-background-light">
+        {/* Sidebar (Reused) */}
+        <aside className="flex w-64 flex-col bg-sidebar-dark text-text-primary-dark p-4">
+          <div className="flex items-center gap-3 p-4">
+            <div className="size-8 text-primary">
+              <svg fill="none" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+                <path d="M44 11.2727C44 14.0109 39.8386 16.3957 33.69 17.6364C39.8386 18.877 44 21.2618 44 24C44 26.7382 39.8386 29.123 33.69 30.3636C39.8386 31.6043 44 33.9891 44 36.7273C44 40.7439 35.0457 44 24 44C12.9543 44 4 40.7439 4 36.7273C4 33.9891 8.16144 31.6043 14.31 30.3636C8.16144 29.123 4 26.7382 4 24C4 21.2618 8.16144 18.877 14.31 17.6364C8.16144 16.3957 4 14.0109 4 11.2727C4 7.25611 12.9543 4 24 4C35.0457 4 44 7.25611 44 11.2727Z" fill="currentColor"></path>
+              </svg>
+            </div>
+            <h2 className="text-xl font-bold">Lsx wholesale</h2>
+          </div>
+          <div className="flex flex-1 flex-col justify-between">
+            <nav className="flex flex-col gap-2 mt-6">
+              {filteredNavItems.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveNav(item.id)}
+                  className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${activeNav === item.id
+                    ? "bg-primary/20 text-primary"
+                    : "text-text-secondary-dark hover:bg-primary/10 hover:text-text-primary-dark"
+                    }`}
+                >
+                  <span className="material-symbols-outlined">{item.icon}</span>
+                  <p className="text-sm font-medium">{item.label}</p>
+                </button>
+              ))}
+            </nav>
+            <div className="flex flex-col gap-4">
+              <div className="h-px bg-border-dark"></div>
+              <Link href="/" target="_blank" className="flex items-center gap-3 rounded-lg px-3 py-2 text-text-secondary-dark hover:bg-primary/10 hover:text-text-primary-dark">
+                <span className="material-symbols-outlined">public</span>
+                <p className="text-sm font-medium">返回網站</p>
+              </Link>
+              <Link href="/" className="flex items-center gap-3 rounded-lg px-3 py-2 text-text-secondary-dark hover:bg-primary/10 hover:text-text-primary-dark">
+                <span className="material-symbols-outlined">logout</span>
+                <p className="text-sm font-medium">登出</p>
+              </Link>
+            </div>
+          </div>
+        </aside>
+
+        <main className="flex-1 overflow-y-auto">
+          <div className="p-6 md:p-10">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h1 className="text-3xl font-bold text-text-primary-light">子帳管理</h1>
+                <p className="text-text-secondary-light">新增與管理後台子帳戶及其權限</p>
+              </div>
+              <button
+                onClick={() => {
+                  setEditingSubAccount(null);
+                  setSubAccountForm({ email: "", password: "", name: "", permissions: [] });
+                  setShowSubAccountModal(true);
+                }}
+                className="px-4 py-2 bg-primary text-white rounded-lg font-bold hover:bg-primary/90"
+              >
+                新增子帳戶
+              </button>
+            </div>
+
+            <div className="bg-white rounded-xl border border-border-light overflow-hidden">
+              <table className="w-full text-left">
+                <thead className="bg-gray-50 border-b border-border-light">
+                  <tr>
+                    <th className="px-6 py-3 text-sm font-medium text-text-secondary-light">姓名</th>
+                    <th className="px-6 py-3 text-sm font-medium text-text-secondary-light">Email</th>
+                    <th className="px-6 py-3 text-sm font-medium text-text-secondary-light">權限數量</th>
+                    <th className="px-6 py-3 text-sm font-medium text-text-secondary-light">建立時間</th>
+                    <th className="px-6 py-3 text-sm font-medium text-text-secondary-light">操作</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-light">
+                  {subAccounts.map((account) => (
+                    <tr key={account.user_id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 text-sm font-medium text-text-primary-light">{account.name}</td>
+                      <td className="px-6 py-4 text-sm text-text-secondary-light">{account.email}</td>
+                      <td className="px-6 py-4 text-sm text-text-secondary-light">
+                        <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
+                          {account.permissions?.length || 0} 項
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-text-secondary-light">
+                        {new Date(account.created_at).toLocaleDateString("zh-TW")}
+                      </td>
+                      <td className="px-6 py-4 text-sm flex gap-3">
+                        <button
+                          onClick={() => {
+                            setEditingSubAccount(account);
+                            setSubAccountForm({
+                              email: account.email,
+                              password: "",
+                              name: account.name,
+                              permissions: account.permissions || [],
+                            });
+                            setShowSubAccountModal(true);
+                          }}
+                          className="text-primary hover:underline"
+                        >
+                          編輯
+                        </button>
+                        <button
+                          onClick={() => handleDeleteSubAccount(account.user_id)}
+                          className="text-danger hover:underline"
+                        >
+                          刪除
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {subAccounts.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-8 text-center text-text-secondary-light">
+                        暫無子帳戶
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          {showSubAccountModal && renderSubAccountModal()}
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen bg-background-light">
       {/* Sidebar */}
@@ -1813,7 +2142,7 @@ function AdminDashboard() {
 
         <div className="flex flex-1 flex-col justify-between">
           <nav className="flex flex-col gap-2 mt-6">
-            {navItems.map((item) => (
+            {filteredNavItems.map((item) => (
               <button
                 key={item.id}
                 onClick={() => setActiveNav(item.id)}
@@ -1837,6 +2166,10 @@ function AdminDashboard() {
                 <p className="text-sm text-text-secondary-dark">系統管理員</p>
               </div>
             </div>
+            <Link href="/" target="_blank" className="flex items-center gap-3 rounded-lg px-3 py-2 text-text-secondary-dark hover:bg-primary/10 hover:text-text-primary-dark">
+              <span className="material-symbols-outlined">public</span>
+              <p className="text-sm font-medium">返回網站</p>
+            </Link>
             <Link href="/" className="flex items-center gap-3 rounded-lg px-3 py-2 text-text-secondary-dark hover:bg-primary/10 hover:text-text-primary-dark">
               <span className="material-symbols-outlined">logout</span>
               <p className="text-sm font-medium">登出</p>
@@ -1930,7 +2263,9 @@ function AdminDashboard() {
                           ? "訂單管理"
                           : activeNav === "upgrade_settings"
                             ? "批發升級申請資格設定"
-                            : "儀表板"}
+                            : activeNav === "sub_accounts"
+                              ? "子帳戶管理"
+                              : "儀表看板"}
               </p>
               <p className="text-base text-text-secondary-light">
                 {activeNav === "announcements"
@@ -1947,7 +2282,9 @@ function AdminDashboard() {
                             ? "管理首頁與專區顯示的熱銷商品"
                             : activeNav === "upgrade_settings"
                               ? "管理會員升級為批發會員的申請資格、銀行帳號與代理費金額"
-                              : "歡迎回來，以下是您商店活動的摘要。"}
+                              : activeNav === "sub_accounts"
+                                ? "新增與管理後台子帳戶及其權限"
+                                : "歡迎回來，以下是您商店活動的摘要。"}
               </p>
             </div>
             {activeNav === "dashboard" && (
@@ -4783,9 +5120,6 @@ function AdminDashboard() {
       )}
     </div>
   );
-
-
-
 }
 
 export default dynamic(() => Promise.resolve(AdminDashboard), { ssr: false });
