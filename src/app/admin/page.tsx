@@ -729,6 +729,30 @@ function AdminDashboard() {
     }
   };
 
+  const handleUpload = async (file: File | undefined, onSuccess: (url: string) => void) => {
+    if (!file) return;
+    const formData = new FormData();
+    formData.append("file", file);
+    setBannerLoading(true);
+    try {
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.url) {
+        onSuccess(data.url);
+      } else {
+        alert("Upload failed: " + (data.error || "Unknown error"));
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Upload failed");
+    } finally {
+      setBannerLoading(false);
+    }
+  };
+
   // 橫幅：首頁
   const fetchIndexBanners = async () => {
     setBannerLoading(true);
@@ -3825,8 +3849,14 @@ function AdminDashboard() {
                     <h3 className="text-lg font-bold text-text-primary-light mb-3">新增首頁橫幅</h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
-                        <label className="text-sm text-text-secondary-light">圖片網址</label>
-                        <input value={newIndexBanner.image_url} onChange={(e) => setNewIndexBanner({ ...newIndexBanner, image_url: e.target.value })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
+                        <label className="text-sm text-text-secondary-light">圖片網址 (或上傳)</label>
+                        <div className="flex gap-2">
+                          <input value={newIndexBanner.image_url} onChange={(e) => setNewIndexBanner({ ...newIndexBanner, image_url: e.target.value })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" placeholder="輸入網址或上傳圖片" />
+                          <label className="mt-1 flex items-center justify-center px-3 py-2 bg-gray-100 border border-border-light rounded-lg cursor-pointer hover:bg-gray-200">
+                            <span className="material-symbols-outlined text-sm">upload</span>
+                            <input type="file" className="hidden" accept="image/*" onChange={(e) => handleUpload(e.target.files?.[0], (url) => setNewIndexBanner({ ...newIndexBanner, image_url: url }))} />
+                          </label>
+                        </div>
                       </div>
                       <div>
                         <label className="text-sm text-text-secondary-light">連結（可選）</label>
@@ -3898,8 +3928,14 @@ function AdminDashboard() {
                     <h3 className="text-lg font-bold text-text-primary-light mb-3">新增商品頁橫幅</h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
-                        <label className="text-sm text-text-secondary-light">圖片網址</label>
-                        <input value={newProductsBanner.image_url} onChange={(e) => setNewProductsBanner({ ...newProductsBanner, image_url: e.target.value })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
+                        <label className="text-sm text-text-secondary-light">圖片網址 (或上傳)</label>
+                        <div className="flex gap-2">
+                          <input value={newProductsBanner.image_url} onChange={(e) => setNewProductsBanner({ ...newProductsBanner, image_url: e.target.value })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" placeholder="輸入網址或上傳圖片" />
+                          <label className="mt-1 flex items-center justify-center px-3 py-2 bg-gray-100 border border-border-light rounded-lg cursor-pointer hover:bg-gray-200">
+                            <span className="material-symbols-outlined text-sm">upload</span>
+                            <input type="file" className="hidden" accept="image/*" onChange={(e) => handleUpload(e.target.files?.[0], (url) => setNewProductsBanner({ ...newProductsBanner, image_url: url }))} />
+                          </label>
+                        </div>
                       </div>
                       <div>
                         <label className="text-sm text-text-secondary-light">排序（數字越小越前面）</label>

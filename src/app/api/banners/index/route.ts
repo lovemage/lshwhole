@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
+import { v2 as cloudinary } from "cloudinary";
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
@@ -58,7 +59,33 @@ export async function DELETE(req: NextRequest) {
   if (!idRaw) return NextResponse.json({ error: "缺少 id" }, { status: 400 });
   const id = Number(idRaw);
   const admin = supabaseAdmin();
+
+  // Get banner info first to delete image
+  const { data: banner } = await admin.from("index_banners").select("image_url").eq("id", id).single();
+
   const { error } = await admin.from("index_banners").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+  // Delete image from Cloudinary if it exists
+  if (banner?.image_url) {
+    const publicId = getPublicIdFromUrl(banner.image_url);
+    if (publicId) {
+      try {
+        await cloudinary.uploader.destroy(publicId);
+      } catch (e) {
+        console.error("Failed to delete image from Cloudinary:", e);
+      }
+    }
+  }
+
   return NextResponse.json({ ok: true });
+}
+
+function getPublicIdFromUrl(url: string) {
+  try {
+    const regex = /\/upload\/(?:v\d+\/)?(.+)\.[^.]+$/;
+    const match = url.match(regex);
+    if (match) return match[1];
+  } catch {}
+  return null;
 }
