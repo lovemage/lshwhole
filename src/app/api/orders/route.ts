@@ -203,8 +203,9 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (orderError || !order) {
+      console.error("創建訂單失敗:", orderError);
       return NextResponse.json(
-        { error: "創建訂單失敗" },
+        { error: "創建訂單失敗", details: orderError },
         { status: 500 }
       );
     }
