@@ -38,14 +38,13 @@ export async function POST(
       return NextResponse.json({ error: "訂單不存在" }, { status: 404 });
     }
 
-    if (order.status !== "ARRIVED_TW") {
-      return NextResponse.json({ error: "訂單狀態不正確，無法支付運費" }, { status: 400 });
+    if (order.shipping_paid) {
+      return NextResponse.json({ error: "已支付過運費" }, { status: 400 });
     }
 
     const shippingFee = (order.shipping_fee_intl || 0) + (order.box_fee || 0);
     if (shippingFee <= 0) {
-      // No fee to pay, just update status?
-      // Or maybe error? Let's allow update if fee is 0.
+      return NextResponse.json({ error: "無需支付運費" }, { status: 400 });
     }
 
     // 2. Check wallet
@@ -95,11 +94,11 @@ export async function POST(
       return NextResponse.json({ error: "更新錢包餘額失敗" }, { status: 500 });
     }
 
-    // 4. Update Order Status
+    // 4. Update Order Payment Status
     const { error: updateOrderError } = await admin
       .from("orders")
       .update({
-        status: "READY_TO_SHIP",
+        shipping_paid: true,
         updated_at: new Date().toISOString(),
       })
       .eq("id", id);

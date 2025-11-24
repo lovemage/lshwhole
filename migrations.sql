@@ -29,6 +29,9 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS hold_id BIGINT;
 -- Add columns for Order Items status (for Out of Stock handling) - now redundant but kept for safety
 
 -- Add columns for Member Tier if not exists (User mentioned "Update profiles.tier")
--- Check constraints for profiles.tier to allow 'guest', 'retail', 'wholesale'
+-- Check constraints for profiles.tier to allow 'guest', 'retail', 'wholesale', 'vip'
 -- ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_tier_check;
 -- ALTER TABLE profiles ADD CONSTRAINT profiles_tier_check CHECK (tier IN ('guest', 'retail', 'wholesale', 'vip'));
+
+-- New Requirement: Track if shipping has been paid
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_paid BOOLEAN DEFAULT FALSE;

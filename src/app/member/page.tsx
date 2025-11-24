@@ -35,6 +35,7 @@ interface Order {
   order_items: OrderItem[];
   user_email?: string;
   user_display_name?: string;
+  shipping_paid: boolean;
 }
 
 interface ProfileInfo {
@@ -202,15 +203,10 @@ export default function MemberPage() {
 
   const getStatusText = (status: string) => {
     switch (status) {
-      case "PENDING": return "待處理";
-      case "PICKING": return "揀貨中";
-      case "CHARGED": return "已扣款";
-      case "ARRIVED_TW": return "抵台 / 待補運費";
-      case "READY_TO_SHIP": return "準備出貨";
-      case "SHIPPED": return "已出貨";
-      case "RECEIVED": return "已收貨";
-      case "REFUNDED": return "已退款";
-      case "CANCELLED": return "已取消";
+      case "PENDING": return "處理中";
+      case "COMPLETED": return "處理完畢";
+      case "CANCELLED": return "取消訂單";
+      case "DISPUTE_PENDING": return "爭議待處理";
       default: return status;
     }
   };
@@ -622,11 +618,20 @@ export default function MemberPage() {
                         {new Date(order.created_at).toLocaleString("zh-TW")}
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-sm text-gray-500 mb-1">訂單狀態</div>
-                      <span className="px-3 py-1 rounded-full text-xs font-medium bg-gray-200 text-gray-800">
+                    <div className="text-right flex flex-col items-end gap-1">
+                      <div className="text-sm text-gray-500">訂單狀態</div>
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                        order.status === "PENDING" ? "bg-yellow-100 text-yellow-800" :
+                        order.status === "COMPLETED" ? "bg-green-100 text-green-800" :
+                        order.status === "CANCELLED" ? "bg-gray-100 text-gray-800" :
+                        order.status === "DISPUTE_PENDING" ? "bg-red-100 text-red-800" :
+                        "bg-gray-100 text-gray-800"
+                      }`}>
                         {getStatusText(order.status)}
                       </span>
+                      {order.shipping_paid && (
+                        <span className="text-xs text-green-600 font-medium">已支付補運費</span>
+                      )}
                     </div>
                   </div>
 
@@ -678,7 +683,8 @@ export default function MemberPage() {
                       <div className="text-sm text-gray-600 space-y-1">
                         {order.shipping_method && <div>運送方式: {order.shipping_method}</div>}
                         {order.tracking_number && <div>單號: {order.tracking_number}</div>}
-                        {order.status === "ARRIVED_TW" && (
+                        {/* 提示支付運費: 當有運費產生且尚未支付時顯示 */}
+                        {((order.shipping_fee_intl > 0 || order.box_fee > 0) && !order.shipping_paid) && (
                           <div className="text-orange-600 font-medium">
                             <p>請支付補運費以安排出貨</p>
                           </div>
@@ -700,8 +706,8 @@ export default function MemberPage() {
                       </div>
                     </div>
 
-                    {/* Actions */}
-                    {order.status === "ARRIVED_TW" && (
+                    {/* Actions: 支付運費按鈕 */}
+                    {((order.shipping_fee_intl > 0 || order.box_fee > 0) && !order.shipping_paid) && (
                       <div className="flex justify-end mt-4 pt-4 border-t border-gray-200">
                         <button
                           onClick={() => handlePayShipping(order.id)}

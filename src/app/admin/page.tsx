@@ -4230,13 +4230,10 @@ function AdminDashboard() {
                   className="px-4 py-2 border border-border-light rounded-lg"
                 >
                   <option value="">全部狀態</option>
-                  <option value="PENDING">待處理</option>
-                  <option value="PICKING">揀貨中</option>
-                  <option value="CHARGED">已扣款</option>
-                  <option value="SHIPPED">已出貨</option>
-                  <option value="RECEIVED">已收貨</option>
-                  <option value="REFUNDED">已退款</option>
-                  <option value="CANCELLED">已取消</option>
+                  <option value="PENDING">處理中</option>
+                  <option value="COMPLETED">處理完畢</option>
+                  <option value="CANCELLED">取消訂單</option>
+                  <option value="DISPUTE_PENDING">爭議待處理</option>
                 </select>
                 <button
                   onClick={() => fetchOrders(0)}
@@ -4315,29 +4312,20 @@ function AdminDashboard() {
                                 : "-"}
                             </td>
                             <td className="py-3 px-4 text-sm">
-                              <span className={`px-2 py-1 rounded text-xs font-medium ${order.status === "PENDING"
-                                ? "bg-yellow-100 text-yellow-800"
-                                : order.status === "SHIPPED"
-                                  ? "bg-blue-100 text-blue-800"
-                                  : order.status === "COMPLETED"
-                                    ? "bg-green-100 text-green-800"
-                                    : "bg-gray-100 text-gray-800"
-                                }`}>
-                                {order.status === "PENDING"
-                                  ? "待處理"
-                                  : order.status === "PICKING"
-                                    ? "揀貨中"
-                                    : order.status === "CHARGED"
-                                      ? "已扣款"
-                                      : order.status === "SHIPPED"
-                                        ? "已出貨"
-                                        : order.status === "RECEIVED"
-                                          ? "已收貨"
-                                          : order.status === "REFUNDED"
-                                            ? "已退款"
-                                            : order.status === "CANCELLED"
-                                              ? "已取消"
-                                              : order.status}
+                              <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                order.status === "PENDING" ? "bg-yellow-100 text-yellow-800" :
+                                order.status === "COMPLETED" ? "bg-green-100 text-green-800" :
+                                order.status === "CANCELLED" ? "bg-gray-100 text-gray-800" :
+                                order.status === "DISPUTE_PENDING" ? "bg-red-100 text-red-800" :
+                                "bg-gray-100 text-gray-800"
+                              }`}>
+                                {
+                                  order.status === "PENDING" ? "處理中" :
+                                  order.status === "COMPLETED" ? "處理完畢" :
+                                  order.status === "CANCELLED" ? "取消訂單" :
+                                  order.status === "DISPUTE_PENDING" ? "爭議待處理" :
+                                  order.status
+                                }
                               </span>
                             </td>
                             <td className="py-3 px-4 text-sm">
@@ -5394,19 +5382,21 @@ function AdminDashboard() {
                     onChange={(e) => setSelectedOrder({ ...selectedOrder, status: e.target.value })}
                     className="w-full px-4 py-2 border border-border-light rounded-lg"
                   >
-                    <option value="PENDING">待處理 (已付款)</option>
-                    <option value="ARRIVED_TW">抵台 / 待補運費</option>
-                    <option value="READY_TO_SHIP">準備出貨 (已補運費)</option>
-                    <option value="SHIPPED">已出貨</option>
-                    <option value="RECEIVED">已收貨</option>
-                    <option value="REFUNDED">已退款</option>
-                    <option value="CANCELLED">已取消</option>
+                    <option value="PENDING">處理中</option>
+                    <option value="COMPLETED">處理完畢</option>
+                    <option value="CANCELLED">取消訂單</option>
+                    <option value="DISPUTE_PENDING">爭議待處理</option>
                   </select>
                   
                   <div className="bg-gray-50 p-4 rounded-lg space-y-2">
                     <p className="text-sm text-text-secondary-light">建立時間: {new Date(selectedOrder.created_at).toLocaleString("zh-TW")}</p>
                     <p className="text-sm text-text-secondary-light">會員: {selectedOrder.user_display_name} ({selectedOrder.user_email})</p>
                     <p className="text-sm text-text-secondary-light">總金額: <span className="font-bold text-primary">NT$ {selectedOrder.total_twd}</span></p>
+                    {selectedOrder.shipping_paid && (
+                      <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800">
+                        已支付補運費
+                      </span>
+                    )}
                   </div>
                 </div>
 
