@@ -121,41 +121,6 @@ export default function MemberOrdersPage() {
     }
   };
 
-  const handlePayShipping = async (orderId: number) => {
-    if (!confirm("確定要支付運費嗎？將從您的錢包扣款。")) return;
-
-    try {
-      setLoading(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.push("/login");
-        return;
-      }
-
-      const res = await fetch(`/api/orders/${orderId}/pay-shipping`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        alert(data.error || "支付失敗");
-        return;
-      }
-
-      alert("支付成功！");
-      fetchOrders(); // Reload
-    } catch (e) {
-      console.error("Pay shipping failed:", e);
-      alert("支付失敗，請稍後再試");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handlePayItemShipping = async (orderId: number, itemIds: number[]) => {
     if (!confirm(`確定要支付選取商品的運費嗎？將從您的錢包扣款。`)) return;
 
@@ -309,40 +274,15 @@ export default function MemberOrdersPage() {
                     <div className="text-sm text-gray-600 space-y-1">
                       {order.shipping_method && <div>運送方式: {order.shipping_method}</div>}
                       {order.tracking_number && <div>單號: {order.tracking_number}</div>}
-                      {/* 提示支付運費: 當有運費產生且尚未支付時顯示 */}
-                      {((order.shipping_fee_intl > 0 || order.box_fee > 0) && !order.shipping_paid) && (
-                        <div className="text-orange-600 font-medium">
-                          <p>請支付補運費以安排出貨</p>
-                        </div>
-                      )}
                     </div>
                     <div className="text-right">
                        <div className="text-sm text-gray-500 mb-1">商品金額: NT$ {order.total_twd.toLocaleString()}</div>
-                       {(order.shipping_fee_intl > 0 || order.box_fee > 0) && (
-                         <div className="text-sm text-gray-500 mb-1">
-                           補運費: NT$ {((order.shipping_fee_intl || 0) + (order.box_fee || 0)).toLocaleString()}
-                           <span className="text-xs text-gray-400 ml-1">
-                             (國際運費 {order.shipping_fee_intl || 0} + 包材 {order.box_fee || 0})
-                           </span>
-                         </div>
-                       )}
                        <div className="text-lg font-bold text-gray-900 mt-2">
-                         總計 NT$ {(order.total_twd + (order.shipping_fee_intl || 0) + (order.box_fee || 0)).toLocaleString()}
+                         總計 NT$ {(order.total_twd).toLocaleString()}
                        </div>
                     </div>
                   </div>
 
-                  {/* Actions: 支付運費按鈕 (Order Level) */}
-                  {((order.shipping_fee_intl > 0 || order.box_fee > 0) && !order.shipping_paid) && (
-                    <div className="flex justify-end mt-4 pt-4 border-t border-gray-200">
-                      <button
-                        onClick={() => handlePayShipping(order.id)}
-                        className="px-6 py-2 bg-primary text-white rounded-lg font-bold hover:bg-primary/90 shadow-sm"
-                      >
-                        支付運費 NT$ {((order.shipping_fee_intl || 0) + (order.box_fee || 0)).toLocaleString()}
-                      </button>
-                    </div>
-                  )}
                 </div>
               </div>
             ))}

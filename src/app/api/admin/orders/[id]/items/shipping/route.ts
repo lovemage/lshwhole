@@ -9,7 +9,7 @@ export async function PUT(
     const { id } = await params; // order_id
     const admin = supabaseAdmin();
     const body = await request.json();
-    const { item_id, weight, shipping_method, box_fee } = body;
+    const { item_id, weight, shipping_method, box_fee, shipping_country } = body;
 
     if (!item_id) {
       return NextResponse.json({ error: "缺少必要參數 (item_id)" }, { status: 400 });
@@ -38,13 +38,23 @@ export async function PUT(
     const newWeight = weight !== undefined ? Number(weight) : item.weight;
     const newMethod = shipping_method !== undefined ? shipping_method : item.shipping_method;
     const newBoxFee = box_fee !== undefined ? Number(box_fee) : item.box_fee;
+    const newCountry = shipping_country !== undefined ? shipping_country : item.shipping_country;
 
     let intlFee = item.shipping_fee_intl;
     let domFee = item.shipping_fee_domestic;
 
-    // Calculate Intl Fee if weight is present
-    if (newWeight >= 0 && settings.rate_intl_kg) {
-      intlFee = Math.ceil(newWeight * settings.rate_intl_kg);
+    // Calculate Intl Fee based on country and weight
+    if (newWeight >= 0) {
+      if (newCountry === 'KR' && settings.rate_intl_kr) {
+        intlFee = Math.ceil(newWeight * settings.rate_intl_kr);
+      } else if (newCountry === 'JP' && settings.rate_intl_jp) {
+        intlFee = Math.ceil(newWeight * settings.rate_intl_jp);
+      } else if (newCountry === 'TH' && settings.rate_intl_th) {
+        intlFee = Math.ceil(newWeight * settings.rate_intl_th);
+      } else if (settings.rate_intl_kg) {
+        // Fallback to generic rate if country not specified or no country specific rate
+        intlFee = Math.ceil(newWeight * settings.rate_intl_kg);
+      }
     }
 
     // Calculate Domestic Fee if method is present
@@ -58,6 +68,9 @@ export async function PUT(
           break;
         case "CVS":
           domFee = settings.rate_dom_cvs || 0;
+          break;
+        case "HSINCHU":
+          domFee = settings.rate_dom_hsinchu || 0;
           break;
         case "WHOLESALE_STORE":
           domFee = 0; // Assumed 0 as member handles it
@@ -74,6 +87,7 @@ export async function PUT(
         weight: newWeight,
         shipping_method: newMethod,
         box_fee: newBoxFee,
+        shipping_country: newCountry,
         shipping_fee_intl: intlFee,
         shipping_fee_domestic: domFee,
         updated_at: new Date().toISOString()
@@ -90,6 +104,7 @@ export async function PUT(
         weight: newWeight, 
         shipping_method: newMethod, 
         box_fee: newBoxFee, 
+        shipping_country: newCountry,
         shipping_fee_intl: intlFee, 
         shipping_fee_domestic: domFee 
       } 

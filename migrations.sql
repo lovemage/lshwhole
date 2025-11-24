@@ -60,3 +60,14 @@ INSERT INTO shipping_settings (key, value) VALUES
 ('rate_dom_blackcat', 130),
 ('rate_dom_cvs', 60)
 ON CONFLICT DO NOTHING;
+
+-- New Requirement: Shipping Country for International Shipping Rate
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS shipping_country TEXT;
+
+-- Seed new default shipping settings for countries
+INSERT INTO shipping_settings (key, value) VALUES 
+('rate_intl_kr', 165),
+('rate_intl_jp', 220),
+('rate_intl_th', 180),
+('rate_dom_hsinchu', 0) -- Value to be set by admin, defaulting to 0 or similar logic
+ON CONFLICT DO NOTHING;

@@ -234,9 +234,13 @@ function AdminDashboard() {
   // Shipping Settings State
   const [shippingSettings, setShippingSettings] = useState({
     rate_intl_kg: 0,
+    rate_intl_kr: 0,
+    rate_intl_jp: 0,
+    rate_intl_th: 0,
     rate_dom_post: 0,
     rate_dom_blackcat: 0,
     rate_dom_cvs: 0,
+    rate_dom_hsinchu: 0,
   });
   const [shippingSettingsLoading, setShippingSettingsLoading] = useState(false);
 
@@ -1309,9 +1313,13 @@ function AdminDashboard() {
         const data = await res.json();
         setShippingSettings({
           rate_intl_kg: data.rate_intl_kg || 0,
+          rate_intl_kr: data.rate_intl_kr || 0,
+          rate_intl_jp: data.rate_intl_jp || 0,
+          rate_intl_th: data.rate_intl_th || 0,
           rate_dom_post: data.rate_dom_post || 0,
           rate_dom_blackcat: data.rate_dom_blackcat || 0,
           rate_dom_cvs: data.rate_dom_cvs || 0,
+          rate_dom_hsinchu: data.rate_dom_hsinchu || 0,
         });
       }
     } catch (err) {
@@ -1458,7 +1466,7 @@ function AdminDashboard() {
     }
   };
 
-  const updateItemShipping = async (itemId: number, weight: number, method: string, boxFee: number) => {
+  const updateItemShipping = async (itemId: number, weight: number, method: string, boxFee: number, country: string) => {
     try {
       const res = await fetch(`/api/admin/orders/${selectedOrder.id}/items/shipping`, {
         method: "PUT",
@@ -1467,7 +1475,8 @@ function AdminDashboard() {
           item_id: itemId,
           weight: weight,
           shipping_method: method,
-          box_fee: boxFee
+          box_fee: boxFee,
+          shipping_country: country
         }),
       });
 
@@ -4216,10 +4225,37 @@ function AdminDashboard() {
           {activeNav === "shipping_settings" && (
             <div className="py-6 max-w-2xl space-y-6">
               <div className="bg-card-light rounded-xl border border-border-light p-6">
-                <h3 className="text-lg font-bold text-text-primary-light mb-4">國際運費費率</h3>
+                <h3 className="text-lg font-bold text-text-primary-light mb-4">國際運費費率 (每公斤/TWD)</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-text-primary-light mb-1">每公斤運費 (TWD)</label>
+                    <label className="block text-sm font-medium text-text-primary-light mb-1">韓國 (KR)</label>
+                    <input
+                      type="number"
+                      value={shippingSettings.rate_intl_kr}
+                      onChange={(e) => setShippingSettings({ ...shippingSettings, rate_intl_kr: Number(e.target.value) })}
+                      className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary-light mb-1">日本 (JP)</label>
+                    <input
+                      type="number"
+                      value={shippingSettings.rate_intl_jp}
+                      onChange={(e) => setShippingSettings({ ...shippingSettings, rate_intl_jp: Number(e.target.value) })}
+                      className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary-light mb-1">泰國 (TH)</label>
+                    <input
+                      type="number"
+                      value={shippingSettings.rate_intl_th}
+                      onChange={(e) => setShippingSettings({ ...shippingSettings, rate_intl_th: Number(e.target.value) })}
+                      className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary-light mb-1">其他預設 (Default)</label>
                     <input
                       type="number"
                       value={shippingSettings.rate_intl_kg}
@@ -4248,6 +4284,15 @@ function AdminDashboard() {
                       type="number"
                       value={shippingSettings.rate_dom_blackcat}
                       onChange={(e) => setShippingSettings({ ...shippingSettings, rate_dom_blackcat: Number(e.target.value) })}
+                      className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary-light mb-1">新竹貨運</label>
+                    <input
+                      type="number"
+                      value={shippingSettings.rate_dom_hsinchu}
+                      onChange={(e) => setShippingSettings({ ...shippingSettings, rate_dom_hsinchu: Number(e.target.value) })}
                       className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
                     />
                   </div>
@@ -5520,7 +5565,7 @@ function AdminDashboard() {
       {/* 訂單詳情 Modal */}
       {showOrderDetail && selectedOrder && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl max-w-[950px] w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-border-light p-6 flex justify-between items-center z-10">
               <h2 className="text-2xl font-bold">訂單 #{selectedOrder.id}</h2>
               <button onClick={() => setShowOrderDetail(false)} className="text-text-secondary-light hover:text-text-primary-light">
@@ -5617,10 +5662,10 @@ function AdminDashboard() {
                       <tr>
                         <th className="p-3 text-sm font-medium">商品</th>
                         <th className="p-3 text-sm font-medium">單價/數量</th>
-                        <th className="p-3 text-sm font-medium w-32">重量(kg)</th>
-                        <th className="p-3 text-sm font-medium w-40">物流方式</th>
+                        <th className="p-3 text-sm font-medium min-w-[140px]">國際運費 (重量)</th>
+                        <th className="p-3 text-sm font-medium min-w-[140px]">物流方式</th>
                         <th className="p-3 text-sm font-medium w-24">包材費</th>
-                        <th className="p-3 text-sm font-medium w-32">運費試算</th>
+                        <th className="p-3 text-sm font-medium min-w-[120px]">運費試算</th>
                         <th className="p-3 text-sm font-medium w-32">寄件編號</th>
                         <th className="p-3 text-sm font-medium">狀態</th>
                         <th className="p-3 text-sm font-medium">操作</th>
@@ -5647,21 +5692,42 @@ function AdminDashboard() {
                             <div className="text-xs text-gray-500">x {item.qty}</div>
                             <div className="font-bold mt-1">${item.unit_price_twd * item.qty}</div>
                           </td>
-                          <td className="p-3 text-sm align-top">
-                            <input
-                              type="number"
-                              step="0.01"
+                          <td className="p-3 text-sm align-top space-y-2">
+                            <select
                               className="w-full text-sm border border-gray-300 rounded px-2 py-1"
-                              value={item.weight || 0}
+                              value={item.shipping_country || ""}
                               onChange={(e) => {
-                                const val = Math.max(0, Number(e.target.value));
+                                const val = e.target.value;
                                 setSelectedOrder((prev: any) => ({
                                   ...prev,
-                                  items: prev.items.map((i: any) => i.id === item.id ? { ...i, weight: val } : i)
+                                  items: prev.items.map((i: any) => i.id === item.id ? { ...i, shipping_country: val } : i)
                                 }));
+                                updateItemShipping(item.id, item.weight || 0, item.shipping_method, item.box_fee || 0, val);
                               }}
-                              onBlur={(e) => updateItemShipping(item.id, Number(e.target.value), item.shipping_method, item.box_fee || 0)}
-                            />
+                            >
+                              <option value="">選擇國家</option>
+                              <option value="KR">韓國 (KR)</option>
+                              <option value="JP">日本 (JP)</option>
+                              <option value="TH">泰國 (TH)</option>
+                            </select>
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="number"
+                                step="0.01"
+                                placeholder="重量"
+                                className="w-full text-sm border border-gray-300 rounded px-2 py-1"
+                                value={item.weight || 0}
+                                onChange={(e) => {
+                                  const val = Math.max(0, Number(e.target.value));
+                                  setSelectedOrder((prev: any) => ({
+                                    ...prev,
+                                    items: prev.items.map((i: any) => i.id === item.id ? { ...i, weight: val } : i)
+                                  }));
+                                }}
+                                onBlur={(e) => updateItemShipping(item.id, Number(e.target.value), item.shipping_method, item.box_fee || 0, item.shipping_country)}
+                              />
+                              <span className="text-xs text-gray-500">kg</span>
+                            </div>
                           </td>
                           <td className="p-3 text-sm align-top">
                             <select
@@ -5673,12 +5739,13 @@ function AdminDashboard() {
                                   ...prev,
                                   items: prev.items.map((i: any) => i.id === item.id ? { ...i, shipping_method: val } : i)
                                 }));
-                                updateItemShipping(item.id, item.weight || 0, val, item.box_fee || 0);
+                                updateItemShipping(item.id, item.weight || 0, val, item.box_fee || 0, item.shipping_country);
                               }}
                             >
                               <option value="">未設定</option>
                               <option value="POST">郵政宅配</option>
                               <option value="BLACK_CAT">黑貓宅配</option>
+                              <option value="HSINCHU">新竹貨運</option>
                               <option value="CVS">便利店</option>
                               <option value="WHOLESALE_STORE">批發客賣貨便</option>
                             </select>
@@ -5695,7 +5762,7 @@ function AdminDashboard() {
                                   items: prev.items.map((i: any) => i.id === item.id ? { ...i, box_fee: val } : i)
                                 }));
                               }}
-                              onBlur={(e) => updateItemShipping(item.id, item.weight || 0, item.shipping_method, Number(e.target.value))}
+                              onBlur={(e) => updateItemShipping(item.id, item.weight || 0, item.shipping_method, Number(e.target.value), item.shipping_country)}
                             />
                           </td>
                           <td className="p-3 text-sm align-top">
