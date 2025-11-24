@@ -12,6 +12,9 @@ interface OrderItem {
   unit_price_twd: number;
   status: string;
   refund_amount: number;
+  shipping_fee_intl: number;
+  shipping_fee_domestic: number;
+  shipping_paid: boolean;
   product: {
     title_zh: string;
     title_original: string;
@@ -270,6 +273,44 @@ export default function MemberPage() {
       window.location.reload(); 
     } catch (e) {
       console.error("Pay shipping failed:", e);
+      alert("支付失敗，請稍後再試");
+    } finally {
+      setOrdersLoading(false);
+    }
+  };
+
+  const handlePayItemShipping = async (orderId: number, itemIds: number[]) => {
+    if (!confirm(`確定要支付選取商品的運費嗎？將從您的錢包扣款。`)) return;
+
+    try {
+      setOrdersLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push("/login");
+        return;
+      }
+
+      const res = await fetch(`/api/orders/${orderId}/pay-item-shipping`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ item_ids: itemIds }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.error || "支付失敗");
+        fetchOrders();
+        return;
+      }
+
+      alert("支付成功！");
+      window.location.reload();
+    } catch (e) {
+      console.error("Pay item shipping failed:", e);
       alert("支付失敗，請稍後再試");
     } finally {
       setOrdersLoading(false);
@@ -662,14 +703,33 @@ export default function MemberPage() {
                           </div>
                         </div>
 
-                        {/* Item Status */}
-                        <div className="sm:text-right min-w-[100px]">
+                        {/* Item Status & Shipping */}
+                        <div className="sm:text-right min-w-[100px] flex flex-col items-end gap-2">
                           <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium border ${getItemStatusColor(item.status)}`}>
                             {getItemStatusText(item.status)}
                           </span>
                           {item.refund_amount > 0 && (
-                            <div className="text-xs text-red-600 mt-1 font-medium">
+                            <div className="text-xs text-red-600 font-medium">
                               已退 NT$ {item.refund_amount}
+                            </div>
+                          )}
+                          
+                          {/* Item Level Shipping Display */}
+                          {((item.shipping_fee_intl || 0) + (item.shipping_fee_domestic || 0)) > 0 && (
+                            <div className="flex flex-col items-end gap-1">
+                              <div className="text-xs text-gray-500">
+                                運費: NT$ {((item.shipping_fee_intl || 0) + (item.shipping_fee_domestic || 0))}
+                              </div>
+                              {item.shipping_paid ? (
+                                <span className="text-xs text-green-600 font-medium">已付運費</span>
+                              ) : (
+                                <button
+                                  onClick={() => handlePayItemShipping(order.id, [item.id])}
+                                  className="px-2 py-1 bg-primary text-white text-xs rounded hover:bg-primary/90"
+                                >
+                                  支付運費
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>

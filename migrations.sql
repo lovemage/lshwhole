@@ -33,5 +33,10 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS hold_id BIGINT;
 -- ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_tier_check;
 -- ALTER TABLE profiles ADD CONSTRAINT profiles_tier_check CHECK (tier IN ('guest', 'retail', 'wholesale', 'vip'));
 
--- New Requirement: Track if shipping has been paid
+-- New Requirement: Track if shipping has been paid (Order Level)
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_paid BOOLEAN DEFAULT FALSE;
+
+-- New Requirement: Item-level shipping tracking for split shipments
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS shipping_fee_intl INTEGER DEFAULT 0;
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS shipping_fee_domestic INTEGER DEFAULT 0;
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS shipping_paid BOOLEAN DEFAULT FALSE;

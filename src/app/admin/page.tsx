@@ -1400,6 +1400,36 @@ function AdminDashboard() {
     }
   };
 
+  const updateItemShipping = async (itemId: number, intlFee: number, domesticFee: number) => {
+    try {
+      const res = await fetch(`/api/admin/orders/${selectedOrder.id}/items/shipping`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          item_id: itemId,
+          shipping_fee_intl: intlFee,
+          shipping_fee_domestic: domesticFee
+        }),
+      });
+
+      if (res.ok) {
+        // Update local state
+        setSelectedOrder((prev: any) => ({
+          ...prev,
+          items: prev.items.map((item: any) =>
+            item.id === itemId ? { ...item, shipping_fee_intl: intlFee, shipping_fee_domestic: domesticFee } : item
+          )
+        }));
+      } else {
+        const j = await res.json().catch(() => ({}));
+        alert(j?.error || "更新運費失敗");
+      }
+    } catch (err) {
+      console.error("Update item shipping failed:", err);
+      alert("更新運費失敗");
+    }
+  };
+
   // Sub-account handlers
   const fetchSubAccounts = async () => {
     try {
@@ -5500,6 +5530,7 @@ function AdminDashboard() {
                         <th className="p-3 text-sm font-medium">單價</th>
                         <th className="p-3 text-sm font-medium">數量</th>
                         <th className="p-3 text-sm font-medium">小計</th>
+                        <th className="p-3 text-sm font-medium">個別運費</th>
                         <th className="p-3 text-sm font-medium">狀態</th>
                         <th className="p-3 text-sm font-medium">操作</th>
                       </tr>
@@ -5523,6 +5554,51 @@ function AdminDashboard() {
                           <td className="p-3 text-sm">NT$ {item.unit_price_twd}</td>
                           <td className="p-3 text-sm">{item.qty}</td>
                           <td className="p-3 text-sm font-bold">NT$ {item.unit_price_twd * item.qty}</td>
+                          <td className="p-3 text-sm min-w-[200px]">
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-gray-500 w-8">國際</span>
+                                <input
+                                  type="number"
+                                  className="w-20 text-xs border border-gray-300 rounded px-1"
+                                  value={item.shipping_fee_intl || 0}
+                                  onChange={(e) => {
+                                    const val = Math.max(0, Math.floor(Number(e.target.value)));
+                                    setSelectedOrder((prev: any) => ({
+                                      ...prev,
+                                      items: prev.items.map((i: any) => i.id === item.id ? { ...i, shipping_fee_intl: val } : i)
+                                    }));
+                                  }}
+                                  onBlur={(e) => updateItemShipping(item.id, Number(e.target.value), item.shipping_fee_domestic || 0)}
+                                />
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-gray-500 w-8">國內</span>
+                                <input
+                                  type="number"
+                                  className="w-20 text-xs border border-gray-300 rounded px-1"
+                                  value={item.shipping_fee_domestic || 0}
+                                  onChange={(e) => {
+                                    const val = Math.max(0, Math.floor(Number(e.target.value)));
+                                    setSelectedOrder((prev: any) => ({
+                                      ...prev,
+                                      items: prev.items.map((i: any) => i.id === item.id ? { ...i, shipping_fee_domestic: val } : i)
+                                    }));
+                                  }}
+                                  onBlur={(e) => updateItemShipping(item.id, item.shipping_fee_intl || 0, Number(e.target.value))}
+                                />
+                              </div>
+                              <div className="mt-1">
+                                {item.shipping_paid ? (
+                                  <span className="text-xs text-green-600 font-medium bg-green-50 px-2 py-0.5 rounded">運費已付</span>
+                                ) : (
+                                  (item.shipping_fee_intl > 0 || item.shipping_fee_domestic > 0) && (
+                                    <span className="text-xs text-orange-600 font-medium bg-orange-50 px-2 py-0.5 rounded">運費未付</span>
+                                  )
+                                )}
+                              </div>
+                            </div>
+                          </td>
                           <td className="p-3 text-sm">
                             <span className={`px-2 py-1 rounded text-xs font-medium ${
                               item.status === 'OUT_OF_STOCK' ? 'bg-red-100 text-red-800' : 

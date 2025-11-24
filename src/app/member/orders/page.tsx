@@ -11,6 +11,9 @@ interface OrderItem {
   unit_price_twd: number;
   status: string;
   refund_amount: number;
+  shipping_fee_intl: number;
+  shipping_fee_domestic: number;
+  shipping_paid: boolean;
   product: {
     title_zh: string;
     title_original: string;
@@ -32,6 +35,7 @@ interface Order {
   shipping_fee_intl: number;
   box_fee: number;
   order_items: OrderItem[];
+  shipping_paid: boolean;
 }
 
 export default function MemberOrdersPage() {
@@ -152,6 +156,43 @@ export default function MemberOrdersPage() {
     }
   };
 
+  const handlePayItemShipping = async (orderId: number, itemIds: number[]) => {
+    if (!confirm(`確定要支付選取商品的運費嗎？將從您的錢包扣款。`)) return;
+
+    try {
+      setLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push("/login");
+        return;
+      }
+
+      const res = await fetch(`/api/orders/${orderId}/pay-item-shipping`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ item_ids: itemIds }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.error || "支付失敗");
+        return;
+      }
+
+      alert("支付成功！");
+      fetchOrders();
+    } catch (e) {
+      console.error("Pay item shipping failed:", e);
+      alert("支付失敗，請稍後再試");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
@@ -228,14 +269,33 @@ export default function MemberOrdersPage() {
                         </div>
                       </div>
 
-                      {/* Item Status */}
-                      <div className="sm:text-right min-w-[100px]">
+                      {/* Item Status & Shipping */}
+                      <div className="sm:text-right min-w-[100px] flex flex-col items-end gap-2">
                         <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium border ${getItemStatusColor(item.status)}`}>
                           {getItemStatusText(item.status)}
                         </span>
                         {item.refund_amount > 0 && (
-                          <div className="text-xs text-red-600 mt-1 font-medium">
+                          <div className="text-xs text-red-600 font-medium">
                             已退 NT$ {item.refund_amount}
+                          </div>
+                        )}
+                        
+                        {/* Item Level Shipping Display */}
+                        {((item.shipping_fee_intl || 0) + (item.shipping_fee_domestic || 0)) > 0 && (
+                          <div className="flex flex-col items-end gap-1">
+                            <div className="text-xs text-gray-500">
+                              運費: NT$ {((item.shipping_fee_intl || 0) + (item.shipping_fee_domestic || 0))}
+                            </div>
+                            {item.shipping_paid ? (
+                              <span className="text-xs text-green-600 font-medium">已付運費</span>
+                            ) : (
+                              <button
+                                onClick={() => handlePayItemShipping(order.id, [item.id])}
+                                className="px-2 py-1 bg-primary text-white text-xs rounded hover:bg-primary/90"
+                              >
+                                支付運費
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>
@@ -249,7 +309,8 @@ export default function MemberOrdersPage() {
                     <div className="text-sm text-gray-600 space-y-1">
                       {order.shipping_method && <div>運送方式: {order.shipping_method}</div>}
                       {order.tracking_number && <div>單號: {order.tracking_number}</div>}
-                      {order.status === "ARRIVED_TW" && (
+                      {/* 提示支付運費: 當有運費產生且尚未支付時顯示 */}
+                      {((order.shipping_fee_intl > 0 || order.box_fee > 0) && !order.shipping_paid) && (
                         <div className="text-orange-600 font-medium">
                           <p>請支付補運費以安排出貨</p>
                         </div>
@@ -271,8 +332,8 @@ export default function MemberOrdersPage() {
                     </div>
                   </div>
 
-                  {/* Actions */}
-                  {order.status === "ARRIVED_TW" && (
+                  {/* Actions: 支付運費按鈕 (Order Level) */}
+                  {((order.shipping_fee_intl > 0 || order.box_fee > 0) && !order.shipping_paid) && (
                     <div className="flex justify-end mt-4 pt-4 border-t border-gray-200">
                       <button
                         onClick={() => handlePayShipping(order.id)}
