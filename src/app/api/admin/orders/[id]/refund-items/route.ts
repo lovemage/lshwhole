@@ -58,6 +58,7 @@ export async function POST(
         refund_qty,
         refund_amount: itemRefund,
         original_qty: orderItem.qty,
+        unit_price_twd: orderItem.unit_price_twd,
         current_status: orderItem.status,
         current_refund: orderItem.refund_amount || 0
       });
@@ -112,8 +113,17 @@ export async function POST(
 
     // 4. Update Order Items Status
     for (const pItem of processedItems) {
-      const newStatus = pItem.refund_qty === pItem.original_qty ? "OUT_OF_STOCK" : "PARTIAL_OOS";
+      // Calculate total refunded amount including this transaction
       const newRefundAmount = (pItem.current_refund || 0) + pItem.refund_amount;
+      const totalValue = pItem.original_qty * pItem.unit_price_twd;
+      
+      // Determine status
+      let newStatus = "NORMAL";
+      if (newRefundAmount >= totalValue) {
+        newStatus = "OUT_OF_STOCK";
+      } else if (newRefundAmount > 0) {
+        newStatus = "PARTIAL_OOS";
+      }
       
       await admin
         .from("order_items")
@@ -124,23 +134,18 @@ export async function POST(
         .eq("id", pItem.id);
     }
 
-    // 5. Update Order Status if all items refunded? 
-    // Logic: If all items are OOS, maybe cancel order? 
-    // For now, keep order status as is, unless changed manually or strictly defined.
-    // The requirement says "If whole order OOS, status -> REFUNDED".
-    
-    // Check if all items in order are now OOS
+    // 5. Update Order Status if all items refunded
     const { data: allItems } = await admin
       .from("order_items")
       .select("status")
       .eq("order_id", id);
       
-    const isAllOOS = allItems?.every(i => i.status === "OUT_OF_STOCK");
+    const isAllOOS = allItems?.every((i: any) => i.status === "OUT_OF_STOCK");
     
     if (isAllOOS) {
        await admin
         .from("orders")
-        .update({ status: "REFUNDED" }) // or CANCELLED?
+        .update({ status: "REFUNDED" })
         .eq("id", id);
     }
 

@@ -35,8 +35,7 @@ export async function GET(
           id,
           title_zh,
           title_original,
-          sku,
-          images
+          sku
         )
       `)
       .eq("order_id", id);
@@ -45,11 +44,51 @@ export async function GET(
       console.error("Error fetching order items:", itemsError);
     }
 
+    // Fetch product images
+    let imageMap = new Map<number, string[]>();
+    if (items && items.length > 0) {
+      const productIds = items.map((item: any) => item.product_id).filter(Boolean);
+      if (productIds.length > 0) {
+        const { data: imgs, error: imgErr } = await admin
+          .from("product_images")
+          .select("product_id, url, sort")
+          .in("product_id", productIds)
+          .order("sort", { ascending: true });
+
+        if (!imgErr && imgs) {
+          const byProduct = new Map<number, { url: string; sort: number }[]>();
+          imgs.forEach((img: any) => {
+            if (!byProduct.has(img.product_id)) {
+              byProduct.set(img.product_id, []);
+            }
+            byProduct.get(img.product_id)!.push({ url: img.url, sort: img.sort });
+          });
+
+          // Sort images by sort order and take URLs
+          byProduct.forEach((images, productId) => {
+            const sortedUrls = images
+              .sort((a, b) => a.sort - b.sort)
+              .map(img => img.url);
+            imageMap.set(productId, sortedUrls);
+          });
+        }
+      }
+    }
+
+    // Add images to items
+    const itemsWithImages = (items || []).map((item: any) => ({
+      ...item,
+      product: {
+        ...item.product,
+        images: imageMap.get(item.product_id) || []
+      }
+    }));
+
     return NextResponse.json({
       ...order,
       user_email: profile?.email,
       user_display_name: profile?.display_name,
-      items: items || [],
+      items: itemsWithImages,
     });
   } catch (err) {
     console.error("GET order detail error:", err);

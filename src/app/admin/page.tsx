@@ -1379,6 +1379,27 @@ function AdminDashboard() {
     }
   };
 
+  const updateItemStatus = async (itemId: number, newStatus: string) => {
+    try {
+      const res = await fetch(`/api/admin/orders/${selectedOrder.id}/items/status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ item_id: itemId, status: newStatus }),
+      });
+
+      if (res.ok) {
+        // alert("狀態更新成功"); // Optional: reduce noise
+        openOrderDetail({ id: selectedOrder.id }); // Refresh detail
+      } else {
+        const j = await res.json().catch(() => ({}));
+        alert(j?.error || "更新失敗");
+      }
+    } catch (err) {
+      console.error("Update item status failed:", err);
+      alert("更新失敗");
+    }
+  };
+
   // Sub-account handlers
   const fetchSubAccounts = async () => {
     try {
@@ -5518,21 +5539,54 @@ function AdminDashboard() {
                               item.status === 'PARTIAL_OOS' ? 'bg-orange-100 text-orange-800' :
                               'bg-green-100 text-green-800'
                             }`}>
-                              {item.status === 'OUT_OF_STOCK' ? '缺貨' : item.status === 'PARTIAL_OOS' ? '部分缺貨' : '正常'}
+                              {(() => {
+                                const map: any = {
+                                  NORMAL: "國外配貨中",
+                                  ALLOCATED: "國外配貨完成",
+                                  IN_TRANSIT: "回台運輸中",
+                                  ARRIVED: "商品抵台",
+                                  SHIPPED: "商品寄出",
+                                  DELIVERY_FAILED: "未收貨",
+                                  RECEIVED: "已收貨",
+                                  OUT_OF_STOCK: "缺貨/斷貨",
+                                  PARTIAL_OOS: "部分缺貨"
+                                };
+                                return map[item.status] || item.status;
+                              })()}
                             </span>
                             {item.refund_amount > 0 && (
                               <div className="text-xs text-red-600 mt-1">已退 NT${item.refund_amount}</div>
                             )}
                           </td>
                           <td className="p-3 text-sm">
-                            {item.status !== 'OUT_OF_STOCK' && (
-                              <button
-                                onClick={() => openRefundModal(item)}
-                                className="text-red-600 hover:underline text-xs border border-red-200 px-2 py-1 rounded hover:bg-red-50"
-                              >
-                                標記缺貨/退款
-                              </button>
-                            )}
+                            <div className="flex flex-col gap-2">
+                              {item.status !== 'OUT_OF_STOCK' && item.status !== 'PARTIAL_OOS' && (
+                                <select
+                                  value={item.status}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val === 'OUT_OF_STOCK_MODAL') {
+                                      openRefundModal(item);
+                                    } else {
+                                      updateItemStatus(item.id, val);
+                                    }
+                                  }}
+                                  className="text-xs border border-gray-300 rounded px-2 py-1 bg-white"
+                                >
+                                  <option value="NORMAL">國外配貨中</option>
+                                  <option value="ALLOCATED">國外配貨完成</option>
+                                  <option value="IN_TRANSIT">回台運輸中</option>
+                                  <option value="ARRIVED">商品抵台</option>
+                                  <option value="SHIPPED">商品寄出</option>
+                                  <option value="DELIVERY_FAILED">未收貨</option>
+                                  <option value="RECEIVED">已收貨</option>
+                                  <option value="OUT_OF_STOCK_MODAL" className="text-red-600">標記缺貨/退款...</option>
+                                </select>
+                              )}
+                              {(item.status === 'OUT_OF_STOCK' || item.status === 'PARTIAL_OOS') && (
+                                <span className="text-xs text-gray-500">已退款處理</span>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
