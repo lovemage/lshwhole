@@ -16,7 +16,17 @@ export async function PUT(
     }
 
     // Validate status
-    const validStatuses = ["NORMAL", "ALLOCATED", "OUT_OF_STOCK", "PARTIAL_OOS"];
+    const validStatuses = [
+      "NORMAL",
+      "ALLOCATED",
+      "IN_TRANSIT",
+      "ARRIVED",
+      "SHIPPED",
+      "RECEIVED",
+      "DELIVERY_FAILED",
+      "OUT_OF_STOCK",
+      "PARTIAL_OOS"
+    ];
     if (!validStatuses.includes(status)) {
       return NextResponse.json({ error: "無效的狀態" }, { status: 400 });
     }
