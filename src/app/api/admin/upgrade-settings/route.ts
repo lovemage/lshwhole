@@ -7,7 +7,7 @@ export async function GET(req: NextRequest) {
     const admin = supabaseAdmin();
     const { data, error } = await admin
       .from("settings_business_info")
-      .select("bank_account_text, wholesale_upgrade_rules, wholesale_agent_fee_twd")
+      .select("bank_account_text, wholesale_upgrade_rules, wholesale_agent_fee_twd, line_link")
       .eq("id", true)
       .maybeSingle();
 
@@ -25,6 +25,7 @@ export async function GET(req: NextRequest) {
         rules_text: data.wholesale_upgrade_rules,
         bank_account_info: data.bank_account_text,
         agent_fee_twd: data.wholesale_agent_fee_twd,
+        line_link: data.line_link,
       },
     });
   } catch (err) {
@@ -41,6 +42,7 @@ export async function PUT(req: NextRequest) {
     const rules_text = typeof body.rules_text === "string" ? body.rules_text : null;
     const bank_account_info =
       typeof body.bank_account_info === "string" ? body.bank_account_info : null;
+    const line_link = typeof body.line_link === "string" ? body.line_link : null;
 
     const rawFee = body.agent_fee_twd;
     let agent_fee_twd: number | null = null;
@@ -59,13 +61,14 @@ export async function PUT(req: NextRequest) {
       bank_account_text: bank_account_info,
       wholesale_upgrade_rules: rules_text,
       wholesale_agent_fee_twd: agent_fee_twd,
+      line_link: line_link,
       updated_at: new Date().toISOString(),
     };
 
     const { data, error } = await admin
       .from("settings_business_info")
       .upsert({ id: true, ...patch })
-      .select("bank_account_text, wholesale_upgrade_rules, wholesale_agent_fee_twd")
+      .select("bank_account_text, wholesale_upgrade_rules, wholesale_agent_fee_twd, line_link")
       .single();
 
     if (error) {
@@ -78,6 +81,7 @@ export async function PUT(req: NextRequest) {
         rules_text: data.wholesale_upgrade_rules,
         bank_account_info: data.bank_account_text,
         agent_fee_twd: data.wholesale_agent_fee_twd,
+        line_link: data.line_link,
       },
     });
   } catch (err) {
@@ -85,4 +89,3 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
-

@@ -62,6 +62,7 @@ interface UpgradeSettings {
   rules_text: string | null;
   bank_account_info: string | null;
   agent_fee_twd: number | null;
+  line_link: string | null;
 }
 
 const DEFAULT_AGENT_FEE = 6000;
@@ -84,10 +85,17 @@ export default function MemberPage() {
   });
   const [profileSaving, setProfileSaving] = useState(false);
 
+  // Top-up State
+  const [isTopUpModalOpen, setIsTopUpModalOpen] = useState(false);
+  const [topUpForm, setTopUpForm] = useState({ amount: "", bankLast5: "" });
+  const [topUpSubmitting, setTopUpSubmitting] = useState(false);
+  const [topUpSuccess, setTopUpSuccess] = useState(false);
+
   // Orders State
   const [orders, setOrders] = useState<Order[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [ordersError, setOrdersError] = useState<string | null>(null);
+  const [activeOrderTab, setActiveOrderTab] = useState<"PROCESSING" | "COMPLETED" | "ALL">("PROCESSING");
 
   const router = useRouter();
 
@@ -174,6 +182,7 @@ export default function MemberPage() {
             bank_account_info: settingsData.bank_account_info ?? null,
             agent_fee_twd:
               typeof settingsData.agent_fee_twd === "number" ? settingsData.agent_fee_twd : null,
+            line_link: settingsData.line_link ?? null,
           });
         } else {
           setUpgradeSettings(null);
@@ -354,6 +363,42 @@ export default function MemberPage() {
       }
     } catch (e) {
       console.error("Update shipping code failed:", e);
+    }
+  };
+
+  const handleTopUpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!topUpForm.amount || !topUpForm.bankLast5) return;
+    
+    try {
+      setTopUpSubmitting(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const res = await fetch("/api/member/topup-request", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          amount_twd: parseInt(topUpForm.amount),
+          bank_account_last_5: topUpForm.bankLast5,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "提交失敗");
+        return;
+      }
+
+      setTopUpSuccess(true);
+    } catch (err) {
+      console.error(err);
+      alert("提交失敗");
+    } finally {
+      setTopUpSubmitting(false);
     }
   };
 
@@ -556,9 +601,21 @@ export default function MemberPage() {
           <div className="border bg-white p-4">
             <h2 className="text-lg font-semibold text-gray-900 mb-2">儲值金餘額</h2>
             <p className="text-sm text-gray-600 mb-1">目前可用金額</p>
-            <p className="text-3xl font-bold text-primary">
-              NT$ {wallet?.balance_twd ?? 0}
-            </p>
+            <div className="flex justify-between items-end">
+              <p className="text-3xl font-bold text-primary">
+                NT$ {wallet?.balance_twd ?? 0}
+              </p>
+              <button
+                onClick={() => {
+                  setIsTopUpModalOpen(true);
+                  setTopUpSuccess(false);
+                  setTopUpForm({ amount: "", bankLast5: "" });
+                }}
+                className="px-4 py-2 bg-green-600 text-white text-sm font-bold rounded hover:bg-green-700 transition-colors"
+              >
+                [儲值]
+              </button>
+            </div>
           </div>
 
           <div className="border bg-white p-4">
@@ -569,7 +626,7 @@ export default function MemberPage() {
                   onClick={() => setIsEditingProfile(true)}
                   className="text-sm text-primary hover:underline"
                 >
-                  編輯
+                  修改收件資料 <span className="text-xs text-gray-500 font-normal ml-1">(注意! Email無法修改)</span>
                 </button>
               ) : (
                 <div className="flex gap-2">
@@ -778,7 +835,42 @@ export default function MemberPage() {
 
         {/* 購買紀錄 Section */}
         <section>
-          <h2 className="text-xl font-bold text-gray-900 mb-4">購買紀錄</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-gray-900">購買紀錄</h2>
+            <div className="flex gap-2 text-sm">
+              <button
+                onClick={() => setActiveOrderTab("PROCESSING")}
+                className={`px-3 py-1 rounded-full border ${
+                  activeOrderTab === "PROCESSING"
+                    ? "bg-primary text-white border-primary"
+                    : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                }`}
+              >
+                處理中
+              </button>
+              <button
+                onClick={() => setActiveOrderTab("COMPLETED")}
+                className={`px-3 py-1 rounded-full border ${
+                  activeOrderTab === "COMPLETED"
+                    ? "bg-primary text-white border-primary"
+                    : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                }`}
+              >
+                已完成
+              </button>
+              <button
+                onClick={() => setActiveOrderTab("ALL")}
+                className={`px-3 py-1 rounded-full border ${
+                  activeOrderTab === "ALL"
+                    ? "bg-primary text-white border-primary"
+                    : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                }`}
+              >
+                全部
+              </button>
+            </div>
+          </div>
+          
           {ordersLoading && orders.length === 0 ? (
             <div className="text-center py-8 bg-white border border-gray-200">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
@@ -798,7 +890,14 @@ export default function MemberPage() {
             </div>
           ) : (
             <div className="space-y-6">
-              {orders.map((order) => (
+              {orders
+                .filter(order => {
+                  if (activeOrderTab === "ALL") return true;
+                  if (activeOrderTab === "PROCESSING") return ["PENDING", "DISPUTE_PENDING"].includes(order.status);
+                  if (activeOrderTab === "COMPLETED") return ["COMPLETED", "CANCELLED", "REFUNDED"].includes(order.status);
+                  return true;
+                })
+                .map((order) => (
                 <div key={order.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
                   {/* Order Header */}
                   <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex flex-wrap justify-between items-center gap-4">
@@ -1035,6 +1134,112 @@ export default function MemberPage() {
         )}
         {renderContent()}
       </main>
+
+      {/* Top-up Modal */}
+      {isTopUpModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md bg-white rounded-lg shadow-xl p-6">
+            <h2 className="text-xl font-bold mb-4">申請儲值</h2>
+            
+            {!topUpSuccess ? (
+              <form onSubmit={handleTopUpSubmit} className="space-y-4">
+                <div className="p-4 bg-gray-50 rounded border text-sm text-gray-700 space-y-2">
+                  <p className="font-bold text-red-600">注意事項：</p>
+                  <ul className="list-disc pl-5 space-y-1">
+                    <li>匯款請用本人存簿匯款。</li>
+                    <li>使用他人存簿匯款 Lsh 有權凍結並查證該筆款項真實來源。</li>
+                  </ul>
+                  {upgradeSettings?.bank_account_info && (
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      <p className="font-semibold text-gray-900 mb-1">匯款資訊：</p>
+                      <pre className="whitespace-pre-wrap font-sans">{upgradeSettings.bank_account_info}</pre>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    儲值金額 (TWD)
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    value={topUpForm.amount}
+                    onChange={(e) => setTopUpForm({ ...topUpForm, amount: e.target.value })}
+                    className="w-full border border-gray-300 rounded px-3 py-2"
+                    placeholder="請輸入金額"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    匯款帳號後五碼
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={5}
+                    minLength={5}
+                    value={topUpForm.bankLast5}
+                    onChange={(e) => setTopUpForm({ ...topUpForm, bankLast5: e.target.value })}
+                    className="w-full border border-gray-300 rounded px-3 py-2"
+                    placeholder="請輸入後五碼"
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsTopUpModalOpen(false)}
+                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50"
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={topUpSubmitting}
+                    className="flex-1 px-4 py-2 bg-primary text-white font-bold rounded hover:bg-primary/90 disabled:opacity-50"
+                  >
+                    {topUpSubmitting ? "提交中..." : "完成匯款"}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="text-center space-y-4">
+                <div className="text-green-600 text-5xl flex justify-center">
+                  <span className="material-symbols-outlined text-5xl">check_circle</span>
+                </div>
+                <h3 className="text-lg font-bold text-gray-900">申請提交成功</h3>
+                <p className="text-gray-600">
+                  請點擊下方按鈕上傳匯款單據至官方 Line，<br />
+                  管理員確認後將為您手動儲值。
+                </p>
+                
+                <a
+                  href={upgradeSettings?.line_link || "https://line.me/ti/p/@lshwholesale"}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block w-full py-3 bg-[#06C755] text-white font-bold rounded hover:bg-[#05b64d]"
+                >
+                  上傳匯款單 (前往 Line)
+                </a>
+                
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsTopUpModalOpen(false);
+                    // Refresh data? Not strictly needed as it's pending.
+                  }}
+                  className="block w-full py-2 text-gray-500 hover:text-gray-700"
+                >
+                  關閉
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

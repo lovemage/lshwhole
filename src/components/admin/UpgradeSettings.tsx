@@ -5,6 +5,7 @@ export default function UpgradeSettings() {
     rules_text: string;
     bank_account_info: string;
     agent_fee_twd: number | null;
+    line_link: string;
   } | null>(null);
   const [upgradeSettingsLoading, setUpgradeSettingsLoading] = useState(false);
 
@@ -29,6 +30,7 @@ export default function UpgradeSettings() {
           bank_account_info: data.bank_account_info || "",
           agent_fee_twd:
             typeof data.agent_fee_twd === "number" ? data.agent_fee_twd : null,
+          line_link: data.line_link || "",
         });
       } else {
         // Admin 預設文案，需與前台 /member 預設顯示一致
@@ -36,6 +38,7 @@ export default function UpgradeSettings() {
           rules_text: "請先完成會員資料與手機驗證，並確認已了解批發會員使用規則後再提出申請。",
           bank_account_info: "銀行：範例銀行 123 分行\n戶名：範例國際有限公司\n帳號：01234567890123",
           agent_fee_twd: 6000,
+          line_link: "",
         });
       }
     } catch (err) {
@@ -56,6 +59,7 @@ export default function UpgradeSettings() {
           rules_text: upgradeSettings.rules_text,
           bank_account_info: upgradeSettings.bank_account_info,
           agent_fee_twd: upgradeSettings.agent_fee_twd,
+          line_link: upgradeSettings.line_link,
         }),
       });
       const json = await res.json().catch(() => ({}));
@@ -70,6 +74,7 @@ export default function UpgradeSettings() {
           bank_account_info: data.bank_account_info || "",
           agent_fee_twd:
             typeof data.agent_fee_twd === "number" ? data.agent_fee_twd : null,
+          line_link: data.line_link || "",
         });
       }
       alert("設定已保存");
@@ -92,9 +97,8 @@ export default function UpgradeSettings() {
             value={upgradeSettings?.rules_text ?? ""}
             onChange={(e) =>
               setUpgradeSettings((prev) => ({
+                ...prev!,
                 rules_text: e.target.value,
-                bank_account_info: prev?.bank_account_info ?? "",
-                agent_fee_twd: prev?.agent_fee_twd ?? null,
               }))
             }
             rows={6}
@@ -111,14 +115,31 @@ export default function UpgradeSettings() {
             value={upgradeSettings?.bank_account_info ?? ""}
             onChange={(e) =>
               setUpgradeSettings((prev) => ({
-                rules_text: prev?.rules_text ?? "",
+                ...prev!,
                 bank_account_info: e.target.value,
-                agent_fee_twd: prev?.agent_fee_twd ?? null,
               }))
             }
             rows={4}
             className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm whitespace-pre-line"
             placeholder={"銀行：範例銀行 123 分行\n戶名：範例國際有限公司\n帳號：01234567890123"}
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-text-primary-light mb-1">
+            官方 Line 連結
+          </label>
+          <input
+            type="text"
+            value={upgradeSettings?.line_link ?? ""}
+            onChange={(e) =>
+              setUpgradeSettings((prev) => ({
+                ...prev!,
+                line_link: e.target.value,
+              }))
+            }
+            className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+            placeholder="https://line.me/ti/p/@lshwholesale"
           />
         </div>
 
@@ -132,8 +153,7 @@ export default function UpgradeSettings() {
             value={upgradeSettings?.agent_fee_twd ?? ""}
             onChange={(e) =>
               setUpgradeSettings((prev) => ({
-                rules_text: prev?.rules_text ?? "",
-                bank_account_info: prev?.bank_account_info ?? "",
+                ...prev!,
                 agent_fee_twd: e.target.value === "" ? null : Math.max(0, Math.floor(Number(e.target.value) || 0)),
               }))
             }

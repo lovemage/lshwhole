@@ -33,24 +33,37 @@ export async function POST(
       return NextResponse.json({ error: "未登入" }, { status: 401 });
     }
 
-    // 1. Verify Order Ownership & Item Validity
-    // Fetch items that belong to this order and this user, and are in the requested list
+    // 1. Verify Order Ownership
+    const { data: order, error: orderError } = await admin
+      .from("orders")
+      .select("id, user_id")
+      .eq("id", id)
+      .single();
+
+    if (orderError || !order) {
+      return NextResponse.json({ error: "訂單不存在" }, { status: 404 });
+    }
+
+    if (order.user_id !== user.id) {
+      return NextResponse.json({ error: "這不是您的訂單" }, { status: 403 });
+    }
+
+    // 2. Fetch Items & Validity
     const { data: items, error: itemsError } = await admin
       .from("order_items")
-      .select("id, shipping_fee_intl, shipping_fee_domestic, shipping_paid, order_id, orders!inner(user_id)")
+      .select("id, shipping_fee_intl, shipping_fee_domestic, shipping_paid, order_id")
       .eq("order_id", id)
-      .in("id", item_ids)
-      .eq("orders.user_id", user.id);
+      .in("id", item_ids);
 
     if (itemsError || !items || items.length === 0) {
       return NextResponse.json({ error: "找不到有效的訂單商品" }, { status: 404 });
     }
 
     if (items.length !== item_ids.length) {
-      return NextResponse.json({ error: "部分商品不存在或是非本人訂單" }, { status: 400 });
+      return NextResponse.json({ error: "部分商品不存在" }, { status: 400 });
     }
 
-    // 2. Calculate Total Amount
+    // 3. Calculate Total Amount
     let totalAmount = 0;
     const itemsToPay = [];
 
@@ -70,7 +83,7 @@ export async function POST(
       return NextResponse.json({ error: "選取的商品無需支付運費" }, { status: 400 });
     }
 
-    // 3. Check Wallet Balance
+    // 4. Check Wallet Balance
     const { data: wallet, error: walletError } = await admin
       .from("wallets")
       .select("balance_twd")
@@ -85,8 +98,8 @@ export async function POST(
       return NextResponse.json({ error: `餘額不足，共需 NT$${totalAmount}` }, { status: 400 });
     }
 
-    // 4. Process Payment
-    // 4.1 Ledger
+    // 5. Process Payment
+    // 5.1 Ledger
     const externalRef = `ITEM_SHIP_PAY_${id}_${Date.now()}`;
     const { error: ledgerError } = await admin
       .from("wallet_ledger")
@@ -100,10 +113,11 @@ export async function POST(
       });
 
     if (ledgerError) {
-      return NextResponse.json({ error: "建立交易紀錄失敗" }, { status: 500 });
+      console.error("Ledger Error:", ledgerError);
+      return NextResponse.json({ error: "建立交易紀錄失敗: " + ledgerError.message }, { status: 500 });
     }
 
-    // 4.2 Update Wallet
+    // 5.2 Update Wallet
     const newBalance = wallet.balance_twd - totalAmount;
     const { error: updateWalletError } = await admin
       .from("wallets")
@@ -114,23 +128,25 @@ export async function POST(
       .eq("user_id", user.id);
 
     if (updateWalletError) {
+      console.error("Wallet Update Error:", updateWalletError);
       return NextResponse.json({ error: "更新錢包餘額失敗" }, { status: 500 });
     }
 
-    // 4.3 Update Items Status
+    // 5.3 Update Items Status
     const { error: updateItemsError } = await admin
       .from("order_items")
       .update({ shipping_paid: true })
       .in("id", itemsToPay);
 
     if (updateItemsError) {
+      console.error("Order Items Update Error:", updateItemsError);
       return NextResponse.json({ error: "更新商品運費狀態失敗" }, { status: 500 });
     }
 
     return NextResponse.json({ success: true, new_balance: newBalance });
 
-  } catch (err) {
+  } catch (err: any) {
     console.error("Pay item shipping error:", err);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json({ error: "Internal server error: " + (err.message || String(err)) }, { status: 500 });
   }
 }

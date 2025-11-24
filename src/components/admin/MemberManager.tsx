@@ -16,6 +16,8 @@ interface Member {
 }
 
 export default function MemberManager() {
+  const [activeTab, setActiveTab] = useState<"MEMBERS" | "TOPUP_REQUESTS">("MEMBERS");
+  
   const [members, setMembers] = useState<Member[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
   const [memberSearch, setMemberSearch] = useState("");
@@ -31,9 +33,51 @@ export default function MemberManager() {
   const [topupNote, setTopupNote] = useState("");
   const [topupLoading, setTopupLoading] = useState(false);
 
+  // Topup Requests
+  const [topupRequests, setTopupRequests] = useState<any[]>([]);
+  const [requestsLoading, setRequestsLoading] = useState(false);
+
   useEffect(() => {
     fetchMembers(0);
+    fetchTopupRequests();
   }, []);
+
+  const fetchTopupRequests = async () => {
+    try {
+      setRequestsLoading(true);
+      const res = await fetch("/api/admin/topup-requests?status=PENDING");
+      if (res.ok) {
+        const json = await res.json();
+        setTopupRequests(json.data || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch requests:", err);
+    } finally {
+      setRequestsLoading(false);
+    }
+  };
+
+  const handleRequestAction = async (id: number, action: "APPROVE" | "REJECT", note: string = "") => {
+    if (!confirm(`確定要${action === "APPROVE" ? "核准" : "拒絕"}此申請嗎？`)) return;
+    
+    try {
+      const res = await fetch("/api/admin/topup-requests", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, action, note }),
+      });
+      
+      if (res.ok) {
+        alert("操作成功");
+        fetchTopupRequests();
+      } else {
+        alert("操作失敗");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("操作失敗");
+    }
+  };
 
   const fetchMembers = async (page: number = 0) => {
     try {
@@ -213,6 +257,24 @@ export default function MemberManager() {
 
   return (
     <div className="py-6 space-y-6">
+      <div className="flex gap-4 border-b border-border-light">
+        <button
+          onClick={() => setActiveTab("MEMBERS")}
+          className={`px-4 py-2 font-medium ${activeTab === "MEMBERS" ? "text-primary border-b-2 border-primary" : "text-text-secondary-light"}`}
+        >
+          會員列表
+        </button>
+        <button
+          onClick={() => setActiveTab("TOPUP_REQUESTS")}
+          className={`px-4 py-2 font-medium ${activeTab === "TOPUP_REQUESTS" ? "text-primary border-b-2 border-primary" : "text-text-secondary-light"}`}
+        >
+          儲值申請 
+          {topupRequests.length > 0 && <span className="ml-2 bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">{topupRequests.length}</span>}
+        </button>
+      </div>
+
+      {activeTab === "MEMBERS" ? (
+        <>
       {/* 搜尋與篩選 */}
       <div className="flex flex-wrap gap-4">
         <input
@@ -360,6 +422,62 @@ export default function MemberManager() {
           >
             下一頁
           </button>
+        </div>
+      )}
+      </>
+      ) : (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <h2 className="text-lg font-bold">待處理儲值申請</h2>
+            <button onClick={fetchTopupRequests} className="text-primary text-sm hover:underline">重新整理</button>
+          </div>
+          
+          {requestsLoading ? (
+            <p>載入中...</p>
+          ) : topupRequests.length === 0 ? (
+            <p className="text-gray-500">目前沒有待處理的申請</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border-b border-border-light bg-gray-50">
+                    <th className="text-left py-3 px-4 text-sm font-medium">申請時間</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium">會員</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium">金額</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium">帳號後五碼</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topupRequests.map((req) => (
+                    <tr key={req.id} className="border-b border-border-light hover:bg-gray-50">
+                      <td className="py-3 px-4 text-sm">{new Date(req.created_at).toLocaleString("zh-TW")}</td>
+                      <td className="py-3 px-4 text-sm">
+                        <div>{req.user?.display_name || "-"}</div>
+                        <div className="text-xs text-gray-500">{req.user?.email}</div>
+                      </td>
+                      <td className="py-3 px-4 text-sm font-bold text-green-600">NT$ {req.amount_twd}</td>
+                      <td className="py-3 px-4 text-sm">{req.bank_account_last_5}</td>
+                      <td className="py-3 px-4 text-sm flex gap-2">
+                        <button
+                          onClick={() => handleRequestAction(req.id, "APPROVE")}
+                          className="px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700"
+                        >
+                          核准
+                        </button>
+                        <button
+                          onClick={() => handleRequestAction(req.id, "REJECT")}
+                          className="px-3 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700"
+                        >
+                          拒絕
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
