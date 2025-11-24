@@ -73,6 +73,7 @@ export default function OrderManager() {
       const res = await fetch(`/api/admin/orders/${order.id}`);
       if (res.ok) {
         const data = await res.json();
+        console.log("Order Detail Data:", data); // Debug
         setSelectedOrder(data);
         setShowOrderDetail(true);
       } else {

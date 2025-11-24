@@ -76,13 +76,18 @@ export async function GET(
     }
 
     // Add images to items
-    const itemsWithImages = (items || []).map((item: any) => ({
-      ...item,
-      product: {
-        ...item.product,
-        images: imageMap.get(item.product_id) || []
-      }
-    }));
+    const itemsWithImages = (items || []).map((item: any) => {
+      // Handle case where product might be an array (one-to-many inference) or null
+      const productData = Array.isArray(item.product) ? item.product[0] : item.product;
+      
+      return {
+        ...item,
+        product: {
+          ...(productData || {}),
+          images: imageMap.get(item.product_id) || []
+        }
+      };
+    });
 
     return NextResponse.json({
       ...order,
