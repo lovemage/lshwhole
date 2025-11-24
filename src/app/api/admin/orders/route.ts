@@ -96,13 +96,18 @@ export async function GET(request: NextRequest) {
       const profile = profileMap.get(o.user_id) || { email: null, display_name: null };
 
       // Add images to order items
-      const orderItemsWithImages = o.order_items?.map((item: any) => ({
-        ...item,
-        product: {
-          ...item.products,
-          images: imageMap.get(item.product_id) || []
-        }
-      })) || [];
+      const orderItemsWithImages = o.order_items?.map((item: any) => {
+        // Handle case where products might be an array (one-to-many inference) or null
+        const productData = Array.isArray(item.products) ? item.products[0] : item.products;
+        
+        return {
+          ...item,
+          product: {
+            ...(productData || {}),
+            images: imageMap.get(item.product_id) || []
+          }
+        };
+      }) || [];
 
       return {
         ...o,
