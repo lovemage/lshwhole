@@ -122,6 +122,58 @@ export async function PUT(
       shipping_address,
     } = body;
 
+    // Handle Status Change Logic
+    if (status !== undefined) {
+      const { data: currentOrder } = await admin
+        .from("orders")
+        .select("status, user_id, total_twd")
+        .eq("id", id)
+        .single();
+
+      if (!currentOrder) {
+        return NextResponse.json({ error: "訂單不存在" }, { status: 404 });
+      }
+
+      // Prevent changing from CANCELLED
+      if (currentOrder.status === "CANCELLED" && status !== "CANCELLED") {
+        return NextResponse.json({ error: "已取消的訂單無法更改狀態" }, { status: 400 });
+      }
+
+      // Handle Cancellation Refund
+      if (status === "CANCELLED" && currentOrder.status !== "CANCELLED") {
+        // Refund to wallet
+        const { data: wallet } = await admin
+          .from("wallets")
+          .select("balance_twd")
+          .eq("user_id", currentOrder.user_id)
+          .single();
+
+        if (wallet) {
+          const refundAmount = currentOrder.total_twd;
+          const newBalance = wallet.balance_twd + refundAmount;
+
+          // Update Wallet
+          await admin
+            .from("wallets")
+            .update({
+              balance_twd: newBalance,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("user_id", currentOrder.user_id);
+
+          // Create Ledger
+          await admin.from("wallet_ledger").insert({
+            user_id: currentOrder.user_id,
+            type: "REFUND",
+            amount_twd: refundAmount,
+            charge_type: "ORDER_CANCEL",
+            external_ref: `ORDER_CANCEL_${id}_${Date.now()}`,
+            note: `訂單 #${id} 取消退款`
+          });
+        }
+      }
+    }
+
     const updateData: any = {};
     if (status !== undefined) updateData.status = status;
     if (shipping_fee_intl !== undefined) updateData.shipping_fee_intl = shipping_fee_intl;

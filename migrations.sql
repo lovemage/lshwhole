@@ -71,3 +71,9 @@ INSERT INTO shipping_settings (key, value) VALUES
 ('rate_intl_th', 180),
 ('rate_dom_hsinchu', 0) -- Value to be set by admin, defaulting to 0 or similar logic
 ON CONFLICT DO NOTHING;
+
+-- Fix for "Could not find the 'note' column of 'wallet_ledger'"
+ALTER TABLE wallet_ledger ADD COLUMN IF NOT EXISTS note TEXT;
+
+-- New Requirement: Item-level Box Count for Domestic Shipping
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS box_count INTEGER DEFAULT 1;

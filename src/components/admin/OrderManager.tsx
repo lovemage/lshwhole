@@ -5,7 +5,7 @@ export default function OrderManager() {
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersPage, setOrdersPage] = useState(0);
   const [ordersTotal, setOrdersTotal] = useState(0);
-  const [ordersStatusFilter, setOrdersStatusFilter] = useState<string>("");
+  const [ordersStatusFilter, setOrdersStatusFilter] = useState<string>("PENDING");
   const [ordersSearch, setOrdersSearch] = useState("");
   const [expandedOrderIds, setExpandedOrderIds] = useState<Set<number>>(new Set());
   const pageSize = 20;
@@ -181,7 +181,7 @@ export default function OrderManager() {
     }
   };
 
-  const updateItemShipping = async (itemId: number, weight: number, method: string, boxFee: number, country: string) => {
+  const updateItemShipping = async (itemId: number, weight: number, method: string, boxFee: number, country: string, boxCount: number) => {
     try {
       const res = await fetch(`/api/admin/orders/${selectedOrder.id}/items/shipping`, {
         method: "PUT",
@@ -191,7 +191,8 @@ export default function OrderManager() {
           weight: weight,
           shipping_method: method,
           box_fee: boxFee,
-          shipping_country: country
+          shipping_country: country,
+          box_count: boxCount
         }),
       });
 
@@ -533,7 +534,8 @@ export default function OrderManager() {
                       <tr>
                         <th className="p-3 text-sm font-medium whitespace-nowrap">商品</th>
                         <th className="p-3 text-sm font-medium whitespace-nowrap">單價/數量</th>
-                        <th className="p-3 text-sm font-medium min-w-[140px] whitespace-nowrap">重量 / 國際運費</th>
+                        <th className="p-3 text-sm font-medium whitespace-nowrap w-24">重量 (kg)</th>
+                        <th className="p-3 text-sm font-medium min-w-[120px] whitespace-nowrap">國際運費</th>
                         <th className="p-3 text-sm font-medium min-w-[140px] whitespace-nowrap">物流方式</th>
                         <th className="p-3 text-sm font-medium w-24 whitespace-nowrap">包材費</th>
                         <th className="p-3 text-sm font-medium min-w-[120px] whitespace-nowrap">運費試算</th>
@@ -563,9 +565,27 @@ export default function OrderManager() {
                             <div className="text-xs text-gray-500">x {item.qty}</div>
                             <div className="font-bold mt-1">${item.unit_price_twd * item.qty}</div>
                           </td>
-                          <td className="p-3 text-sm align-top space-y-2">
+                          <td className="p-3 text-sm align-top">
+                            <input
+                              type="number"
+                              step="0.01"
+                              placeholder="0"
+                              className="w-full text-sm border border-gray-300 rounded px-2 py-1 disabled:bg-gray-100 disabled:text-gray-400"
+                              value={item.weight || 0}
+                              onChange={(e) => {
+                                const val = Math.max(0, Number(e.target.value));
+                                setSelectedOrder((prev: any) => ({
+                                  ...prev,
+                                  items: prev.items.map((i: any) => i.id === item.id ? { ...i, weight: val } : i)
+                                }));
+                              }}
+                              onBlur={(e) => updateItemShipping(item.id, Number(e.target.value), item.shipping_method, item.box_fee || 0, item.shipping_country, item.box_count || 1)}
+                              disabled={item.status !== 'ARRIVED'}
+                            />
+                          </td>
+                          <td className="p-3 text-sm align-top">
                             <select
-                              className="w-full text-sm border border-gray-300 rounded px-2 py-1"
+                              className="w-full text-sm border border-gray-300 rounded px-2 py-1 disabled:bg-gray-100 disabled:text-gray-400"
                               value={item.shipping_country || ""}
                               onChange={(e) => {
                                 const val = e.target.value;
@@ -573,36 +593,19 @@ export default function OrderManager() {
                                   ...prev,
                                   items: prev.items.map((i: any) => i.id === item.id ? { ...i, shipping_country: val } : i)
                                 }));
-                                updateItemShipping(item.id, item.weight || 0, item.shipping_method, item.box_fee || 0, val);
+                                updateItemShipping(item.id, item.weight || 0, item.shipping_method, item.box_fee || 0, val, item.box_count || 1);
                               }}
+                              disabled={item.status !== 'ARRIVED'}
                             >
                               <option value="">選擇國家</option>
                               <option value="KR">韓國 (KR)</option>
                               <option value="JP">日本 (JP)</option>
                               <option value="TH">泰國 (TH)</option>
                             </select>
-                            <div className="flex items-center gap-1">
-                              <input
-                                type="number"
-                                step="0.01"
-                                placeholder="重量"
-                                className="w-full text-sm border border-gray-300 rounded px-2 py-1"
-                                value={item.weight || 0}
-                                onChange={(e) => {
-                                  const val = Math.max(0, Number(e.target.value));
-                                  setSelectedOrder((prev: any) => ({
-                                    ...prev,
-                                    items: prev.items.map((i: any) => i.id === item.id ? { ...i, weight: val } : i)
-                                  }));
-                                }}
-                                onBlur={(e) => updateItemShipping(item.id, Number(e.target.value), item.shipping_method, item.box_fee || 0, item.shipping_country)}
-                              />
-                              <span className="text-xs text-gray-500">kg</span>
-                            </div>
                           </td>
-                          <td className="p-3 text-sm align-top">
+                          <td className="p-3 text-sm align-top space-y-1">
                             <select
-                              className="w-full text-sm border border-gray-300 rounded px-2 py-1"
+                              className="w-full text-sm border border-gray-300 rounded px-2 py-1 disabled:bg-gray-100 disabled:text-gray-400"
                               value={item.shipping_method || ""}
                               onChange={(e) => {
                                 const val = e.target.value;
@@ -610,8 +613,9 @@ export default function OrderManager() {
                                   ...prev,
                                   items: prev.items.map((i: any) => i.id === item.id ? { ...i, shipping_method: val } : i)
                                 }));
-                                updateItemShipping(item.id, item.weight || 0, val, item.box_fee || 0, item.shipping_country);
+                                updateItemShipping(item.id, item.weight || 0, val, item.box_fee || 0, item.shipping_country, item.box_count || 1);
                               }}
+                              disabled={item.status !== 'ARRIVED'}
                             >
                               <option value="">未設定</option>
                               <option value="POST">郵政宅配</option>
@@ -620,11 +624,32 @@ export default function OrderManager() {
                               <option value="CVS">便利店</option>
                               <option value="WHOLESALE_STORE">批發客賣貨便</option>
                             </select>
+                            {(item.shipping_method === 'POST' || item.shipping_method === 'BLACK_CAT' || item.shipping_method === 'HSINCHU' || item.shipping_method === 'CVS') && (
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  min={1}
+                                  placeholder="箱數"
+                                  className="w-full text-sm border border-gray-300 rounded px-2 py-1 disabled:bg-gray-100 disabled:text-gray-400"
+                                  value={item.box_count || 1}
+                                  onChange={(e) => {
+                                    const val = Math.max(1, Math.floor(Number(e.target.value)));
+                                    setSelectedOrder((prev: any) => ({
+                                      ...prev,
+                                      items: prev.items.map((i: any) => i.id === item.id ? { ...i, box_count: val } : i)
+                                    }));
+                                  }}
+                                  onBlur={(e) => updateItemShipping(item.id, item.weight || 0, item.shipping_method, item.box_fee || 0, item.shipping_country, Math.max(1, Math.floor(Number(e.target.value))))}
+                                  disabled={item.status !== 'ARRIVED'}
+                                />
+                                <span className="text-xs text-gray-500 whitespace-nowrap">箱</span>
+                              </div>
+                            )}
                           </td>
                           <td className="p-3 text-sm align-top">
                             <input
                               type="number"
-                              className="w-full text-sm border border-gray-300 rounded px-2 py-1"
+                              className="w-full text-sm border border-gray-300 rounded px-2 py-1 disabled:bg-gray-100 disabled:text-gray-400"
                               value={item.box_fee || 0}
                               onChange={(e) => {
                                 const val = Math.max(0, Math.floor(Number(e.target.value)));
@@ -633,7 +658,8 @@ export default function OrderManager() {
                                   items: prev.items.map((i: any) => i.id === item.id ? { ...i, box_fee: val } : i)
                                 }));
                               }}
-                              onBlur={(e) => updateItemShipping(item.id, item.weight || 0, item.shipping_method, Number(e.target.value), item.shipping_country)}
+                              onBlur={(e) => updateItemShipping(item.id, item.weight || 0, item.shipping_method, Number(e.target.value), item.shipping_country, item.box_count || 1)}
+                              disabled={item.status !== 'ARRIVED'}
                             />
                           </td>
                           <td className="p-3 text-sm align-top">

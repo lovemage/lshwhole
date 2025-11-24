@@ -9,7 +9,7 @@ export async function PUT(
     const { id } = await params; // order_id
     const admin = supabaseAdmin();
     const body = await request.json();
-    const { item_id, weight, shipping_method, box_fee, shipping_country } = body;
+    const { item_id, weight, shipping_method, box_fee, shipping_country, box_count } = body;
 
     if (!item_id) {
       return NextResponse.json({ error: "缺少必要參數 (item_id)" }, { status: 400 });
@@ -46,6 +46,7 @@ export async function PUT(
     const newMethod = shipping_method !== undefined ? shipping_method : item.shipping_method;
     const newBoxFee = box_fee !== undefined ? Number(box_fee) : (item.box_fee || 0);
     const newCountry = shipping_country !== undefined ? shipping_country : item.shipping_country;
+    const newBoxCount = box_count !== undefined ? Math.max(1, Math.floor(Number(box_count))) : (item.box_count || 1);
 
     let intlFee = item.shipping_fee_intl || 0;
     let domFee = item.shipping_fee_domestic || 0;
@@ -68,25 +69,27 @@ export async function PUT(
 
     // Calculate Domestic Fee if method is present
     if (newMethod) {
+      let baseFee = 0;
       switch (newMethod) {
         case "POST":
-          domFee = settings.rate_dom_post || 0;
+          baseFee = settings.rate_dom_post || 0;
           break;
         case "BLACK_CAT":
-          domFee = settings.rate_dom_blackcat || 0;
+          baseFee = settings.rate_dom_blackcat || 0;
           break;
         case "CVS":
-          domFee = settings.rate_dom_cvs || 0;
+          baseFee = settings.rate_dom_cvs || 0;
           break;
         case "HSINCHU":
-          domFee = settings.rate_dom_hsinchu || 0;
+          baseFee = settings.rate_dom_hsinchu || 0;
           break;
         case "WHOLESALE_STORE":
-          domFee = 0; // Assumed 0 as member handles it
+          baseFee = 0; // Assumed 0 as member handles it
           break;
         default:
-          domFee = 0;
+          baseFee = 0;
       }
+      domFee = baseFee * newBoxCount;
     }
 
     // 4. Update
@@ -99,6 +102,7 @@ export async function PUT(
         shipping_country: newCountry,
         shipping_fee_intl: intlFee,
         shipping_fee_domestic: domFee,
+        box_count: newBoxCount,
         updated_at: new Date().toISOString()
       })
       .eq("id", item_id);
@@ -116,7 +120,8 @@ export async function PUT(
         box_fee: newBoxFee, 
         shipping_country: newCountry,
         shipping_fee_intl: intlFee, 
-        shipping_fee_domestic: domFee 
+        shipping_fee_domestic: domFee,
+        box_count: newBoxCount
       } 
     });
 

@@ -325,6 +325,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 9. 更新會員最後購買日期
+    await admin
+      .from("profiles")
+      .update({ last_purchase_date: new Date().toISOString() })
+      .eq("user_id", user.id);
+
     return NextResponse.json({
       success: true,
       order_id: order.id,
