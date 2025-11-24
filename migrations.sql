@@ -40,3 +40,23 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_paid BOOLEAN DEFAULT FALSE;
 ALTER TABLE order_items ADD COLUMN IF NOT EXISTS shipping_fee_intl INTEGER DEFAULT 0;
 ALTER TABLE order_items ADD COLUMN IF NOT EXISTS shipping_fee_domestic INTEGER DEFAULT 0;
 ALTER TABLE order_items ADD COLUMN IF NOT EXISTS shipping_paid BOOLEAN DEFAULT FALSE;
+
+-- Additional item-level fields for new shipping logic
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS weight FLOAT DEFAULT 0;
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS box_fee INTEGER DEFAULT 0;
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS shipping_method TEXT; -- 'POST', 'BLACK_CAT', 'CVS', 'WHOLESALE_STORE'
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS member_shipping_code TEXT;
+
+-- Create shipping_settings table
+CREATE TABLE IF NOT EXISTS shipping_settings (
+  key TEXT PRIMARY KEY,
+  value NUMERIC
+);
+
+-- Seed default values for shipping settings
+INSERT INTO shipping_settings (key, value) VALUES 
+('rate_intl_kg', 200),
+('rate_dom_post', 80),
+('rate_dom_blackcat', 130),
+('rate_dom_cvs', 60)
+ON CONFLICT DO NOTHING;

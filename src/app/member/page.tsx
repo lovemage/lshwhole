@@ -14,6 +14,9 @@ interface OrderItem {
   refund_amount: number;
   shipping_fee_intl: number;
   shipping_fee_domestic: number;
+  box_fee: number;
+  shipping_method: string;
+  member_shipping_code: string;
   shipping_paid: boolean;
   product: {
     title_zh: string;
@@ -314,6 +317,28 @@ export default function MemberPage() {
       alert("支付失敗，請稍後再試");
     } finally {
       setOrdersLoading(false);
+    }
+  };
+
+  const updateShippingCode = async (orderId: number, itemId: number, code: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const res = await fetch(`/api/orders/${orderId}/items/${itemId}/shipping-code`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ shipping_code: code }),
+      });
+
+      if (!res.ok) {
+        alert("更新失敗");
+      }
+    } catch (e) {
+      console.error("Update shipping code failed:", e);
     }
   };
 
@@ -704,7 +729,7 @@ export default function MemberPage() {
                         </div>
 
                         {/* Item Status & Shipping */}
-                        <div className="sm:text-right min-w-[100px] flex flex-col items-end gap-2">
+                        <div className="sm:text-right min-w-[200px] flex flex-col items-end gap-2">
                           <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium border ${getItemStatusColor(item.status)}`}>
                             {getItemStatusText(item.status)}
                           </span>
@@ -715,23 +740,47 @@ export default function MemberPage() {
                           )}
                           
                           {/* Item Level Shipping Display */}
-                          {((item.shipping_fee_intl || 0) + (item.shipping_fee_domestic || 0)) > 0 && (
-                            <div className="flex flex-col items-end gap-1">
-                              <div className="text-xs text-gray-500">
-                                運費: NT$ {((item.shipping_fee_intl || 0) + (item.shipping_fee_domestic || 0))}
+                          <div className="w-full flex flex-col items-end gap-1 mt-2 border-t pt-2">
+                            {/* 賣貨便單號回填 */}
+                            {item.shipping_method === 'WHOLESALE_STORE' && (
+                              <div className="w-full mb-2">
+                                <label className="text-xs text-gray-500 block mb-1 text-left">賣貨便寄件編號</label>
+                                <div className="flex gap-1">
+                                  <input 
+                                    type="text" 
+                                    defaultValue={item.member_shipping_code || ''}
+                                    placeholder="輸入寄件編號"
+                                    className="w-full text-xs border border-gray-300 rounded px-2 py-1"
+                                    onBlur={(e) => updateShippingCode(order.id, item.id, e.target.value)}
+                                  />
+                                </div>
                               </div>
-                              {item.shipping_paid ? (
-                                <span className="text-xs text-green-600 font-medium">已付運費</span>
-                              ) : (
-                                <button
-                                  onClick={() => handlePayItemShipping(order.id, [item.id])}
-                                  className="px-2 py-1 bg-primary text-white text-xs rounded hover:bg-primary/90"
-                                >
-                                  支付運費
-                                </button>
-                              )}
-                            </div>
-                          )}
+                            )}
+
+                            {/* 運費明細 */}
+                            {((item.shipping_fee_intl || 0) + (item.shipping_fee_domestic || 0) + (item.box_fee || 0)) > 0 && (
+                              <div className="text-right w-full bg-gray-50 p-2 rounded text-xs text-gray-600 space-y-1">
+                                <div>國際運費: NT$ {item.shipping_fee_intl || 0}</div>
+                                <div>國內運費: NT$ {item.shipping_fee_domestic || 0}</div>
+                                <div>包材費: NT$ {item.box_fee || 0}</div>
+                                <div className="font-bold text-gray-900 pt-1 border-t border-gray-200">
+                                  總運費: NT$ {(item.shipping_fee_intl || 0) + (item.shipping_fee_domestic || 0) + (item.box_fee || 0)}
+                                </div>
+                                <div className="mt-2 flex justify-end">
+                                  {item.shipping_paid ? (
+                                    <span className="text-green-600 font-bold border border-green-200 bg-green-50 px-2 py-1 rounded">已付運費</span>
+                                  ) : (
+                                    <button
+                                      onClick={() => handlePayItemShipping(order.id, [item.id])}
+                                      className="px-3 py-1 bg-primary text-white font-bold rounded hover:bg-primary/90 transition-colors"
+                                    >
+                                      支付運費
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ))}

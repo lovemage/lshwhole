@@ -231,6 +231,15 @@ function AdminDashboard() {
   } | null>(null);
   const [upgradeSettingsLoading, setUpgradeSettingsLoading] = useState(false);
 
+  // Shipping Settings State
+  const [shippingSettings, setShippingSettings] = useState({
+    rate_intl_kg: 0,
+    rate_dom_post: 0,
+    rate_dom_blackcat: 0,
+    rate_dom_cvs: 0,
+  });
+  const [shippingSettingsLoading, setShippingSettingsLoading] = useState(false);
+
   // Sub-accounts state
   const [subAccounts, setSubAccounts] = useState<any[]>([]);
   const [subAccountsLoading, setSubAccountsLoading] = useState(false);
@@ -312,6 +321,13 @@ function AdminDashboard() {
   useEffect(() => {
     if (activeNav === "upgrade_settings") {
       fetchUpgradeSettings();
+    }
+  }, [activeNav]);
+
+  // Fetch shipping settings
+  useEffect(() => {
+    if (activeNav === "shipping_settings") {
+      fetchShippingSettings();
     }
   }, [activeNav]);
 
@@ -1284,6 +1300,48 @@ function AdminDashboard() {
     }
   };
 
+  // 運費管理
+  const fetchShippingSettings = async () => {
+    try {
+      setShippingSettingsLoading(true);
+      const res = await fetch("/api/admin/shipping-settings");
+      if (res.ok) {
+        const data = await res.json();
+        setShippingSettings({
+          rate_intl_kg: data.rate_intl_kg || 0,
+          rate_dom_post: data.rate_dom_post || 0,
+          rate_dom_blackcat: data.rate_dom_blackcat || 0,
+          rate_dom_cvs: data.rate_dom_cvs || 0,
+        });
+      }
+    } catch (err) {
+      console.error("Fetch shipping settings failed:", err);
+    } finally {
+      setShippingSettingsLoading(false);
+    }
+  };
+
+  const saveShippingSettings = async () => {
+    try {
+      setShippingSettingsLoading(true);
+      const res = await fetch("/api/admin/shipping-settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(shippingSettings),
+      });
+      if (res.ok) {
+        alert("運費設定已儲存");
+      } else {
+        alert("儲存失敗");
+      }
+    } catch (err) {
+      console.error("Save shipping settings failed:", err);
+      alert("儲存失敗");
+    } finally {
+      setShippingSettingsLoading(false);
+    }
+  };
+
   // 訂單詳情
   const openOrderDetail = async (order: any) => {
     try {
@@ -1400,33 +1458,35 @@ function AdminDashboard() {
     }
   };
 
-  const updateItemShipping = async (itemId: number, intlFee: number, domesticFee: number) => {
+  const updateItemShipping = async (itemId: number, weight: number, method: string, boxFee: number) => {
     try {
       const res = await fetch(`/api/admin/orders/${selectedOrder.id}/items/shipping`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           item_id: itemId,
-          shipping_fee_intl: intlFee,
-          shipping_fee_domestic: domesticFee
+          weight: weight,
+          shipping_method: method,
+          box_fee: boxFee
         }),
       });
 
       if (res.ok) {
-        // Update local state
+        const { data } = await res.json();
+        // Update local state with returned calculated fees
         setSelectedOrder((prev: any) => ({
           ...prev,
           items: prev.items.map((item: any) =>
-            item.id === itemId ? { ...item, shipping_fee_intl: intlFee, shipping_fee_domestic: domesticFee } : item
+            item.id === itemId ? { ...item, ...data } : item
           )
         }));
       } else {
         const j = await res.json().catch(() => ({}));
-        alert(j?.error || "更新運費失敗");
+        alert(j?.error || "更新失敗");
       }
     } catch (err) {
       console.error("Update item shipping failed:", err);
-      alert("更新運費失敗");
+      alert("更新失敗");
     }
   };
 
@@ -1984,6 +2044,7 @@ function AdminDashboard() {
     { id: "hot_products", label: "熱銷商品", icon: "whatshot" },
     { id: "sub_accounts", label: "子帳管理", icon: "manage_accounts" },
     { id: "banners", label: "橫幅管理", icon: "view_carousel" },
+    { id: "shipping_settings", label: "運費管理", icon: "local_shipping" },
     { id: "settings", label: "系統設置", icon: "settings" },
   ];
 
@@ -4152,6 +4213,71 @@ function AdminDashboard() {
             </div>
           )}
 
+          {activeNav === "shipping_settings" && (
+            <div className="py-6 max-w-2xl space-y-6">
+              <div className="bg-card-light rounded-xl border border-border-light p-6">
+                <h3 className="text-lg font-bold text-text-primary-light mb-4">國際運費費率</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary-light mb-1">每公斤運費 (TWD)</label>
+                    <input
+                      type="number"
+                      value={shippingSettings.rate_intl_kg}
+                      onChange={(e) => setShippingSettings({ ...shippingSettings, rate_intl_kg: Number(e.target.value) })}
+                      className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-card-light rounded-xl border border-border-light p-6">
+                <h3 className="text-lg font-bold text-text-primary-light mb-4">國內運費費率</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary-light mb-1">宅配 (郵政)</label>
+                    <input
+                      type="number"
+                      value={shippingSettings.rate_dom_post}
+                      onChange={(e) => setShippingSettings({ ...shippingSettings, rate_dom_post: Number(e.target.value) })}
+                      className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary-light mb-1">宅配 (黑貓)</label>
+                    <input
+                      type="number"
+                      value={shippingSettings.rate_dom_blackcat}
+                      onChange={(e) => setShippingSettings({ ...shippingSettings, rate_dom_blackcat: Number(e.target.value) })}
+                      className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary-light mb-1">便利店</label>
+                    <input
+                      type="number"
+                      value={shippingSettings.rate_dom_cvs}
+                      onChange={(e) => setShippingSettings({ ...shippingSettings, rate_dom_cvs: Number(e.target.value) })}
+                      className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="mt-2 text-sm text-text-secondary-light">
+                  * 「批發客賣貨便開單」的國內運費預設為 0 (由會員處理)
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  onClick={saveShippingSettings}
+                  disabled={shippingSettingsLoading}
+                  className="px-6 py-2 bg-primary text-white rounded-lg font-bold hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {shippingSettingsLoading ? "儲存中..." : "儲存設定"}
+                </button>
+              </div>
+            </div>
+          )}
+
           {activeNav === "announcements" ? (
 
             <div className="py-6">
@@ -5462,39 +5588,12 @@ function AdminDashboard() {
                 </div>
               </div>
 
-              {/* 運費與物流 */}
+              {/* 運費與物流 (舊版 - 僅保留檢視或備註) */}
               <div className="border-t border-border-light pt-6">
-                <h3 className="text-lg font-bold mb-4">運費與物流設定</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-1">國際運費 (TWD)</label>
-                    <input
-                      type="number"
-                      value={selectedOrder.shipping_fee_intl || 0}
-                      onChange={(e) => setSelectedOrder({ ...selectedOrder, shipping_fee_intl: Number(e.target.value) })}
-                      className="w-full px-3 py-2 border border-border-light rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">包材費 (TWD)</label>
-                    <input
-                      type="number"
-                      value={selectedOrder.box_fee || 0}
-                      onChange={(e) => setSelectedOrder({ ...selectedOrder, box_fee: Number(e.target.value) })}
-                      className="w-full px-3 py-2 border border-border-light rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">箱數</label>
-                    <input
-                      type="number"
-                      value={selectedOrder.box_count || 0}
-                      onChange={(e) => setSelectedOrder({ ...selectedOrder, box_count: Number(e.target.value) })}
-                      className="w-full px-3 py-2 border border-border-light rounded-lg"
-                    />
-                  </div>
-                  <div className="col-span-3">
-                    <label className="block text-sm font-medium mb-1">追蹤單號 (Tracking Number)</label>
+                <h3 className="text-lg font-bold mb-4">物流設定</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <label className="block text-sm font-medium mb-1">全單追蹤單號 (若有)</label>
                     <input
                       type="text"
                       value={selectedOrder.tracking_number || ""}
@@ -5503,18 +5602,8 @@ function AdminDashboard() {
                       placeholder="輸入物流單號"
                     />
                   </div>
-                  <div className="col-span-3">
-                    <label className="block text-sm font-medium mb-1">運送方式</label>
-                    <select
-                      value={selectedOrder.shipping_method || ""}
-                      onChange={(e) => setSelectedOrder({ ...selectedOrder, shipping_method: e.target.value })}
-                      className="w-full px-3 py-2 border border-border-light rounded-lg"
-                    >
-                      <option value="">未選擇</option>
-                      <option value="POST">郵局</option>
-                      <option value="CVS">便利商店</option>
-                      <option value="CVS_WHOLESALE">賣貨便 (批發專用)</option>
-                    </select>
+                  <div className="col-span-2 text-sm text-text-secondary-light">
+                    * 註：運費與物流方式已改為下方商品層級設定。
                   </div>
                 </div>
               </div>
@@ -5527,10 +5616,12 @@ function AdminDashboard() {
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="p-3 text-sm font-medium">商品</th>
-                        <th className="p-3 text-sm font-medium">單價</th>
-                        <th className="p-3 text-sm font-medium">數量</th>
-                        <th className="p-3 text-sm font-medium">小計</th>
-                        <th className="p-3 text-sm font-medium">個別運費</th>
+                        <th className="p-3 text-sm font-medium">單價/數量</th>
+                        <th className="p-3 text-sm font-medium w-32">重量(kg)</th>
+                        <th className="p-3 text-sm font-medium w-40">物流方式</th>
+                        <th className="p-3 text-sm font-medium w-24">包材費</th>
+                        <th className="p-3 text-sm font-medium w-32">運費試算</th>
+                        <th className="p-3 text-sm font-medium w-32">寄件編號</th>
                         <th className="p-3 text-sm font-medium">狀態</th>
                         <th className="p-3 text-sm font-medium">操作</th>
                       </tr>
@@ -5551,56 +5642,95 @@ function AdminDashboard() {
                               </div>
                             </div>
                           </td>
-                          <td className="p-3 text-sm">NT$ {item.unit_price_twd}</td>
-                          <td className="p-3 text-sm">{item.qty}</td>
-                          <td className="p-3 text-sm font-bold">NT$ {item.unit_price_twd * item.qty}</td>
-                          <td className="p-3 text-sm min-w-[200px]">
-                            <div className="flex flex-col gap-1">
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-gray-500 w-8">國際</span>
-                                <input
-                                  type="number"
-                                  className="w-20 text-xs border border-gray-300 rounded px-1"
-                                  value={item.shipping_fee_intl || 0}
-                                  onChange={(e) => {
-                                    const val = Math.max(0, Math.floor(Number(e.target.value)));
-                                    setSelectedOrder((prev: any) => ({
-                                      ...prev,
-                                      items: prev.items.map((i: any) => i.id === item.id ? { ...i, shipping_fee_intl: val } : i)
-                                    }));
-                                  }}
-                                  onBlur={(e) => updateItemShipping(item.id, Number(e.target.value), item.shipping_fee_domestic || 0)}
-                                />
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-gray-500 w-8">國內</span>
-                                <input
-                                  type="number"
-                                  className="w-20 text-xs border border-gray-300 rounded px-1"
-                                  value={item.shipping_fee_domestic || 0}
-                                  onChange={(e) => {
-                                    const val = Math.max(0, Math.floor(Number(e.target.value)));
-                                    setSelectedOrder((prev: any) => ({
-                                      ...prev,
-                                      items: prev.items.map((i: any) => i.id === item.id ? { ...i, shipping_fee_domestic: val } : i)
-                                    }));
-                                  }}
-                                  onBlur={(e) => updateItemShipping(item.id, item.shipping_fee_intl || 0, Number(e.target.value))}
-                                />
-                              </div>
-                              <div className="mt-1">
-                                {item.shipping_paid ? (
-                                  <span className="text-xs text-green-600 font-medium bg-green-50 px-2 py-0.5 rounded">運費已付</span>
-                                ) : (
-                                  (item.shipping_fee_intl > 0 || item.shipping_fee_domestic > 0) && (
-                                    <span className="text-xs text-orange-600 font-medium bg-orange-50 px-2 py-0.5 rounded">運費未付</span>
-                                  )
-                                )}
+                          <td className="p-3 text-sm">
+                            <div>${item.unit_price_twd}</div>
+                            <div className="text-xs text-gray-500">x {item.qty}</div>
+                            <div className="font-bold mt-1">${item.unit_price_twd * item.qty}</div>
+                          </td>
+                          <td className="p-3 text-sm align-top">
+                            <input
+                              type="number"
+                              step="0.01"
+                              className="w-full text-sm border border-gray-300 rounded px-2 py-1"
+                              value={item.weight || 0}
+                              onChange={(e) => {
+                                const val = Math.max(0, Number(e.target.value));
+                                setSelectedOrder((prev: any) => ({
+                                  ...prev,
+                                  items: prev.items.map((i: any) => i.id === item.id ? { ...i, weight: val } : i)
+                                }));
+                              }}
+                              onBlur={(e) => updateItemShipping(item.id, Number(e.target.value), item.shipping_method, item.box_fee || 0)}
+                            />
+                          </td>
+                          <td className="p-3 text-sm align-top">
+                            <select
+                              className="w-full text-sm border border-gray-300 rounded px-2 py-1"
+                              value={item.shipping_method || ""}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setSelectedOrder((prev: any) => ({
+                                  ...prev,
+                                  items: prev.items.map((i: any) => i.id === item.id ? { ...i, shipping_method: val } : i)
+                                }));
+                                updateItemShipping(item.id, item.weight || 0, val, item.box_fee || 0);
+                              }}
+                            >
+                              <option value="">未設定</option>
+                              <option value="POST">郵政宅配</option>
+                              <option value="BLACK_CAT">黑貓宅配</option>
+                              <option value="CVS">便利店</option>
+                              <option value="WHOLESALE_STORE">批發客賣貨便</option>
+                            </select>
+                          </td>
+                          <td className="p-3 text-sm align-top">
+                            <input
+                              type="number"
+                              className="w-full text-sm border border-gray-300 rounded px-2 py-1"
+                              value={item.box_fee || 0}
+                              onChange={(e) => {
+                                const val = Math.max(0, Math.floor(Number(e.target.value)));
+                                setSelectedOrder((prev: any) => ({
+                                  ...prev,
+                                  items: prev.items.map((i: any) => i.id === item.id ? { ...i, box_fee: val } : i)
+                                }));
+                              }}
+                              onBlur={(e) => updateItemShipping(item.id, item.weight || 0, item.shipping_method, Number(e.target.value))}
+                            />
+                          </td>
+                          <td className="p-3 text-sm align-top">
+                            <div className="text-xs space-y-1">
+                              <div>國際: ${item.shipping_fee_intl || 0}</div>
+                              <div>國內: ${item.shipping_fee_domestic || 0}</div>
+                              <div>包材: ${item.box_fee || 0}</div>
+                              <div className="font-bold border-t pt-1 text-primary">
+                                總計: ${(item.shipping_fee_intl || 0) + (item.shipping_fee_domestic || 0) + (item.box_fee || 0)}
                               </div>
                             </div>
                           </td>
+                          <td className="p-3 text-sm align-top">
+                            {item.shipping_method === "WHOLESALE_STORE" ? (
+                              <div className="text-xs">
+                                {item.member_shipping_code ? (
+                                  <span className="font-mono bg-gray-100 px-1 rounded">{item.member_shipping_code}</span>
+                                ) : (
+                                  <span className="text-red-500">待會員填寫</span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-gray-400">-</span>
+                            )}
+                          </td>
                           <td className="p-3 text-sm">
-                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                            <div className="space-y-1">
+                              {item.shipping_paid ? (
+                                <span className="text-xs text-green-600 font-medium bg-green-50 px-2 py-0.5 rounded block text-center">運費已付</span>
+                              ) : (
+                                ((item.shipping_fee_intl || 0) + (item.shipping_fee_domestic || 0) + (item.box_fee || 0)) > 0 && (
+                                  <span className="text-xs text-orange-600 font-medium bg-orange-50 px-2 py-0.5 rounded block text-center">運費未付</span>
+                                )
+                              )}
+                              <span className={`px-2 py-1 rounded text-xs font-medium block text-center ${
                               item.status === 'OUT_OF_STOCK' ? 'bg-red-100 text-red-800' : 
                               item.status === 'PARTIAL_OOS' ? 'bg-orange-100 text-orange-800' :
                               'bg-green-100 text-green-800'
@@ -5620,6 +5750,7 @@ function AdminDashboard() {
                                 return map[item.status] || item.status;
                               })()}
                             </span>
+                            </div>
                             {item.refund_amount > 0 && (
                               <div className="text-xs text-red-600 mt-1">已退 NT${item.refund_amount}</div>
                             )}
