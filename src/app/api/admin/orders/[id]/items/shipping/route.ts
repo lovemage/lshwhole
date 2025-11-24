@@ -17,10 +17,17 @@ export async function PUT(
 
     // 1. Fetch Settings
     const { data: settingsData, error: settingsError } = await admin.from("shipping_settings").select("*");
-    if (settingsError) throw settingsError;
+    if (settingsError) {
+      console.error("Error fetching settings:", settingsError);
+      throw settingsError;
+    }
     
     const settings: Record<string, number> = {};
-    settingsData?.forEach((s: any) => settings[s.key] = Number(s.value));
+    settingsData?.forEach((s: any) => {
+      if (s.key && s.value !== undefined) {
+        settings[s.key] = Number(s.value);
+      }
+    });
 
     // 2. Fetch Item
     const { data: item, error: itemError } = await admin
@@ -35,16 +42,16 @@ export async function PUT(
     }
 
     // 3. Calculate Fees
-    const newWeight = weight !== undefined ? Number(weight) : item.weight;
+    const newWeight = weight !== undefined ? Number(weight) : (item.weight || 0);
     const newMethod = shipping_method !== undefined ? shipping_method : item.shipping_method;
-    const newBoxFee = box_fee !== undefined ? Number(box_fee) : item.box_fee;
+    const newBoxFee = box_fee !== undefined ? Number(box_fee) : (item.box_fee || 0);
     const newCountry = shipping_country !== undefined ? shipping_country : item.shipping_country;
 
-    let intlFee = item.shipping_fee_intl;
-    let domFee = item.shipping_fee_domestic;
+    let intlFee = item.shipping_fee_intl || 0;
+    let domFee = item.shipping_fee_domestic || 0;
 
     // Calculate Intl Fee based on country and weight
-    if (newWeight >= 0) {
+    if (!isNaN(newWeight) && newWeight >= 0) {
       if (newCountry === 'KR' && settings.rate_intl_kr) {
         intlFee = Math.ceil(newWeight * settings.rate_intl_kr);
       } else if (newCountry === 'JP' && settings.rate_intl_jp) {
@@ -54,6 +61,8 @@ export async function PUT(
       } else if (settings.rate_intl_kg) {
         // Fallback to generic rate if country not specified or no country specific rate
         intlFee = Math.ceil(newWeight * settings.rate_intl_kg);
+      } else {
+        intlFee = 0; // Reset if no rate found
       }
     }
 
@@ -95,7 +104,8 @@ export async function PUT(
       .eq("id", item_id);
 
     if (updateError) {
-      return NextResponse.json({ error: "更新運費失敗" }, { status: 500 });
+      console.error("Update error details:", updateError);
+      return NextResponse.json({ error: "更新運費失敗: " + updateError.message }, { status: 500 });
     }
 
     return NextResponse.json({ 

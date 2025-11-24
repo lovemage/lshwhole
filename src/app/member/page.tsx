@@ -75,6 +75,15 @@ export default function MemberPage() {
   const [upgradeSubmitting, setUpgradeSubmitting] = useState(false);
   const [upgradeSuccess, setUpgradeSuccess] = useState(false);
 
+  // Profile Edit State
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [editForm, setEditForm] = useState({
+    display_name: "",
+    phone: "",
+    delivery_address: "",
+  });
+  const [profileSaving, setProfileSaving] = useState(false);
+
   // Orders State
   const [orders, setOrders] = useState<Order[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
@@ -140,6 +149,12 @@ export default function MemberPage() {
             wholesale_upgrade_requested_at: p.wholesale_upgrade_requested_at ?? null,
             wholesale_upgrade_status:
               (p.wholesale_upgrade_status as ProfileInfo["wholesale_upgrade_status"]) ?? "NONE",
+          });
+          // Initialize edit form
+          setEditForm({
+            display_name: p.display_name ?? "",
+            phone: p.phone ?? "",
+            delivery_address: p.delivery_address ?? "",
           });
           setError(null);
         }
@@ -457,6 +472,38 @@ export default function MemberPage() {
     }
   };
 
+  const handleSaveProfile = async () => {
+    try {
+      setProfileSaving(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const res = await fetch("/api/profile", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify(editForm),
+      });
+
+      if (!res.ok) {
+        alert("更新失敗");
+        return;
+      }
+
+      const updatedProfile = await res.json();
+      setProfile((prev) => prev ? ({ ...prev, ...updatedProfile }) : null);
+      setIsEditingProfile(false);
+      alert("更新成功");
+    } catch (e) {
+      console.error("Update profile failed:", e);
+      alert("更新失敗，請稍後再試");
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
   const getUpgradeAgentFee = () => {
     if (typeof upgradeSettings?.agent_fee_twd === "number" && upgradeSettings.agent_fee_twd > 0) {
       return upgradeSettings.agent_fee_twd;
@@ -515,21 +562,98 @@ export default function MemberPage() {
           </div>
 
           <div className="border bg-white p-4">
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">會員資訊</h2>
-            <div className="space-y-1 text-sm text-gray-700">
-              <p>姓名 / 公司：{profile.display_name || "-"}</p>
-              <p>Email：{profile.email || "-"}</p>
-              <p>手機：{profile.phone || "-"}</p>
-              <p>寄送地址：{profile.delivery_address || "-"}</p>
-              <p>
-                會員等級：
-                {profile.tier === "vip"
-                  ? "VIP 會員"
-                  : profile.tier === "wholesale"
-                  ? "批發會員"
-                  : "零售會員"}
-              </p>
+            <div className="flex justify-between items-start mb-2">
+              <h2 className="text-lg font-semibold text-gray-900">會員資訊</h2>
+              {!isEditingProfile ? (
+                <button 
+                  onClick={() => setIsEditingProfile(true)}
+                  className="text-sm text-primary hover:underline"
+                >
+                  編輯
+                </button>
+              ) : (
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => {
+                      setIsEditingProfile(false);
+                      // Reset form
+                      setEditForm({
+                        display_name: profile.display_name || "",
+                        phone: profile.phone || "",
+                        delivery_address: profile.delivery_address || "",
+                      });
+                    }}
+                    className="text-sm text-gray-500 hover:text-gray-700"
+                    disabled={profileSaving}
+                  >
+                    取消
+                  </button>
+                  <button 
+                    onClick={handleSaveProfile}
+                    className="text-sm text-primary font-bold hover:text-primary/80"
+                    disabled={profileSaving}
+                  >
+                    {profileSaving ? "儲存中..." : "儲存"}
+                  </button>
+                </div>
+              )}
             </div>
+            
+            {!isEditingProfile ? (
+              <div className="space-y-1 text-sm text-gray-700">
+                <p>姓名 / 公司：{profile.display_name || "-"}</p>
+                <p>Email：{profile.email || "-"}</p>
+                <p>手機：{profile.phone || "-"}</p>
+                <p>寄送地址：{profile.delivery_address || "-"}</p>
+                <p>
+                  會員等級：
+                  {profile.tier === "vip"
+                    ? "VIP 會員"
+                    : profile.tier === "wholesale"
+                    ? "批發會員"
+                    : "零售會員"}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3 text-sm">
+                <div>
+                  <label className="block text-gray-600 mb-1">姓名 / 公司</label>
+                  <input 
+                    type="text" 
+                    value={editForm.display_name}
+                    onChange={(e) => setEditForm({...editForm, display_name: e.target.value})}
+                    className="w-full border border-gray-300 rounded px-3 py-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-gray-600 mb-1">Email (不可修改)</label>
+                  <input 
+                    type="text" 
+                    value={profile.email || ""}
+                    disabled
+                    className="w-full border border-gray-200 bg-gray-50 rounded px-3 py-2 text-gray-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-gray-600 mb-1">手機</label>
+                  <input 
+                    type="text" 
+                    value={editForm.phone}
+                    onChange={(e) => setEditForm({...editForm, phone: e.target.value})}
+                    className="w-full border border-gray-300 rounded px-3 py-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-gray-600 mb-1">寄送地址</label>
+                  <textarea 
+                    value={editForm.delivery_address}
+                    onChange={(e) => setEditForm({...editForm, delivery_address: e.target.value})}
+                    className="w-full border border-gray-300 rounded px-3 py-2"
+                    rows={2}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </section>
 

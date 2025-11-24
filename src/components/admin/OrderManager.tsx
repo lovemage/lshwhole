@@ -435,7 +435,7 @@ export default function OrderManager() {
       {/* 訂單詳情 Modal */}
       {showOrderDetail && selectedOrder && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-[950px] w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl max-w-7xl w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-border-light p-6 flex justify-between items-center z-10">
               <h2 className="text-2xl font-bold">訂單 #{selectedOrder.id}</h2>
               <button onClick={() => setShowOrderDetail(false)} className="text-text-secondary-light hover:text-text-primary-light">
@@ -530,15 +530,15 @@ export default function OrderManager() {
                   <table className="w-full text-left">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="p-3 text-sm font-medium">商品</th>
-                        <th className="p-3 text-sm font-medium">單價/數量</th>
-                        <th className="p-3 text-sm font-medium min-w-[140px]">國際運費 (重量)</th>
-                        <th className="p-3 text-sm font-medium min-w-[140px]">物流方式</th>
-                        <th className="p-3 text-sm font-medium w-24">包材費</th>
-                        <th className="p-3 text-sm font-medium min-w-[120px]">運費試算</th>
-                        <th className="p-3 text-sm font-medium w-32">寄件編號</th>
-                        <th className="p-3 text-sm font-medium">狀態</th>
-                        <th className="p-3 text-sm font-medium">操作</th>
+                        <th className="p-3 text-sm font-medium whitespace-nowrap">商品</th>
+                        <th className="p-3 text-sm font-medium whitespace-nowrap">單價/數量</th>
+                        <th className="p-3 text-sm font-medium min-w-[140px] whitespace-nowrap">重量 / 國際運費</th>
+                        <th className="p-3 text-sm font-medium min-w-[140px] whitespace-nowrap">物流方式</th>
+                        <th className="p-3 text-sm font-medium w-24 whitespace-nowrap">包材費</th>
+                        <th className="p-3 text-sm font-medium min-w-[120px] whitespace-nowrap">運費試算</th>
+                        <th className="p-3 text-sm font-medium w-32 whitespace-nowrap">寄件編號</th>
+                        <th className="p-3 text-sm font-medium whitespace-nowrap">狀態</th>
+                        <th className="p-3 text-sm font-medium whitespace-nowrap">操作</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border-light">
