@@ -1,5 +1,14 @@
 import type { Metadata } from "next";
+import { Noto_Sans_TC } from "next/font/google";
 import "./globals.css";
+
+const notoSansTC = Noto_Sans_TC({
+  subsets: ["latin"],
+  weight: ["400", "500", "700", "900"],
+  variable: "--font-noto-sans-tc",
+  display: "swap",
+  preload: false, // Disable preload for CJK fonts to avoid large initial payload if needed, or keep true
+});
 
 export const metadata: Metadata = {
   title: "LshWholesale",
@@ -12,20 +21,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-Hant" className="light">
+    <html lang="zh-Hant" className={`light ${notoSansTC.variable}`}>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link
-          href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap"
-          rel="stylesheet"
-        />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined"
+          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block"
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body className={notoSansTC.className}>{children}</body>
     </html>
   );
 }
