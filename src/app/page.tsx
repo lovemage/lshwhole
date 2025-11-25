@@ -6,6 +6,7 @@ import BannerCarousel from "@/components/BannerCarousel";
 import { supabase } from "@/lib/supabase";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import CountdownTimer from "@/components/CountdownTimer";
 
 interface Announcement {
   id: number;
@@ -30,6 +31,9 @@ export default function HomePage() {
 
   const [bestsellers, setBestsellers] = useState<RetailProduct[]>([]);
   const [bsLoading, setBsLoading] = useState(true);
+
+  const [limitedTimeProducts, setLimitedTimeProducts] = useState<any[]>([]);
+  const [limitedLoading, setLimitedLoading] = useState(true);
 
   const [userTier, setUserTier] = useState<string>("guest");
 
@@ -76,6 +80,21 @@ export default function HomePage() {
       }
     };
     fetchBestsellers();
+
+    const fetchLimitedTimeProducts = async () => {
+      try {
+        const res = await fetch("/api/limited-time-products");
+        if (res.ok) {
+          const json = await res.json();
+          setLimitedTimeProducts(json.products || []);
+        }
+      } catch (e) {
+        console.error("Failed to fetch limited time products:", e);
+      } finally {
+        setLimitedLoading(false);
+      }
+    };
+    fetchLimitedTimeProducts();
   }, []);
 
   // Fetch Display Settings and Products
@@ -274,6 +293,58 @@ export default function HomePage() {
                   </div>
                 </div>
               </section>
+
+              {/* Limited Time Products Section */}
+              {limitedTimeProducts.length > 0 && (
+                <section>
+                  <div className="flex justify-between items-center px-0 pb-3 pt-5">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-gray-900 text-[22px] font-bold leading-tight tracking-[-0.015em]">限定時間商品</h2>
+                      <span className="bg-red-100 text-red-600 text-xs font-bold px-2 py-1 rounded-full">LIMITED</span>
+                    </div>
+                  </div>
+                  <div className="flex overflow-x-auto [-ms-scrollbar-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden -mx-4">
+                    <div className="flex items-stretch p-4 gap-4">
+                      {limitedLoading && Array.from({ length: 4 }).map((_, idx) => (
+                        <div key={`lt-skel-${idx}`} className="flex h-full flex-1 flex-col gap-4 rounded-xl bg-white shadow-sm border border-gray-200 min-w-60 overflow-hidden animate-pulse">
+                          <div className="w-full bg-gray-100 aspect-square" />
+                          <div className="p-4 pt-0">
+                            <div className="h-5 bg-gray-100 rounded w-4/5 mb-2" />
+                            <div className="h-6 bg-gray-100 rounded w-2/5" />
+                          </div>
+                        </div>
+                      ))}
+
+                      {!limitedLoading && limitedTimeProducts.map((product) => (
+                        <div key={product.id} className="relative flex h-full flex-1 flex-col gap-4 rounded-xl bg-white shadow-sm border border-gray-200 min-w-60 overflow-hidden group">
+                          <div className="absolute top-2 left-2 z-10">
+                            <CountdownTimer endTime={product.limited_time_end} className="bg-white/90 backdrop-blur px-2 py-1 rounded-lg shadow-sm" />
+                          </div>
+                          <div
+                            className="w-full bg-center bg-no-repeat aspect-square bg-cover"
+                            style={{ backgroundImage: `url("${product.cover_image_url || 'https://via.placeholder.com/300'}")` }}
+                          />
+                          <div className="flex flex-col flex-1 justify-between p-4 pt-0 gap-4">
+                            <div>
+                              <p className="text-gray-800 text-base font-medium leading-normal line-clamp-2">{product.title}</p>
+                              {userTier !== "guest" && (
+                                <p className="text-primary text-lg font-bold leading-normal mt-1">
+                                  {(userTier === "wholesale" || userTier === "vip")
+                                    ? (product.wholesale_price_twd ? `NT$ ${product.wholesale_price_twd}` : `NT$ ${product.retail_price_twd}`)
+                                    : (product.retail_price_twd ? `NT$ ${product.retail_price_twd}` : '價格待定')}
+                                </p>
+                              )}
+                            </div>
+                            <Link href={`/products/${product.id}`} className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-red-600 text-white text-sm font-bold leading-normal tracking-[0.015em] hover:bg-red-700 transition-colors">
+                              <span className="truncate">立即搶購</span>
+                            </Link>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+              )}
 
               {/* Popular Products Carousel */}
               <section>

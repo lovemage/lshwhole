@@ -91,3 +91,7 @@ CREATE TABLE IF NOT EXISTS wallet_topup_requests (
 
 -- New Requirement: Line Link for Top-up/Upgrade settings
 ALTER TABLE settings_business_info ADD COLUMN IF NOT EXISTS line_link TEXT;
+
+-- New Requirement: Limited Time Products
+ALTER TABLE products ADD COLUMN IF NOT EXISTS is_limited_time BOOLEAN DEFAULT FALSE;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS limited_time_end TIMESTAMPTZ;

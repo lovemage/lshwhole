@@ -143,7 +143,7 @@ export async function POST(request: NextRequest) {
       // 查詢商品資訊
       const { data: product, error: productError } = await admin
         .from("products")
-        .select("id, wholesale_price_twd, retail_price_twd, moq, status")
+        .select("id, wholesale_price_twd, retail_price_twd, moq, status, is_limited_time, limited_time_end")
         .eq("id", product_id)
         .single();
 
@@ -159,6 +159,18 @@ export async function POST(request: NextRequest) {
           { error: `商品 ${product_id} 未上架` },
           { status: 400 }
         );
+      }
+
+      // 檢查限時商品是否過期
+      if (product.is_limited_time && product.limited_time_end) {
+        const now = new Date();
+        const endTime = new Date(product.limited_time_end);
+        if (now > endTime) {
+          return NextResponse.json(
+            { error: `商品 ${product_id} 已結束販售` },
+            { status: 400 }
+          );
+        }
       }
 
       // 檢查 MOQ

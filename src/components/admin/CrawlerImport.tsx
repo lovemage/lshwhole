@@ -50,6 +50,7 @@ export default function CrawlerImport() {
   const [batchPriceAdjustWholesale, setBatchPriceAdjustWholesale] = useState(0);
   const [batchPriceAdjustRetail, setBatchPriceAdjustRetail] = useState(0);
   const [batchPublishing, setBatchPublishing] = useState(false);
+  const [isTranslating, setIsTranslating] = useState(false);
   const [publishForm, setPublishForm] = useState({
     sku: "",
     title: "",
@@ -288,6 +289,37 @@ export default function CrawlerImport() {
       if (arr.has(url)) arr.delete(url); else arr.add(url);
       return { ...prev, image_urls: Array.from(arr) };
     });
+  };
+
+  const handleTranslate = async (field: "title" | "description") => {
+    const text = field === "title" ? publishForm.title : publishForm.description;
+    if (!text) return alert("無內容可翻譯");
+
+    try {
+      setIsTranslating(true);
+      const res = await fetch("/api/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        if (data.translatedText) {
+          setPublishForm(prev => ({
+            ...prev,
+            [field]: data.translatedText
+          }));
+        }
+      } else {
+        alert("翻譯失敗，請稍後再試");
+      }
+    } catch (err) {
+      console.error("Translation failed:", err);
+      alert("翻譯發生錯誤");
+    } finally {
+      setIsTranslating(false);
+    }
   };
 
   const publishNow = async () => {
@@ -773,11 +805,31 @@ export default function CrawlerImport() {
                   <input value={publishForm.sku} onChange={(e) => setPublishForm({ ...publishForm, sku: e.target.value })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
                 </div>
                 <div>
-                  <label className="text-sm text-text-secondary-light">標題</label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-sm text-text-secondary-light">標題</label>
+                    <button 
+                      type="button"
+                      onClick={() => handleTranslate("title")}
+                      disabled={isTranslating || !publishForm.title}
+                      className="text-xs text-primary hover:underline disabled:opacity-50"
+                    >
+                      {isTranslating ? "翻譯中..." : "翻譯成中文"}
+                    </button>
+                  </div>
                   <input value={publishForm.title} onChange={(e) => setPublishForm({ ...publishForm, title: e.target.value })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
                 </div>
                 <div>
-                  <label className="text-sm text-text-secondary-light">描述</label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-sm text-text-secondary-light">描述</label>
+                    <button 
+                      type="button"
+                      onClick={() => handleTranslate("description")}
+                      disabled={isTranslating || !publishForm.description}
+                      className="text-xs text-primary hover:underline disabled:opacity-50"
+                    >
+                      {isTranslating ? "翻譯中..." : "翻譯成中文"}
+                    </button>
+                  </div>
                   <textarea value={publishForm.description} onChange={(e) => setPublishForm({ ...publishForm, description: e.target.value })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm min-h-24" />
                 </div>
                 <div>

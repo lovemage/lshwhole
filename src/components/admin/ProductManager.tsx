@@ -27,11 +27,15 @@ export default function ProductManager() {
   const [productEditForm, setProductEditForm] = useState({
     sku: "",
     title_zh: "",
+    title_original: "",
+    desc_zh: "",
+    desc_original: "",
     retail_price_twd: 0,
     wholesale_price_twd: 0,
     cost_twd: 0,
     status: "draft" as "draft" | "published",
   });
+  const [isTranslating, setIsTranslating] = useState(false);
 
   useEffect(() => {
     fetchCategories();
@@ -129,13 +133,47 @@ export default function ProductManager() {
     setEditingProduct(p);
     setProductEditForm({
       sku: p.sku || "",
-      title_zh: p.title_zh || p.title_original || "",
+      title_zh: p.title_zh || "",
+      title_original: p.title_original || "",
+      desc_zh: p.desc_zh || "",
+      desc_original: p.desc_original || "",
       retail_price_twd: Number(p.retail_price_twd || 0),
       wholesale_price_twd: Number(p.wholesale_price_twd || 0),
       cost_twd: Number(p.cost_twd || 0),
       status: (p.status === "published" ? "published" : "draft") as "draft" | "published",
     });
     setShowProductEdit(true);
+  };
+
+  const handleTranslate = async (field: "title" | "description") => {
+    const text = field === "title" ? productEditForm.title_original : productEditForm.desc_original;
+    if (!text) return alert("無原文內容可翻譯");
+
+    try {
+      setIsTranslating(true);
+      const res = await fetch("/api/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        if (data.translatedText) {
+          setProductEditForm(prev => ({
+            ...prev,
+            [field === "title" ? "title_zh" : "desc_zh"]: data.translatedText
+          }));
+        }
+      } else {
+        alert("翻譯失敗，請稍後再試");
+      }
+    } catch (err) {
+      console.error("Translation failed:", err);
+      alert("翻譯發生錯誤");
+    } finally {
+      setIsTranslating(false);
+    }
   };
 
   const recalculateEditPrices = () => {
@@ -161,6 +199,9 @@ export default function ProductManager() {
     const payload = {
       sku: productEditForm.sku,
       title_zh: productEditForm.title_zh,
+      title_original: productEditForm.title_original,
+      desc_zh: productEditForm.desc_zh,
+      desc_original: productEditForm.desc_original,
       retail_price_twd: toInt(productEditForm.retail_price_twd),
       wholesale_price_twd: toInt(productEditForm.wholesale_price_twd),
       cost_twd: toInt(productEditForm.cost_twd),
@@ -342,8 +383,38 @@ export default function ProductManager() {
                 <input value={productEditForm.sku} onChange={(e) => setProductEditForm({ ...productEditForm, sku: e.target.value })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
               </div>
               <div>
-                <label className="text-sm text-text-secondary-light">商品名稱</label>
-                <input value={productEditForm.title_zh} onChange={(e) => setProductEditForm({ ...productEditForm, title_zh: e.target.value })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
+                <label className="text-sm text-text-secondary-light">商品名稱 (中文)</label>
+                <div className="flex gap-2">
+                  <input value={productEditForm.title_zh} onChange={(e) => setProductEditForm({ ...productEditForm, title_zh: e.target.value })} className="mt-1 flex-1 rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
+                  <button 
+                    onClick={() => handleTranslate("title")} 
+                    disabled={isTranslating || !productEditForm.title_original}
+                    className="mt-1 px-3 rounded-lg border border-primary text-primary text-xs hover:bg-primary/10 disabled:opacity-50"
+                  >
+                    翻譯
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="text-sm text-text-secondary-light">商品名稱 (原文)</label>
+                <input value={productEditForm.title_original} onChange={(e) => setProductEditForm({ ...productEditForm, title_original: e.target.value })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="text-sm text-text-secondary-light">商品描述 (中文)</label>
+                <div className="flex flex-col gap-2">
+                  <textarea value={productEditForm.desc_zh} onChange={(e) => setProductEditForm({ ...productEditForm, desc_zh: e.target.value })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm min-h-20" />
+                  <button 
+                    onClick={() => handleTranslate("description")} 
+                    disabled={isTranslating || !productEditForm.desc_original}
+                    className="self-end px-3 py-1 rounded-lg border border-primary text-primary text-xs hover:bg-primary/10 disabled:opacity-50"
+                  >
+                    從原文翻譯
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="text-sm text-text-secondary-light">商品描述 (原文)</label>
+                <textarea value={productEditForm.desc_original} onChange={(e) => setProductEditForm({ ...productEditForm, desc_original: e.target.value })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm min-h-20" />
               </div>
               <div>
                 <div className="flex items-center justify-between mb-2">

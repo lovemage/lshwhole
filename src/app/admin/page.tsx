@@ -13,6 +13,7 @@ import MemberManager from "@/components/admin/MemberManager";
 import UpgradeSettings from "@/components/admin/UpgradeSettings";
 import OrderManager from "@/components/admin/OrderManager";
 import HotProductManager from "@/components/admin/HotProductManager";
+import LimitedTimeProductManager from "@/components/admin/LimitedTimeProductManager";
 import SubAccountManager from "@/components/admin/SubAccountManager";
 import BannerManager from "@/components/admin/BannerManager";
 import ShippingSettings from "@/components/admin/ShippingSettings";
@@ -67,6 +68,8 @@ function AdminDashboard() {
         return <OrderManager />;
       case "hot_products":
         return <HotProductManager />;
+      case "limited_time_products":
+        return <LimitedTimeProductManager />;
       case "sub_accounts":
         return <SubAccountManager />;
       case "banners":
@@ -130,7 +133,9 @@ function AdminDashboard() {
                                 ? "商品管理"
                                 : activeNav === "hot_products"
                                   ? "熱銷商品"
-                                  : activeNav === "banners"
+                                  : activeNav === "limited_time_products"
+                                    ? "限時商品"
+                                    : activeNav === "banners"
                                     ? "橫幅管理"
                                     : activeNav === "shipping_settings"
                                       ? "運費管理"
@@ -149,7 +154,9 @@ function AdminDashboard() {
                           ? "查看與管理會員訂單"
                           : activeNav === "hot_products"
                             ? "管理首頁與專區顯示的熱銷商品"
-                            : activeNav === "upgrade_settings"
+                            : activeNav === "limited_time_products"
+                              ? "管理限定時間商品及其販售時間"
+                              : activeNav === "upgrade_settings"
                               ? "管理會員升級為批發會員的申請資格、銀行帳號與代理費金額"
                               : activeNav === "sub_accounts"
                                 ? "新增與管理後台子帳戶及其權限"

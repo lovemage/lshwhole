@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import CartBadge from "@/components/CartBadge";
 import { useMemberPermissions } from "@/lib/memberPermissions";
+import CountdownTimer from "@/components/CountdownTimer";
 
 interface ProductDetail {
   id: string;
@@ -20,6 +21,8 @@ interface ProductDetail {
   images: string[];
   created_at: string;
   updated_at: string;
+  is_limited_time?: boolean;
+  limited_time_end?: string;
 }
 
 interface RelatedProduct {
@@ -76,6 +79,7 @@ export default function ProductDetailPage() {
   const [relatedLoading, setRelatedLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState<{ email: string | null } | null>(null);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [isExpired, setIsExpired] = useState(false);
 
   // 會員權限
   const { loading: permissionsLoading, error: permissionsError, data: permissions } = useMemberPermissions();
@@ -467,15 +471,30 @@ export default function ProductDetailPage() {
                 <span className="text-xs font-semibold px-2 py-1 rounded-full bg-primary/10 text-primary">SKU: {product.sku}</span>
                 <span className="text-xs font-semibold px-2 py-1 rounded-full bg-green-100 text-green-800">{product.status === 'published' ? '已上架' : '未上架'}</span>
               </div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">{product.title_zh || product.title_original}</h1>
+              {/* 主標題：優先顯示原文 */}
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">{product.title_original || product.title_zh}</h1>
               
+              {/* 副標題：中文翻譯（較小字體） */}
               {product.title_zh && product.title_original && product.title_zh !== product.title_original && (
-                <p className="text-lg text-gray-600 mb-2">原文：{product.title_original}</p>
+                <p className="text-lg text-gray-600 mb-2 font-medium">{product.title_zh}</p>
               )}
             </div>
 
             {/* Price */}
             <div className="border-t border-b border-gray-200 py-4">
+              {product.is_limited_time && product.limited_time_end && (
+                <div className="mb-4 p-4 bg-red-50 border border-red-100 rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="material-symbols-outlined text-red-600">alarm</span>
+                    <span className="text-red-800 font-bold">限時販售中</span>
+                  </div>
+                  <CountdownTimer 
+                    endTime={product.limited_time_end} 
+                    style="detail" 
+                    onExpire={() => setIsExpired(true)}
+                  />
+                </div>
+              )}
               <div className="flex flex-col gap-2">
                 {/* 根據會員等級顯示價格 */}
                 {permissions?.permissions.price_type === 'none' && (
@@ -508,17 +527,22 @@ export default function ProductDetailPage() {
             {/* Description */}
             <div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">產品描述</h3>
-              <div className="space-y-2">
-                {product.desc_zh && (
+              <div className="space-y-4">
+                {/* 原文描述為主 */}
+                {product.desc_original && (
                   <div>
-                    <p className="text-gray-600 leading-relaxed whitespace-pre-wrap">{product.desc_zh}</p>
+                    <p className="text-gray-800 leading-relaxed whitespace-pre-wrap text-base">{product.desc_original}</p>
                   </div>
                 )}
-                {product.desc_original && product.desc_original !== product.desc_zh && (
-                  <div>
-                    <p className="text-sm text-gray-500 leading-relaxed whitespace-pre-wrap">原文描述：{product.desc_original}</p>
+                
+                {/* 中文翻譯區塊（較小字體） */}
+                {product.desc_zh && product.desc_zh !== product.desc_original && (
+                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
+                    <h4 className="text-sm font-bold text-gray-500 mb-2">中文翻譯</h4>
+                    <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">{product.desc_zh}</p>
                   </div>
                 )}
+
                 {!product.desc_zh && !product.desc_original && (
                   <p className="text-gray-500 italic">暫無產品描述</p>
                 )}
@@ -568,10 +592,18 @@ export default function ProductDetailPage() {
               </div>
               <button
                 onClick={handleAddToCart}
-                disabled={product.status !== 'published'}
-                className="flex-1 bg-primary text-white font-bold py-2 px-4 rounded-lg hover:bg-primary/90 transition-all duration-100 transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
+                disabled={product.status !== 'published' || isExpired}
+                className={`flex-1 font-bold py-2 px-4 rounded-lg transition-all duration-100 transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 ${
+                  isExpired 
+                    ? "bg-gray-400 text-white" 
+                    : "bg-primary text-white hover:bg-primary/90"
+                }`}
               >
-                {product.status === 'published' ? '加入購物車' : '商品未上架'}
+                {product.status !== 'published' 
+                  ? '商品未上架' 
+                  : isExpired 
+                    ? '販售結束' 
+                    : '加入購物車'}
               </button>
             </div>
 
