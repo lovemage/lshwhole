@@ -12,14 +12,15 @@ export async function POST(request: NextRequest) {
     const apiKey = process.env.OPENAI_API_KEY;
 
     if (!apiKey) {
-      // Fallback / Mock translation if no key provided
-      // In a real scenario, you would integrate with OpenAI or Google Translate here
-      console.warn("OPENAI_API_KEY not found, using mock translation");
+      console.warn("OPENAI_API_KEY not found in process.env");
       return NextResponse.json({ 
         translatedText: `[翻譯] ${text}`,
-        mock: true 
+        mock: true,
+        message: "API Key missing"
       });
     }
+
+    console.log(`Translating text: "${text.substring(0, 20)}..." to ${targetLang}`);
 
     // Call OpenAI API
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -33,7 +34,11 @@ export async function POST(request: NextRequest) {
         messages: [
           {
             role: "system",
-            content: `You are a helpful translator. Translate the following text to ${targetLang === "zh-TW" ? "Traditional Chinese (Taiwan)" : targetLang}. Keep it natural for e-commerce product titles or descriptions.`
+            content: `You are a professional translator for an e-commerce platform. 
+            Translate the following product information to Traditional Chinese (Taiwan/繁體中文). 
+            Ensure the tone is commercial and attractive. 
+            Do not include explanations, just the translated text.
+            If the text is already in Traditional Chinese, return it as is.`
           },
           {
             role: "user",
@@ -46,13 +51,14 @@ export async function POST(request: NextRequest) {
 
     if (!response.ok) {
       const error = await response.json();
-      console.error("OpenAI API error:", error);
-      return NextResponse.json({ error: "Translation failed" }, { status: 500 });
+      console.error("OpenAI API error:", JSON.stringify(error));
+      return NextResponse.json({ error: "Translation failed", details: error }, { status: 500 });
     }
 
     const data = await response.json();
     const translatedText = data.choices[0]?.message?.content?.trim();
 
+    console.log("Translation success");
     return NextResponse.json({ translatedText });
 
   } catch (err) {
