@@ -20,46 +20,46 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    console.log(`Translating text: "${text.substring(0, 20)}..." to ${targetLang}`);
+    console.log(`Translating text using custom endpoint: "${text.substring(0, 20)}..."`);
 
-    // Call OpenAI API
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    // Call Custom OpenAI Endpoint (v1/responses)
+    const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: "gpt-3.5-turbo",
-        messages: [
-          {
-            role: "system",
-            content: `You are a professional translator for an e-commerce platform. 
-            Translate the following product information to Traditional Chinese (Taiwan/繁體中文). 
-            Ensure the tone is commercial and attractive. 
-            Do not include explanations, just the translated text.
-            If the text is already in Traditional Chinese, return it as is.`
-          },
-          {
-            role: "user",
-            content: text
-          }
-        ],
-        temperature: 0.3
+        model: "gpt-5-nano",
+        input: `Translate to Traditional Chinese (Taiwan): ${text}`,
+        store: true
       })
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      console.error("OpenAI API error:", JSON.stringify(error));
+      const error = await response.json().catch(() => ({ status: response.status, statusText: response.statusText }));
+      console.error("OpenAI Custom API error:", JSON.stringify(error));
       return NextResponse.json({ error: "Translation failed", details: error }, { status: 500 });
     }
 
     const data = await response.json();
-    const translatedText = data.choices[0]?.message?.content?.trim();
+    console.log("Custom API Response:", JSON.stringify(data));
 
-    console.log("Translation success");
-    return NextResponse.json({ translatedText });
+    // Attempt to extract text from unknown response format
+    // Assuming it might have 'response', 'output', 'text', or similar
+    let translatedText = "";
+    if (data.response) translatedText = data.response;
+    else if (data.output) translatedText = data.output;
+    else if (data.text) translatedText = data.text;
+    else if (data.choices && data.choices[0]) {
+        // Fallback to standard format just in case
+        translatedText = data.choices[0].text || data.choices[0].message?.content || "";
+    } else {
+        // Fallback: try to find any string value that looks like a translation
+        translatedText = JSON.stringify(data); 
+    }
+
+    return NextResponse.json({ translatedText: translatedText.trim() });
 
   } catch (err) {
     console.error("Translation error:", err);
