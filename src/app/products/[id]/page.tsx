@@ -208,21 +208,36 @@ export default function ProductDetailPage() {
       setTranslating(true);
       
       // Translate Title
-      const titleRes = await fetch("/api/translate", {
-        method: "POST",
-        body: JSON.stringify({ text: product.title_original }),
-      });
-      const titleData = await titleRes.json();
+      if (product.title_original) {
+        try {
+          const titleRes = await fetch("/api/translate", {
+            method: "POST",
+            body: JSON.stringify({ text: product.title_original }),
+          });
+          if (titleRes.ok) {
+            const titleData = await titleRes.json();
+            if (titleData.translatedText) setTranslatedTitle(titleData.translatedText);
+          }
+        } catch (e) {
+          console.error("Title translation error", e);
+        }
+      }
       
       // Translate Description
-      const descRes = await fetch("/api/translate", {
-        method: "POST",
-        body: JSON.stringify({ text: product.desc_original }),
-      });
-      const descData = await descRes.json();
-
-      if (titleData.translatedText) setTranslatedTitle(titleData.translatedText);
-      if (descData.translatedText) setTranslatedDesc(descData.translatedText);
+      if (product.desc_original) {
+        try {
+          const descRes = await fetch("/api/translate", {
+            method: "POST",
+            body: JSON.stringify({ text: product.desc_original }),
+          });
+          if (descRes.ok) {
+            const descData = await descRes.json();
+            if (descData.translatedText) setTranslatedDesc(descData.translatedText);
+          }
+        } catch (e) {
+          console.error("Description translation error", e);
+        }
+      }
       
       setIsTranslated(true);
     } catch (err) {
