@@ -38,10 +38,6 @@ interface CartItem {
   origin: string;
 }
 
-const TranslateIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="currentColor"><path d="m480-80-40-120H160q-33 0-56.5-23.5T80-280v-520q0-33 23.5-56.5T160-880h240l35 120h365q35 0 57.5 22.5T880-680v520q0 33-22.5 56.5T800-80H480ZM286-376q69 0 113.5-44.5T444-536q0-8-.5-14.5T441-564H283v62h89q-8 28-30.5 43.5T287-443q-39 0-67-28t-28-69q0-41 28-69t67-28q18 0 34 6.5t29 19.5l49-47q-21-22-50.5-34T286-704q-67 0-114.5 47.5T124-540q0 69 47.5 116.5T286-376Zm268 20 22-21q-14-17-25.5-33T528-444l26 88Zm50-51q28-33 42.5-63t19.5-47H507l12 42h40q8 15 19 32.5t26 35.5Zm-84 287h280q18 0 29-11.5t11-28.5v-520q0-18-11-29t-29-11H447l47 162h79v-42h41v42h146v41h-51q-10 38-30 74t-47 67l109 107-29 29-108-108-36 37 32 111-80 80Z"/></svg>
-);
-
 const CART_STORAGE_KEY = "lsx_cart";
 
 const loadCartFromStorage = (): CartItem[] => {
@@ -80,12 +76,6 @@ export default function ProductDetailPage() {
   const [relatedLoading, setRelatedLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState<{ email: string | null } | null>(null);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
-
-  // Translation State
-  const [translatedTitle, setTranslatedTitle] = useState<string | null>(null);
-  const [translatedDesc, setTranslatedDesc] = useState<string | null>(null);
-  const [isTranslated, setIsTranslated] = useState(false);
-  const [translating, setTranslating] = useState(false);
 
   // 會員權限
   const { loading: permissionsLoading, error: permissionsError, data: permissions } = useMemberPermissions();
@@ -191,62 +181,6 @@ export default function ProductDetailPage() {
       fetchRelatedProducts();
     }
   }, [params.id, product, loading]);
-
-  const handleTranslate = async () => {
-    if (!product) return;
-    if (isTranslated) {
-      setIsTranslated(false);
-      return;
-    }
-
-    if (translatedTitle && translatedDesc) {
-      setIsTranslated(true);
-      return;
-    }
-
-    try {
-      setTranslating(true);
-      
-      // Translate Title
-      if (product.title_original) {
-        try {
-          const titleRes = await fetch("/api/translate", {
-            method: "POST",
-            body: JSON.stringify({ text: product.title_original }),
-          });
-          if (titleRes.ok) {
-            const titleData = await titleRes.json();
-            if (titleData.translatedText) setTranslatedTitle(titleData.translatedText);
-          }
-        } catch (e) {
-          console.error("Title translation error", e);
-        }
-      }
-      
-      // Translate Description
-      if (product.desc_original) {
-        try {
-          const descRes = await fetch("/api/translate", {
-            method: "POST",
-            body: JSON.stringify({ text: product.desc_original }),
-          });
-          if (descRes.ok) {
-            const descData = await descRes.json();
-            if (descData.translatedText) setTranslatedDesc(descData.translatedText);
-          }
-        } catch (e) {
-          console.error("Description translation error", e);
-        }
-      }
-      
-      setIsTranslated(true);
-    } catch (err) {
-      console.error("Translation failed", err);
-      alert("翻譯失敗，請稍後再試");
-    } finally {
-      setTranslating(false);
-    }
-  };
 
   const handleAddToCart = () => {
     if (!product) return;
@@ -533,27 +467,9 @@ export default function ProductDetailPage() {
                 <span className="text-xs font-semibold px-2 py-1 rounded-full bg-primary/10 text-primary">SKU: {product.sku}</span>
                 <span className="text-xs font-semibold px-2 py-1 rounded-full bg-green-100 text-green-800">{product.status === 'published' ? '已上架' : '未上架'}</span>
               </div>
-              <div className="flex items-start gap-3 justify-between">
-                <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                  {isTranslated 
-                    ? (translatedTitle || product.title_zh || product.title_original) 
-                    : (product.title_zh || product.title_original)}
-                </h1>
-                <button 
-                  onClick={handleTranslate}
-                  disabled={translating}
-                  className={`flex-shrink-0 p-2 rounded-full transition-colors ${isTranslated ? "bg-primary text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}
-                  title={isTranslated ? "顯示原文" : "翻譯內容"}
-                >
-                  {translating ? (
-                    <div className="w-6 h-6 border-2 border-gray-300 border-t-primary rounded-full animate-spin"></div>
-                  ) : (
-                    <TranslateIcon />
-                  )}
-                </button>
-              </div>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">{product.title_zh || product.title_original}</h1>
               
-              {product.title_zh && product.title_original && product.title_zh !== product.title_original && !isTranslated && (
+              {product.title_zh && product.title_original && product.title_zh !== product.title_original && (
                 <p className="text-lg text-gray-600 mb-2">原文：{product.title_original}</p>
               )}
             </div>
@@ -593,26 +509,18 @@ export default function ProductDetailPage() {
             <div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">產品描述</h3>
               <div className="space-y-2">
-                {isTranslated ? (
-                  <p className="text-gray-600 leading-relaxed whitespace-pre-wrap">
-                    {translatedDesc || product.desc_zh || product.desc_original || "暫無產品描述"}
-                  </p>
-                ) : (
-                  <>
-                    {product.desc_zh && (
-                      <div>
-                        <p className="text-gray-600 leading-relaxed whitespace-pre-wrap">{product.desc_zh}</p>
-                      </div>
-                    )}
-                    {product.desc_original && product.desc_original !== product.desc_zh && (
-                      <div>
-                        <p className="text-sm text-gray-500 leading-relaxed whitespace-pre-wrap">原文描述：{product.desc_original}</p>
-                      </div>
-                    )}
-                    {!product.desc_zh && !product.desc_original && (
-                      <p className="text-gray-500 italic">暫無產品描述</p>
-                    )}
-                  </>
+                {product.desc_zh && (
+                  <div>
+                    <p className="text-gray-600 leading-relaxed whitespace-pre-wrap">{product.desc_zh}</p>
+                  </div>
+                )}
+                {product.desc_original && product.desc_original !== product.desc_zh && (
+                  <div>
+                    <p className="text-sm text-gray-500 leading-relaxed whitespace-pre-wrap">原文描述：{product.desc_original}</p>
+                  </div>
+                )}
+                {!product.desc_zh && !product.desc_original && (
+                  <p className="text-gray-500 italic">暫無產品描述</p>
                 )}
               </div>
             </div>
