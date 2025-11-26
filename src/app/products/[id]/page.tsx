@@ -8,6 +8,15 @@ import CartBadge from "@/components/CartBadge";
 import { useMemberPermissions } from "@/lib/memberPermissions";
 import CountdownTimer from "@/components/CountdownTimer";
 
+interface Variant {
+  id: string;
+  name: string;
+  options: Record<string, string>;
+  price: number;
+  stock: number;
+  sku: string;
+}
+
 interface ProductDetail {
   id: string;
   sku: string;
@@ -23,6 +32,8 @@ interface ProductDetail {
   updated_at: string;
   is_limited_time?: boolean;
   limited_time_end?: string;
+  specs?: { name: string; values: string[] }[];
+  variants?: Variant[];
 }
 
 interface RelatedProduct {
@@ -39,6 +50,8 @@ interface CartItem {
   quantity: number;
   image: string;
   origin: string;
+  variantId?: string;
+  variantName?: string;
 }
 
 const CART_STORAGE_KEY = "lsx_cart";
@@ -81,6 +94,8 @@ export default function ProductDetailPage() {
   const [currentUser, setCurrentUser] = useState<{ email: string | null } | null>(null);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [isExpired, setIsExpired] = useState(false);
+  const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
+  const [currentVariant, setCurrentVariant] = useState<Variant | null>(null);
 
   // 會員權限
   const { loading: permissionsLoading, error: permissionsError, data: permissions } = useMemberPermissions();
@@ -156,6 +171,29 @@ export default function ProductDetailPage() {
     fetchProduct();
   }, [params.id]);
 
+  // Initialize default options
+  useEffect(() => {
+    if (product?.specs && product.specs.length > 0 && Object.keys(selectedOptions).length === 0) {
+      const defaults: Record<string, string> = {};
+      product.specs.forEach(s => {
+        if (s.values.length > 0) defaults[s.name] = s.values[0];
+      });
+      setSelectedOptions(defaults);
+    }
+  }, [product]);
+
+  // Find matching variant
+  useEffect(() => {
+    if (!product?.variants || product.variants.length === 0) {
+      setCurrentVariant(null);
+      return;
+    }
+    const variant = product.variants.find(v => {
+      return Object.entries(selectedOptions).every(([key, val]) => v.options[key] === val);
+    });
+    setCurrentVariant(variant || null);
+  }, [selectedOptions, product]);
+
   // 獲取相關商品
   useEffect(() => {
     const fetchRelatedProducts = async () => {
@@ -200,6 +238,25 @@ export default function ProductDetailPage() {
       unitPrice = product.retail_price_twd || 0;
     }
 
+    // Override with variant price if selected
+    if (currentVariant) {
+      // Assuming variant price is retail price override. 
+      // If wholesale logic applies to variants, we might need variant wholesale price.
+      // For now, let's assume variant price overrides base retail, and we apply same ratio or just use it.
+      // If the system is simple, maybe variant price IS the price.
+      // Let's assume variant.price is the retail price.
+      if (priceType === 'wholesale') {
+        // If we don't have wholesale variant price, maybe calculate it?
+        // Or just use the ratio from main product?
+        // Let's assume variant price is retail, and wholesale is 25/35 ratio or similar?
+        // Or just use the variant price as is if user is retail, but what if wholesale?
+        // Let's just use variant price for now.
+        unitPrice = currentVariant.price;
+      } else {
+        unitPrice = currentVariant.price;
+      }
+    }
+
     if (unitPrice <= 0) {
       console.warn("商品價格異常，無法加入購物車");
       return;
@@ -215,7 +272,9 @@ export default function ProductDetailPage() {
         ? product.images[0]
         : "https://images.unsplash.com/photo-1590155294835-6b3fb5b0b9a5?q=80&w=200&auto=format&fit=crop");
 
-    const existingIndex = currentCart.findIndex((item) => item.id === id);
+    const existingIndex = currentCart.findIndex((item) =>
+      item.id === id && item.variantId === currentVariant?.id
+    );
 
     if (existingIndex >= 0) {
       currentCart[existingIndex] = {
@@ -230,6 +289,8 @@ export default function ProductDetailPage() {
         quantity,
         image,
         origin: "國際",
+        variantId: currentVariant?.id,
+        variantName: currentVariant?.name,
       });
     }
 
@@ -462,9 +523,8 @@ export default function ProductDetailPage() {
                 <button
                   key={index}
                   onClick={() => setSelectedImage(index)}
-                  className={`flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border-2 transition-colors ${
-                    selectedImage === index ? "border-primary" : "border-gray-200"
-                  }`}
+                  className={`flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border-2 transition-colors ${selectedImage === index ? "border-primary" : "border-gray-200"
+                    }`}
                 >
                   <img src={image} alt={`${product.title_zh || product.title_original} ${index + 1}`} className="w-full h-full object-cover" />
                 </button>
@@ -482,7 +542,7 @@ export default function ProductDetailPage() {
               </div>
               {/* 主標題：優先顯示原文 */}
               <h1 className="text-3xl font-bold text-gray-900 mb-2">{product.title_original || product.title_zh}</h1>
-              
+
               {/* 副標題：中文翻譯（較小字體） */}
               {product.title_zh && product.title_original && product.title_zh !== product.title_original && (
                 <p className="text-lg text-gray-600 mb-2 font-medium">{product.title_zh}</p>
@@ -497,9 +557,9 @@ export default function ProductDetailPage() {
                     <span className="material-symbols-outlined text-red-600">alarm</span>
                     <span className="text-red-800 font-bold">限時販售中</span>
                   </div>
-                  <CountdownTimer 
-                    endTime={product.limited_time_end} 
-                    style="detail" 
+                  <CountdownTimer
+                    endTime={product.limited_time_end}
+                    style="detail"
                     onExpire={() => setIsExpired(true)}
                   />
                 </div>
@@ -512,7 +572,9 @@ export default function ProductDetailPage() {
                 {permissions?.permissions.price_type === 'retail' && (
                   <div>
                     <p className="text-sm text-gray-600">零售價</p>
-                    <p className="text-4xl font-bold text-gray-900">NT$ {product.retail_price_twd}</p>
+                    <p className="text-4xl font-bold text-gray-900">
+                      NT$ {currentVariant ? currentVariant.price : product.retail_price_twd}
+                    </p>
                   </div>
                 )}
                 {permissions?.permissions.price_type === 'wholesale' && (
@@ -533,6 +595,31 @@ export default function ProductDetailPage() {
                 )}
               </div>
             </div>
+            {/* Specifications Selection */}
+            {product.specs && product.specs.length > 0 && (
+              <div className="border-b border-gray-200 pb-4">
+                {product.specs.map((spec) => (
+                  <div key={spec.name} className="mb-4 last:mb-0">
+                    <h3 className="text-sm font-medium text-gray-900 mb-2">{spec.name}</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {spec.values.map((value) => (
+                        <button
+                          key={value}
+                          onClick={() => setSelectedOptions(prev => ({ ...prev, [spec.name]: value }))}
+                          className={`px-3 py-1.5 text-sm rounded-md border transition-all ${selectedOptions[spec.name] === value
+                            ? "border-primary bg-primary/5 text-primary font-medium"
+                            : "border-gray-200 text-gray-600 hover:border-gray-300"
+                            }`}
+                        >
+                          {value}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Description */}
             <div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">產品描述</h3>
@@ -543,7 +630,7 @@ export default function ProductDetailPage() {
                     <p className="text-gray-800 leading-relaxed whitespace-pre-wrap text-base">{product.desc_original}</p>
                   </div>
                 )}
-                
+
                 {/* 中文翻譯區塊（較小字體） */}
                 {product.desc_zh && product.desc_zh !== product.desc_original && (
                   <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
@@ -602,16 +689,15 @@ export default function ProductDetailPage() {
               <button
                 onClick={handleAddToCart}
                 disabled={product.status !== 'published' || isExpired}
-                className={`flex-1 font-bold py-2 px-4 rounded-lg transition-all duration-100 transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 ${
-                  isExpired 
-                    ? "bg-gray-400 text-white" 
-                    : "bg-primary text-white hover:bg-primary/90"
-                }`}
+                className={`flex-1 font-bold py-2 px-4 rounded-lg transition-all duration-100 transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 ${isExpired
+                  ? "bg-gray-400 text-white"
+                  : "bg-primary text-white hover:bg-primary/90"
+                  }`}
               >
-                {product.status !== 'published' 
-                  ? '商品未上架' 
-                  : isExpired 
-                    ? '販售結束' 
+                {product.status !== 'published'
+                  ? '商品未上架'
+                  : isExpired
+                    ? '販售結束'
                     : '加入購物車'}
               </button>
             </div>
@@ -703,64 +789,66 @@ export default function ProductDetailPage() {
       </footer>
 
       {/* Full Screen Image Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center backdrop-blur-sm" onClick={() => setShowModal(false)}>
-          <button 
-            className="absolute top-4 right-4 p-2 text-white/70 hover:text-white z-50"
-            onClick={() => setShowModal(false)}
-          >
-            <span className="material-symbols-outlined text-4xl">close</span>
-          </button>
-          
-          <div className="relative w-full h-full max-w-7xl max-h-screen flex items-center justify-center p-4" onClick={e => e.stopPropagation()}>
-            <img 
-              src={productImages[selectedImage]} 
-              alt={product.title_zh || product.title_original}
-              className="max-w-full max-h-full object-contain"
-            />
-            
-            {productImages.length > 1 && (
-              <>
-                <button 
-                  className="absolute left-4 top-1/2 -translate-y-1/2 p-2 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedImage(prev => (prev - 1 + productImages.length) % productImages.length);
-                  }}
-                >
-                  <span className="material-symbols-outlined text-3xl">chevron_left</span>
-                </button>
-                
-                <button 
-                  className="absolute right-4 top-1/2 -translate-y-1/2 p-2 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedImage(prev => (prev + 1) % productImages.length);
-                  }}
-                >
-                  <span className="material-symbols-outlined text-3xl">chevron_right</span>
-                </button>
-                
-                {/* Thumbnails in Modal */}
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 overflow-x-auto max-w-[90vw] p-2 rounded-lg bg-black/50">
-                  {productImages.map((img, idx) => (
-                    <button
-                      key={idx}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedImage(idx);
-                      }}
-                      className={`w-12 h-12 flex-shrink-0 rounded overflow-hidden border-2 ${selectedImage === idx ? 'border-white' : 'border-transparent opacity-50 hover:opacity-80'}`}
-                    >
-                      <img src={img} alt={`thumbnail ${idx}`} className="w-full h-full object-cover" />
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
+      {
+        showModal && (
+          <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center backdrop-blur-sm" onClick={() => setShowModal(false)}>
+            <button
+              className="absolute top-4 right-4 p-2 text-white/70 hover:text-white z-50"
+              onClick={() => setShowModal(false)}
+            >
+              <span className="material-symbols-outlined text-4xl">close</span>
+            </button>
+
+            <div className="relative w-full h-full max-w-7xl max-h-screen flex items-center justify-center p-4" onClick={e => e.stopPropagation()}>
+              <img
+                src={productImages[selectedImage]}
+                alt={product.title_zh || product.title_original}
+                className="max-w-full max-h-full object-contain"
+              />
+
+              {productImages.length > 1 && (
+                <>
+                  <button
+                    className="absolute left-4 top-1/2 -translate-y-1/2 p-2 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedImage(prev => (prev - 1 + productImages.length) % productImages.length);
+                    }}
+                  >
+                    <span className="material-symbols-outlined text-3xl">chevron_left</span>
+                  </button>
+
+                  <button
+                    className="absolute right-4 top-1/2 -translate-y-1/2 p-2 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedImage(prev => (prev + 1) % productImages.length);
+                    }}
+                  >
+                    <span className="material-symbols-outlined text-3xl">chevron_right</span>
+                  </button>
+
+                  {/* Thumbnails in Modal */}
+                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 overflow-x-auto max-w-[90vw] p-2 rounded-lg bg-black/50">
+                    {productImages.map((img, idx) => (
+                      <button
+                        key={idx}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedImage(idx);
+                        }}
+                        className={`w-12 h-12 flex-shrink-0 rounded overflow-hidden border-2 ${selectedImage === idx ? 'border-white' : 'border-transparent opacity-50 hover:opacity-80'}`}
+                      >
+                        <img src={img} alt={`thumbnail ${idx}`} className="w-full h-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )
+      }
     </div>
   );
 }

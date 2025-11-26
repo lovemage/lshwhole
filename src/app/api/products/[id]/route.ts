@@ -54,7 +54,7 @@ export async function GET(
     const { data: product, error } = await admin
       .from("products")
       .select(
-        "id, sku, title_zh, title_original, desc_zh, desc_original, retail_price_twd, wholesale_price_twd, status, created_at, updated_at"
+        "id, sku, title_zh, title_original, desc_zh, desc_original, retail_price_twd, wholesale_price_twd, status, created_at, updated_at, specs"
       )
       .eq("id", id)
       .single();
@@ -74,6 +74,12 @@ export async function GET(
       console.error("Error fetching product images:", imgError);
     }
 
+    // 獲取變體
+    const { data: variants, error: vError } = await admin
+      .from("product_variants")
+      .select("id, name, options, price, stock, sku")
+      .eq("product_id", id);
+
     // 將圖片 URL 數組添加到商品資料中
     const productWithImages = {
       id: product.id,
@@ -88,6 +94,8 @@ export async function GET(
       created_at: product.created_at,
       updated_at: product.updated_at,
       images: (images || []).map((img) => img.url),
+      specs: product.specs,
+      variants: variants || [],
     };
 
     return NextResponse.json(productWithImages);

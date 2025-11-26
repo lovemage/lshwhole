@@ -64,6 +64,23 @@ export default function CrawlerImport() {
     image_urls: [] as string[],
   });
 
+  interface Spec {
+    name: string;
+    values: string[];
+  }
+
+  interface Variant {
+    id: string;
+    options: Record<string, string>;
+    price: number;
+    stock: number;
+    sku: string;
+  }
+
+  const [specs, setSpecs] = useState<Spec[]>([]);
+  const [variants, setVariants] = useState<Variant[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+
   interface CandidateImage {
     url: string;
     isProduct: boolean;
@@ -240,6 +257,131 @@ export default function CrawlerImport() {
     setCrawlerFiltered(applyFilterSort(mapped));
   };
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploading(true);
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const res = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.url) {
+            setCandidateImages((prev) => [
+              ...prev,
+              { url: data.url, isProduct: true, isDescription: false },
+            ]);
+          }
+        } else {
+          console.error("Upload failed");
+        }
+      }
+    } catch (err) {
+      console.error("Upload error:", err);
+      alert("圖片上傳失敗");
+    } finally {
+      setIsUploading(false);
+      // Reset input
+      e.target.value = "";
+    }
+  };
+
+  const addSpec = () => {
+    setSpecs([...specs, { name: "", values: [] }]);
+  };
+
+  const updateSpecName = (idx: number, name: string) => {
+    const newSpecs = [...specs];
+    newSpecs[idx].name = name;
+    setSpecs(newSpecs);
+  };
+
+  const addSpecValue = (idx: number, value: string) => {
+    if (!value.trim()) return;
+    const newSpecs = [...specs];
+    if (!newSpecs[idx].values.includes(value.trim())) {
+      newSpecs[idx].values.push(value.trim());
+      setSpecs(newSpecs);
+      generateVariants(newSpecs);
+    }
+  };
+
+  const removeSpecValue = (specIdx: number, valIdx: number) => {
+    const newSpecs = [...specs];
+    newSpecs[specIdx].values.splice(valIdx, 1);
+    setSpecs(newSpecs);
+    generateVariants(newSpecs);
+  };
+
+  const removeSpec = (idx: number) => {
+    const newSpecs = [...specs];
+    newSpecs.splice(idx, 1);
+    setSpecs(newSpecs);
+    generateVariants(newSpecs);
+  };
+
+  const generateVariants = (currentSpecs: Spec[]) => {
+    if (currentSpecs.length === 0) {
+      setVariants([]);
+      return;
+    }
+
+    // Generate Cartesian product
+    const combine = (acc: any[], specIdx: number): any[] => {
+      if (specIdx === currentSpecs.length) return acc;
+
+      const spec = currentSpecs[specIdx];
+      if (spec.values.length === 0) return combine(acc, specIdx + 1); // Skip empty specs
+
+      const nextAcc: any[] = [];
+      if (acc.length === 0) {
+        spec.values.forEach(v => {
+          nextAcc.push({ [spec.name]: v });
+        });
+      } else {
+        acc.forEach(item => {
+          spec.values.forEach(v => {
+            nextAcc.push({ ...item, [spec.name]: v });
+          });
+        });
+      }
+      return combine(nextAcc, specIdx + 1);
+    };
+
+    const optionsList = combine([], 0);
+
+    // Create variants preserving existing data if possible
+    const newVariants = optionsList.map((opts, i) => {
+      const key = JSON.stringify(opts);
+      // Try to find existing variant with same options to keep price/stock
+      const existing = variants.find(v => JSON.stringify(v.options) === key);
+      return existing || {
+        id: Date.now() + "-" + i,
+        options: opts,
+        price: publishForm.retail_price_twd,
+        stock: 10,
+        sku: `${publishForm.sku}-${i + 1}`
+      };
+    });
+
+    setVariants(newVariants);
+  };
+
+  const updateVariant = (idx: number, field: keyof Variant, value: any) => {
+    const newVariants = [...variants];
+    newVariants[idx] = { ...newVariants[idx], [field]: value };
+    setVariants(newVariants);
+  };
+
   const openPublish = (p: any) => {
     const costTwd = Math.floor(Number(getPriceTWD(p) || 0));
     // 自動計算批發價和零售價：批發價 = 成本價 + 25%，零售價 = 成本價 + 35%
@@ -259,6 +401,9 @@ export default function CrawlerImport() {
       l3Id: selectedCrawlerL3,
       image_urls: [], // Will be derived from candidateImages
     });
+
+    setSpecs([]);
+    setVariants([]);
 
     const images = Array.isArray(p.images) ? [...p.images] : [];
     setCandidateImages(images.map((url: string) => ({
@@ -360,6 +505,14 @@ export default function CrawlerImport() {
         category_ids,
         tag_ids: selectedCrawlerTags,
         image_urls: candidateImages.filter(i => i.isProduct).map(i => i.url),
+        specs,
+        variants: variants.map(v => ({
+          name: Object.values(v.options).join(" / "),
+          options: v.options,
+          price: v.price,
+          stock: v.stock,
+          sku: v.sku
+        }))
       };
 
       // Append description images
@@ -812,6 +965,13 @@ export default function CrawlerImport() {
               <div>
                 <div className="text-sm font-medium mb-2">圖片（可調整順序/勾選要上架的圖）</div>
                 <div className="space-y-3 max-h-[50vh] overflow-auto pr-1">
+                  <div className="mb-2">
+                    <label className="cursor-pointer inline-flex items-center gap-2 w-full justify-center rounded-lg border-2 border-dashed border-border-light p-4 hover:bg-background-light transition-colors">
+                      <input type="file" multiple accept="image/*" className="hidden" onChange={handleImageUpload} disabled={isUploading} />
+                      <span className="material-symbols-outlined text-text-secondary-light">add_photo_alternate</span>
+                      <span className="text-sm text-text-secondary-light">{isUploading ? "上傳中..." : "上傳自訂圖片"}</span>
+                    </label>
+                  </div>
                   {candidateImages.map((img, i) => (
                     <div key={i} className="flex items-start gap-3 p-2 border border-border-light rounded-lg bg-background-light">
                       <img src={img.url} alt="img" className="h-20 w-20 object-cover border border-border-light rounded-md shrink-0" />

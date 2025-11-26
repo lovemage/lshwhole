@@ -16,6 +16,8 @@ export async function POST(request: NextRequest) {
       category_ids = [], // number[]
       tag_ids = [], // number[]
       image_urls = [], // string[]
+      specs = [], // {name: string, values: string[]}[]
+      variants = [], // {name: string, options: any, price: number, stock: number, sku: string}[]
     } = body || {};
 
     if (!sku || !title) {
@@ -33,6 +35,7 @@ export async function POST(request: NextRequest) {
       cost_twd: toInt(cost_twd),
       wholesale_price_twd: toInt(wholesale_price_twd),
       retail_price_twd: toInt(retail_price_twd),
+      specs: specs,
     };
 
     const { data: product, error: pErr } = await admin
@@ -67,6 +70,20 @@ export async function POST(request: NextRequest) {
       const rows = image_urls.map((url: string, idx: number) => ({ product_id: productId, url, sort: idx }));
       const { error: iErr } = await admin.from("product_images").insert(rows);
       if (iErr) return NextResponse.json({ error: iErr.message }, { status: 400 });
+    }
+
+    // 變體
+    if (Array.isArray(variants) && variants.length > 0) {
+      const rows = variants.map((v: any) => ({
+        product_id: productId,
+        name: v.name,
+        options: v.options,
+        price: toInt(v.price),
+        stock: toInt(v.stock),
+        sku: v.sku
+      }));
+      const { error: vErr } = await admin.from("product_variants").insert(rows);
+      if (vErr) return NextResponse.json({ error: "Failed to insert variants: " + vErr.message }, { status: 400 });
     }
 
     return NextResponse.json({ id: productId });
