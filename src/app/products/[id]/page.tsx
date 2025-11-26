@@ -75,6 +75,7 @@ export default function ProductDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [selectedImage, setSelectedImage] = useState(0);
+  const [showModal, setShowModal] = useState(false);
   const [relatedProducts, setRelatedProducts] = useState<RelatedProduct[]>([]);
   const [relatedLoading, setRelatedLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState<{ email: string | null } | null>(null);
@@ -441,12 +442,20 @@ export default function ProductDetailPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 xl:gap-16">
           {/* Left Column: Image Gallery */}
           <div className="flex flex-col gap-4">
-            <div className="bg-gray-100 rounded-xl overflow-hidden aspect-square flex items-center justify-center">
+            <div className="relative bg-gray-100 rounded-xl overflow-hidden aspect-square flex items-center justify-center group">
               <img
                 src={productImages[selectedImage]}
                 alt={product.title_zh || product.title_original}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover cursor-pointer"
+                onClick={() => setShowModal(true)}
               />
+              <button
+                onClick={() => setShowModal(true)}
+                className="absolute bottom-4 right-4 p-2 bg-white/80 hover:bg-white text-gray-800 rounded-full shadow-md backdrop-blur-sm transition-all opacity-0 group-hover:opacity-100 z-10"
+                title="查看大圖"
+              >
+                <span className="material-symbols-outlined block">open_in_full</span>
+              </button>
             </div>
             <div className="flex gap-3 overflow-x-auto">
               {productImages.map((image, index) => (
@@ -692,6 +701,66 @@ export default function ProductDetailPage() {
           </div>
         </div>
       </footer>
+
+      {/* Full Screen Image Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center backdrop-blur-sm" onClick={() => setShowModal(false)}>
+          <button 
+            className="absolute top-4 right-4 p-2 text-white/70 hover:text-white z-50"
+            onClick={() => setShowModal(false)}
+          >
+            <span className="material-symbols-outlined text-4xl">close</span>
+          </button>
+          
+          <div className="relative w-full h-full max-w-7xl max-h-screen flex items-center justify-center p-4" onClick={e => e.stopPropagation()}>
+            <img 
+              src={productImages[selectedImage]} 
+              alt={product.title_zh || product.title_original}
+              className="max-w-full max-h-full object-contain"
+            />
+            
+            {productImages.length > 1 && (
+              <>
+                <button 
+                  className="absolute left-4 top-1/2 -translate-y-1/2 p-2 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedImage(prev => (prev - 1 + productImages.length) % productImages.length);
+                  }}
+                >
+                  <span className="material-symbols-outlined text-3xl">chevron_left</span>
+                </button>
+                
+                <button 
+                  className="absolute right-4 top-1/2 -translate-y-1/2 p-2 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedImage(prev => (prev + 1) % productImages.length);
+                  }}
+                >
+                  <span className="material-symbols-outlined text-3xl">chevron_right</span>
+                </button>
+                
+                {/* Thumbnails in Modal */}
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 overflow-x-auto max-w-[90vw] p-2 rounded-lg bg-black/50">
+                  {productImages.map((img, idx) => (
+                    <button
+                      key={idx}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedImage(idx);
+                      }}
+                      className={`w-12 h-12 flex-shrink-0 rounded overflow-hidden border-2 ${selectedImage === idx ? 'border-white' : 'border-transparent opacity-50 hover:opacity-80'}`}
+                    >
+                      <img src={img} alt={`thumbnail ${idx}`} className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

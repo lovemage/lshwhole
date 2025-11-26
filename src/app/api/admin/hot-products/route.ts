@@ -45,23 +45,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "product_ids 必須為非空陣列" }, { status: 400 });
     }
 
-    // 批量標記為熱銷商品
-    const updates = product_ids.map((id, index) => ({
-      id,
-      is_hot: true,
-      hot_order: index + 1,
-      hot_marked_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }));
+    // 批量標記為熱銷商品，改用 Promise.all + update 避免 upsert 導致的欄位缺失問題
+    const updatePromises = product_ids.map((id, index) => {
+      return admin
+        .from("products")
+        .update({
+          is_hot: true,
+          hot_order: index + 1,
+          hot_marked_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id);
+    });
 
-    // 使用 upsert 批量更新
-    const { error: updateError } = await admin
-      .from("products")
-      .upsert(updates, { onConflict: 'id' });
+    const results = await Promise.all(updatePromises);
+    const errors = results.filter(r => r.error).map(r => r.error);
 
-    if (updateError) {
-      console.error("設定熱銷商品失敗:", updateError);
-      return NextResponse.json({ error: "設定熱銷商品失敗" }, { status: 500 });
+    if (errors.length > 0) {
+      console.error("部分設定熱銷商品失敗:", errors);
+      // 這裡選擇回傳 500，或者可以回傳部分成功
+      return NextResponse.json({ error: "設定熱銷商品發生錯誤", details: errors }, { status: 500 });
     }
 
     return NextResponse.json({
