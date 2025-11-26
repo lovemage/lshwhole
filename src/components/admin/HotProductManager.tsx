@@ -29,11 +29,22 @@ export default function HotProductManager() {
   const [selectedDisplayCandidateIds, setSelectedDisplayCandidateIds] = useState<number[]>([]);
   const [savingDisplaySettings, setSavingDisplaySettings] = useState(false);
   const [displaySettingsLoading, setDisplaySettingsLoading] = useState(false);
+  
+  // 用於顯示已選取商品的詳細資訊 (包含非上架商品)
+  const [currentSelectedProducts, setCurrentSelectedProducts] = useState<any[]>([]);
+  const [loadingSelectedProducts, setLoadingSelectedProducts] = useState(false);
 
   useEffect(() => {
     fetchHotProducts();
     fetchDisplaySettings();
   }, []);
+
+  // 當開啟 Drawer 時，讀取目前選取的商品詳情
+  useEffect(() => {
+    if (showDisplaySettingsDrawer) {
+      fetchCurrentSelectedProducts();
+    }
+  }, [showDisplaySettingsDrawer, displaySettings]);
 
   const fetchHotProducts = async () => {
     try {
@@ -150,6 +161,50 @@ export default function HotProductManager() {
     }
   };
 
+  // 取得目前設定的所有商品的詳細資訊 (包含可能已下架的)
+  const fetchCurrentSelectedProducts = async () => {
+    const currentIds = displaySettings[activeDisplayTab] || [];
+    if (currentIds.length === 0) {
+      setCurrentSelectedProducts([]);
+      return;
+    }
+
+    try {
+      setLoadingSelectedProducts(true);
+      // 使用 IDs 查詢，API 會忽略 status 過濾
+      const res = await fetch(`/api/products?ids=${currentIds.join(',')}&limit=${currentIds.length}`);
+      if (res.ok) {
+        const j = await res.json();
+        const foundProducts = j.data || [];
+        
+        // 找出查不到的 ID (物理刪除)
+        const foundIds = new Set(foundProducts.map((p: any) => p.id));
+        const missingIds = currentIds.filter(id => !foundIds.has(id));
+        
+        // 為缺失的 ID 建立假資料以便顯示和移除
+        const missingProducts = missingIds.map(id => ({
+          id,
+          sku: 'UNKNOWN',
+          title_zh: `(商品不存在或已刪除 ID: ${id})`,
+          status: 'deleted',
+          retail_price_twd: 0,
+          is_missing: true
+        }));
+
+        // 合併並排序 (依照設定順序)
+        const allProducts = [...foundProducts, ...missingProducts].sort((a, b) => {
+          return currentIds.indexOf(a.id) - currentIds.indexOf(b.id);
+        });
+
+        setCurrentSelectedProducts(allProducts);
+      }
+    } catch (err) {
+      console.error("Failed to fetch selected products:", err);
+    } finally {
+      setLoadingSelectedProducts(false);
+    }
+  };
+
   const fetchDisplayCandidates = async (page: number = 0) => {
     try {
       const offset = page * pageSize;
@@ -210,6 +265,7 @@ export default function HotProductManager() {
 
     await saveDisplaySettings(newSettings);
     setSelectedDisplayCandidateIds([]);
+    fetchCurrentSelectedProducts(); // 更新已選列表
   };
 
   const handleRemoveDisplayProducts = async (idsToRemove: number[]) => {
@@ -224,6 +280,7 @@ export default function HotProductManager() {
     };
 
     await saveDisplaySettings(newSettings);
+    fetchCurrentSelectedProducts(); // 更新已選列表
   };
 
   const toggleHotCandidate = (id: number) => {
@@ -511,7 +568,45 @@ export default function HotProductManager() {
               </button>
             </div>
 
+            {/* 已選商品列表 */}
+            <div className="p-4 border-b border-border-light bg-white">
+              <h4 className="text-sm font-bold text-text-primary-light mb-2">已設定商品 ({currentSelectedProducts.length})</h4>
+              {loadingSelectedProducts ? (
+                <p className="text-sm text-text-secondary-light">載入中...</p>
+              ) : currentSelectedProducts.length === 0 ? (
+                <p className="text-sm text-text-secondary-light">尚未設定任何商品</p>
+              ) : (
+                <div className="flex gap-2 overflow-x-auto pb-2">
+                  {currentSelectedProducts.map(p => (
+                    <div key={p.id} className={`flex-shrink-0 w-32 border rounded-lg p-2 relative group ${p.is_missing ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'}`}>
+                      <button
+                        onClick={() => handleRemoveDisplayProducts([p.id])}
+                        className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10"
+                        title="移除"
+                      >
+                        <span className="material-symbols-outlined text-sm">close</span>
+                      </button>
+                      <div className="aspect-square w-full bg-gray-200 rounded mb-2 overflow-hidden">
+                        {p.cover_image_url ? (
+                          <img src={p.cover_image_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-gray-400">
+                            <span className="material-symbols-outlined">image_not_supported</span>
+                          </div>
+                        )}
+                      </div>
+                      <p className={`text-xs font-medium truncate ${p.is_missing ? 'text-red-600' : 'text-text-primary-light'}`}>
+                        {p.title_zh || p.title_original}
+                      </p>
+                      {p.is_missing && <p className="text-[10px] text-red-500">已失效</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="p-4 border-b border-border-light bg-gray-50">
+              <h4 className="text-sm font-bold text-text-primary-light mb-2">新增商品</h4>
               <div className="flex gap-3">
                 <input
                   type="text"

@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
       .from("products")
       .select("id, sku, title_zh, title_original, retail_price_twd, wholesale_price_twd, status, is_hot, hot_order, hot_marked_at")
       .eq("is_hot", true)
+      .eq("status", "published") // 只顯示已上架的商品，避免已刪除商品佔位
       .order("hot_order", { ascending: true })
       .order("hot_marked_at", { ascending: false });
 
