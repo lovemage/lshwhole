@@ -34,13 +34,21 @@ export default function ProductManager() {
     wholesale_price_twd: 0,
     cost_twd: 0,
     status: "draft" as "draft" | "published",
+    images: [] as any[],
   });
   const [isTranslating, setIsTranslating] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
     fetchCategories();
     fetchProducts(0, null);
   }, []);
+
+  // Helper to ensure HTTPS URLs
+  const ensureHttps = (url: string) => {
+    if (!url) return url;
+    return url.replace(/^http:/, 'https:');
+  };
 
   const fetchCategories = async () => {
     try {
@@ -129,8 +137,21 @@ export default function ProductManager() {
     }
   };
 
-  const openEditProduct = (p: any) => {
+  const openEditProduct = async (p: any) => {
     setEditingProduct(p);
+
+    // Fetch product images
+    let images = [];
+    try {
+      const res = await fetch(`/api/products/${p.id}`);
+      if (res.ok) {
+        const productData = await res.json();
+        images = productData.images || [];
+      }
+    } catch (err) {
+      console.error("Failed to fetch product images:", err);
+    }
+
     setProductEditForm({
       sku: p.sku || "",
       title_zh: p.title_zh || "",
@@ -141,6 +162,7 @@ export default function ProductManager() {
       wholesale_price_twd: Number(p.wholesale_price_twd || 0),
       cost_twd: Number(p.cost_twd || 0),
       status: (p.status === "published" ? "published" : "draft") as "draft" | "published",
+      images: images,
     });
     setShowProductEdit(true);
   };
@@ -445,6 +467,135 @@ export default function ProductManager() {
                   預設：批發價 = 成本 × 1.25，零售價 = 成本 × 1.35，可手動調整
                 </div>
               </div>
+
+              {/* 圖片管理 */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-medium text-text-primary-light">商品圖片管理</label>
+                  <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-1 rounded-lg border-2 border-dashed border-border-light hover:bg-background-light transition-colors">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={async (e) => {
+                        if (!e.target.files?.length) return;
+                        setIsUploading(true);
+                        try {
+                          for (let i = 0; i < e.target.files.length; i++) {
+                            const file = e.target.files[i];
+                            const formData = new FormData();
+                            formData.append("file", file);
+                            const res = await fetch("/api/upload", { method: "POST", body: formData });
+                            if (res.ok) {
+                              const data = await res.json();
+                              setProductEditForm(prev => ({
+                                ...prev,
+                                images: [...prev.images, { url: data.url, sort: prev.images.length, is_product: true, is_description: false }]
+                              }));
+                            }
+                          }
+                        } catch (err) {
+                          alert("上傳失敗");
+                        } finally {
+                          setIsUploading(false);
+                        }
+                      }}
+                      disabled={isUploading}
+                    />
+                    <span className="material-symbols-outlined text-text-secondary-light text-sm">add_photo_alternate</span>
+                    <span className="text-xs text-text-secondary-light">{isUploading ? "上傳中..." : "新增圖片"}</span>
+                  </label>
+                </div>
+
+                <div className="space-y-3 max-h-60 overflow-y-auto">
+                  {productEditForm.images.map((img, idx) => (
+                    <div key={idx} className="flex items-start gap-3 p-3 border border-border-light rounded-lg bg-background-light">
+                      <img src={ensureHttps(img.url)} alt="" className="w-16 h-16 object-cover border border-border-light rounded-md shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-2">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={img.is_product}
+                              onChange={(e) => {
+                                const newImages = [...productEditForm.images];
+                                newImages[idx] = { ...newImages[idx], is_product: e.target.checked };
+                                setProductEditForm({ ...productEditForm, images: newImages });
+                              }}
+                              className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                            />
+                            <span className="text-sm text-text-primary-light">商品圖</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={img.is_description}
+                              onChange={(e) => {
+                                const newImages = [...productEditForm.images];
+                                newImages[idx] = { ...newImages[idx], is_description: e.target.checked };
+                                setProductEditForm({ ...productEditForm, images: newImages });
+                              }}
+                              className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                            />
+                            <span className="text-sm text-text-primary-light">描述圖</span>
+                          </label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-text-secondary-light">排序: {img.sort}</span>
+                          <div className="flex gap-1">
+                            <button
+                              className="p-1 hover:bg-gray-100 rounded text-text-secondary-light"
+                              onClick={() => {
+                                if (idx > 0) {
+                                  const newImages = [...productEditForm.images];
+                                  [newImages[idx - 1], newImages[idx]] = [newImages[idx], newImages[idx - 1]];
+                                  // Update sort values
+                                  newImages.forEach((img, i) => img.sort = i);
+                                  setProductEditForm({ ...productEditForm, images: newImages });
+                                }
+                              }}
+                              disabled={idx === 0}
+                            >
+                              <span className="material-symbols-outlined text-sm">arrow_upward</span>
+                            </button>
+                            <button
+                              className="p-1 hover:bg-gray-100 rounded text-text-secondary-light"
+                              onClick={() => {
+                                if (idx < productEditForm.images.length - 1) {
+                                  const newImages = [...productEditForm.images];
+                                  [newImages[idx], newImages[idx + 1]] = [newImages[idx + 1], newImages[idx]];
+                                  // Update sort values
+                                  newImages.forEach((img, i) => img.sort = i);
+                                  setProductEditForm({ ...productEditForm, images: newImages });
+                                }
+                              }}
+                              disabled={idx === productEditForm.images.length - 1}
+                            >
+                              <span className="material-symbols-outlined text-sm">arrow_downward</span>
+                            </button>
+                            <button
+                              className="p-1 hover:bg-red-100 rounded text-red-500"
+                              onClick={() => {
+                                const newImages = productEditForm.images.filter((_, i) => i !== idx);
+                                // Update sort values
+                                newImages.forEach((img, i) => img.sort = i);
+                                setProductEditForm({ ...productEditForm, images: newImages });
+                              }}
+                            >
+                              <span className="material-symbols-outlined text-sm">delete</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {productEditForm.images.length === 0 && (
+                    <div className="text-sm text-text-secondary-light text-center py-4">此商品無圖片</div>
+                  )}
+                </div>
+              </div>
+
               <div>
                 <label className="text-sm text-text-secondary-light">狀態</label>
                 <select value={productEditForm.status} onChange={(e) => setProductEditForm({ ...productEditForm, status: e.target.value as any })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm">
