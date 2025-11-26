@@ -64,11 +64,18 @@ export default function CrawlerImport() {
     image_urls: [] as string[],
   });
 
+  interface CandidateImage {
+    url: string;
+    isProduct: boolean;
+    isDescription: boolean;
+  }
+  const [candidateImages, setCandidateImages] = useState<CandidateImage[]>([]);
+
   useEffect(() => {
     fetchCategories();
     fetchTags();
     fetchCategoryRelations();
-    
+
     // Load local settings
     try {
       const saved = localStorage.getItem("crawlerSettings");
@@ -250,20 +257,36 @@ export default function CrawlerImport() {
       l1Id: selectedCrawlerL1,
       l2Id: selectedCrawlerL2,
       l3Id: selectedCrawlerL3,
-      image_urls: Array.isArray(p.images) ? [...p.images] : [],
+      image_urls: [], // Will be derived from candidateImages
     });
+
+    const images = Array.isArray(p.images) ? [...p.images] : [];
+    setCandidateImages(images.map((url: string) => ({
+      url,
+      isProduct: true, // Default to product image
+      isDescription: false
+    })));
+
     setShowPublish(true);
   };
 
-  const moveImage = (idx: number, dir: -1 | 1) => {
-    setPublishForm((prev) => {
-      const arr = [...prev.image_urls];
+  const moveCandidateImage = (idx: number, dir: -1 | 1) => {
+    setCandidateImages((prev) => {
+      const arr = [...prev];
       const to = idx + dir;
       if (to < 0 || to >= arr.length) return prev;
       const tmp = arr[idx];
       arr[idx] = arr[to];
       arr[to] = tmp;
-      return { ...prev, image_urls: arr };
+      return arr;
+    });
+  };
+
+  const toggleCandidateType = (idx: number, type: 'isProduct' | 'isDescription') => {
+    setCandidateImages((prev) => {
+      const arr = [...prev];
+      arr[idx] = { ...arr[idx], [type]: !arr[idx][type] };
+      return arr;
     });
   };
 
@@ -283,13 +306,7 @@ export default function CrawlerImport() {
     }));
   };
 
-  const toggleImage = (url: string) => {
-    setPublishForm((prev) => {
-      const arr = new Set(prev.image_urls);
-      if (arr.has(url)) arr.delete(url); else arr.add(url);
-      return { ...prev, image_urls: Array.from(arr) };
-    });
-  };
+
 
   const handleTranslate = async (field: "title" | "description") => {
     const text = field === "title" ? publishForm.title : publishForm.description;
@@ -302,7 +319,7 @@ export default function CrawlerImport() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
       });
-      
+
       if (res.ok) {
         const data = await res.json();
         if (data.translatedText) {
@@ -342,8 +359,21 @@ export default function CrawlerImport() {
         status: "published",
         category_ids,
         tag_ids: selectedCrawlerTags,
-        image_urls: publishForm.image_urls,
+        image_urls: candidateImages.filter(i => i.isProduct).map(i => i.url),
       };
+
+      // Append description images
+      const descImagesHtml = candidateImages
+        .filter(i => i.isDescription)
+        .map(i => `<img src="${i.url}" style="width: 100%; margin: 10px 0;" />`)
+        .join("");
+
+      if (descImagesHtml) {
+        payload.description = payload.description
+          ? `${payload.description}<br/>${descImagesHtml}`
+          : descImagesHtml;
+      }
+
       if (!payload.sku || !payload.title) {
         alert("請填寫 SKU 與標題");
         return;
@@ -782,17 +812,50 @@ export default function CrawlerImport() {
               <div>
                 <div className="text-sm font-medium mb-2">圖片（可調整順序/勾選要上架的圖）</div>
                 <div className="space-y-3 max-h-[50vh] overflow-auto pr-1">
-                  {publishForm.image_urls.map((url, i) => (
-                    <div key={url} className="flex items-center gap-2">
-                      <input type="checkbox" checked={publishForm.image_urls.includes(url)} onChange={() => toggleImage(url)} />
-                      <img src={url} alt="img" className="h-14 w-14 object-cover border border-border-light" />
-                      <div className="ml-auto flex gap-1">
-                        <button className="px-2 py-1 border border-border-light text-xs" onClick={() => moveImage(i, -1)}>上移</button>
-                        <button className="px-2 py-1 border border-border-light text-xs" onClick={() => moveImage(i, +1)}>下移</button>
+                  {candidateImages.map((img, i) => (
+                    <div key={i} className="flex items-start gap-3 p-2 border border-border-light rounded-lg bg-background-light">
+                      <img src={img.url} alt="img" className="h-20 w-20 object-cover border border-border-light rounded-md shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-col gap-2">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={img.isProduct}
+                              onChange={() => toggleCandidateType(i, 'isProduct')}
+                              className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                            />
+                            <span className="text-sm text-text-primary-light">商品圖</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={img.isDescription}
+                              onChange={() => toggleCandidateType(i, 'isDescription')}
+                              className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                            />
+                            <span className="text-sm text-text-primary-light">描述圖</span>
+                          </label>
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <button
+                          className="p-1 hover:bg-gray-100 rounded text-text-secondary-light"
+                          onClick={() => moveCandidateImage(i, -1)}
+                          disabled={i === 0}
+                        >
+                          <span className="material-symbols-outlined text-lg">arrow_upward</span>
+                        </button>
+                        <button
+                          className="p-1 hover:bg-gray-100 rounded text-text-secondary-light"
+                          onClick={() => moveCandidateImage(i, +1)}
+                          disabled={i === candidateImages.length - 1}
+                        >
+                          <span className="material-symbols-outlined text-lg">arrow_downward</span>
+                        </button>
                       </div>
                     </div>
                   ))}
-                  {publishForm.image_urls.length === 0 && (
+                  {candidateImages.length === 0 && (
                     <div className="text-sm text-text-secondary-light">此商品無圖片</div>
                   )}
                 </div>
@@ -807,7 +870,7 @@ export default function CrawlerImport() {
                 <div>
                   <div className="flex justify-between items-center mb-1">
                     <label className="text-sm text-text-secondary-light">標題</label>
-                    <button 
+                    <button
                       type="button"
                       onClick={() => handleTranslate("title")}
                       disabled={isTranslating || !publishForm.title}
@@ -821,7 +884,7 @@ export default function CrawlerImport() {
                 <div>
                   <div className="flex justify-between items-center mb-1">
                     <label className="text-sm text-text-secondary-light">描述</label>
-                    <button 
+                    <button
                       type="button"
                       onClick={() => handleTranslate("description")}
                       disabled={isTranslating || !publishForm.description}
