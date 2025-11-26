@@ -557,6 +557,12 @@ export default function OrderManager() {
                               <div className="text-sm">
                                 <p className="font-medium line-clamp-1">{item.product?.title_zh || item.product?.title_original}</p>
                                 <p className="text-text-secondary-light text-xs">{item.product?.sku}</p>
+                                {item.product?.original_url && (
+                                  <a href={item.product.original_url} target="_blank" className="text-xs text-primary hover:underline flex items-center gap-1 mt-1">
+                                    <span className="material-symbols-outlined text-[10px]">open_in_new</span>
+                                    原網站
+                                  </a>
+                                )}
                               </div>
                             </div>
                           </td>

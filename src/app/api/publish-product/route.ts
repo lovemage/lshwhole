@@ -12,6 +12,7 @@ export async function POST(request: NextRequest) {
       cost_twd,
       wholesale_price_twd,
       retail_price_twd,
+      original_url, // string, optional
       status = "published",
       category_ids = [], // number[]
       tag_ids = [], // number[]
@@ -36,6 +37,7 @@ export async function POST(request: NextRequest) {
       wholesale_price_twd: toInt(wholesale_price_twd),
       retail_price_twd: toInt(retail_price_twd),
       specs: specs,
+      original_url: original_url ? String(original_url) : null,
     };
 
     const { data: product, error: pErr } = await admin
@@ -92,4 +94,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
-

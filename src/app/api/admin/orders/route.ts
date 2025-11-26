@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
         order_items (
           id, product_id, qty, unit_price_twd,
           products (
-            sku, title_zh, title_original
+            sku, title_zh, title_original, original_url
           )
         )
       `, {

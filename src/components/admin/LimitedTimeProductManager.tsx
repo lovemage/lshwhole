@@ -15,11 +15,43 @@ export default function LimitedTimeProductManager() {
   // Date picker state
   const [endTime, setEndTime] = useState("");
 
+  // Categories for filter
+  const [categories, setCategories] = useState<any[]>([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>("");
+
+  // Manual Add State
+  const [showManualModal, setShowManualModal] = useState(false);
+  const [manualForm, setManualForm] = useState({
+    sku: "",
+    title: "",
+    description: "",
+    cost_twd: 0,
+    wholesale_price_twd: 0,
+    retail_price_twd: 0,
+    image_urls: [] as string[],
+    end_time: ""
+  });
+  const [isUploading, setIsUploading] = useState(false);
+  const [manualPublishing, setManualPublishing] = useState(false);
+
   const pageSize = 20;
 
   useEffect(() => {
     fetchProducts();
+    fetchCategories();
   }, []);
+
+  const fetchCategories = async () => {
+    try {
+      const res = await fetch("/api/categories");
+      if (res.ok) {
+        const data = await res.json();
+        setCategories(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch categories:", err);
+    }
+  };
 
   const fetchProducts = async () => {
     try {
@@ -42,6 +74,9 @@ export default function LimitedTimeProductManager() {
       let url = `/api/products?limit=${pageSize}&offset=${offset}&status=published`;
       if (search) {
         url += `&search=${encodeURIComponent(search)}`;
+      }
+      if (selectedCategoryId) {
+        url += `&category_id=${selectedCategoryId}`;
       }
       const res = await fetch(url);
       if (res.ok) {
@@ -168,7 +203,13 @@ export default function LimitedTimeProductManager() {
             }}
             className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90"
           >
-            新增限時商品
+            從商品庫發布商品
+          </button>
+          <button
+            onClick={() => setShowManualModal(true)}
+            className="px-4 py-2 rounded-lg bg-gray-800 text-white text-sm font-medium hover:bg-gray-700"
+          >
+            手動新增商品
           </button>
         </div>
       </div>
@@ -260,6 +301,21 @@ export default function LimitedTimeProductManager() {
             </div>
 
             <div className="flex gap-3 mb-4">
+              <select
+                value={selectedCategoryId}
+                onChange={(e) => {
+                  setSelectedCategoryId(e.target.value);
+                  setCandidatePage(0);
+                }}
+                className="rounded-lg border border-border-light px-3 py-2 text-sm min-w-[150px]"
+              >
+                <option value="">所有分類</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.level === 1 ? "L1" : c.level === 2 ? "L2" : "L3"})
+                  </option>
+                ))}
+              </select>
               <input
                 type="text"
                 placeholder="搜尋商品..."
@@ -366,6 +422,214 @@ export default function LimitedTimeProductManager() {
                 className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-bold disabled:opacity-50"
               >
                 {adding ? "加入中..." : `加入選取 (${selectedCandidateIds.length})`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 手動新增商品 Modal */}
+      {showManualModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-2xl rounded-xl border border-border-light bg-card-light p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-text-primary-light">手動新增限時商品</h3>
+              <button onClick={() => setShowManualModal(false)} className="text-text-secondary-light">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* 圖片上傳 */}
+              <div>
+                <label className="block text-sm font-medium text-text-primary-light mb-2">商品圖片</label>
+                <div className="flex flex-wrap gap-3">
+                  {manualForm.image_urls.map((url, idx) => (
+                    <div key={idx} className="relative w-20 h-20 rounded border border-border-light overflow-hidden group">
+                      <img src={url} alt="" className="w-full h-full object-cover" />
+                      <button
+                        onClick={() => setManualForm(prev => ({ ...prev, image_urls: prev.image_urls.filter((_, i) => i !== idx) }))}
+                        className="absolute top-0 right-0 bg-black/50 text-white p-0.5 opacity-0 group-hover:opacity-100"
+                      >
+                        <span className="material-symbols-outlined text-sm">close</span>
+                      </button>
+                    </div>
+                  ))}
+                  <label className="flex flex-col items-center justify-center w-20 h-20 rounded border-2 border-dashed border-border-light cursor-pointer hover:bg-background-light">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={async (e) => {
+                        if (!e.target.files?.length) return;
+                        setIsUploading(true);
+                        try {
+                          for (let i = 0; i < e.target.files.length; i++) {
+                            const file = e.target.files[i];
+                            const formData = new FormData();
+                            formData.append("file", file);
+                            const res = await fetch("/api/upload", { method: "POST", body: formData });
+                            if (res.ok) {
+                              const data = await res.json();
+                              setManualForm(prev => ({ ...prev, image_urls: [...prev.image_urls, data.url] }));
+                            }
+                          }
+                        } catch (err) {
+                          alert("上傳失敗");
+                        } finally {
+                          setIsUploading(false);
+                        }
+                      }}
+                      disabled={isUploading}
+                    />
+                    <span className="material-symbols-outlined text-text-secondary-light">add</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-text-primary-light mb-1">SKU</label>
+                  <input
+                    value={manualForm.sku}
+                    onChange={(e) => setManualForm({ ...manualForm, sku: e.target.value })}
+                    className="w-full rounded-lg border border-border-light px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-text-primary-light mb-1">結束時間 (UTC+8)</label>
+                  <input
+                    type="datetime-local"
+                    value={manualForm.end_time}
+                    onChange={(e) => setManualForm({ ...manualForm, end_time: e.target.value })}
+                    className="w-full rounded-lg border border-border-light px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-text-primary-light mb-1">商品標題</label>
+                <input
+                  value={manualForm.title}
+                  onChange={(e) => setManualForm({ ...manualForm, title: e.target.value })}
+                  className="w-full rounded-lg border border-border-light px-3 py-2 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-text-primary-light mb-1">商品描述</label>
+                <textarea
+                  value={manualForm.description}
+                  onChange={(e) => setManualForm({ ...manualForm, description: e.target.value })}
+                  rows={3}
+                  className="w-full rounded-lg border border-border-light px-3 py-2 text-sm"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-3 bg-gray-50 p-3 rounded-lg">
+                <div>
+                  <label className="block text-xs font-medium text-text-secondary-light mb-1">成本價</label>
+                  <input
+                    type="number"
+                    value={manualForm.cost_twd}
+                    onChange={(e) => {
+                      const cost = Math.max(0, Number(e.target.value));
+                      setManualForm({
+                        ...manualForm,
+                        cost_twd: cost,
+                        wholesale_price_twd: Math.floor(cost * 1.25),
+                        retail_price_twd: Math.floor(cost * 1.35)
+                      });
+                    }}
+                    className="w-full rounded border border-border-light px-2 py-1 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-text-secondary-light mb-1">批發價 (+25%)</label>
+                  <input
+                    type="number"
+                    value={manualForm.wholesale_price_twd}
+                    onChange={(e) => setManualForm({ ...manualForm, wholesale_price_twd: Math.max(0, Number(e.target.value)) })}
+                    className="w-full rounded border border-border-light px-2 py-1 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-text-secondary-light mb-1">零售價 (+35%)</label>
+                  <input
+                    type="number"
+                    value={manualForm.retail_price_twd}
+                    onChange={(e) => setManualForm({ ...manualForm, retail_price_twd: Math.max(0, Number(e.target.value)) })}
+                    className="w-full rounded border border-border-light px-2 py-1 text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button onClick={() => setShowManualModal(false)} className="px-4 py-2 rounded-lg border border-border-light text-sm">取消</button>
+              <button
+                onClick={async () => {
+                  if (!manualForm.sku || !manualForm.title || !manualForm.end_time) {
+                    return alert("請填寫完整資訊");
+                  }
+                  setManualPublishing(true);
+                  try {
+                    // 1. 上架商品
+                    const resPub = await fetch("/api/publish-product", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        sku: manualForm.sku,
+                        title: manualForm.title,
+                        description: manualForm.description,
+                        cost_twd: manualForm.cost_twd,
+                        wholesale_price_twd: manualForm.wholesale_price_twd,
+                        retail_price_twd: manualForm.retail_price_twd,
+                        image_urls: manualForm.image_urls,
+                        status: "published"
+                      }),
+                    });
+                    
+                    if (!resPub.ok) throw new Error("上架失敗");
+                    const { id: productId } = await resPub.json();
+
+                    // 2. 加入限時商品
+                    const resLimit = await fetch("/api/admin/limited-time-products", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ 
+                        product_ids: [productId],
+                        end_time: new Date(manualForm.end_time).toISOString()
+                      }),
+                    });
+
+                    if (!resLimit.ok) throw new Error("設定限時失敗");
+
+                    alert("新增成功");
+                    setShowManualModal(false);
+                    setManualForm({
+                      sku: "",
+                      title: "",
+                      description: "",
+                      cost_twd: 0,
+                      wholesale_price_twd: 0,
+                      retail_price_twd: 0,
+                      image_urls: [],
+                      end_time: ""
+                    });
+                    fetchProducts();
+                  } catch (err) {
+                    console.error(err);
+                    alert("操作失敗");
+                  } finally {
+                    setManualPublishing(false);
+                  }
+                }}
+                disabled={manualPublishing || isUploading}
+                className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-bold disabled:opacity-50"
+              >
+                {manualPublishing ? "處理中..." : "確認新增"}
               </button>
             </div>
           </div>

@@ -424,6 +424,38 @@ export default function ProductDetailPage() {
 
   const productImages = getProductImages();
 
+  const DescriptionSection = () => (
+    <div>
+      <h3 className="text-lg font-semibold text-gray-900 mb-2">產品描述</h3>
+      <div className="space-y-4">
+        {/* 原文描述為主 */}
+        {product?.desc_original && (
+          <div>
+            <div
+              className="text-gray-800 leading-relaxed whitespace-pre-wrap text-base"
+              dangerouslySetInnerHTML={{ __html: product.desc_original }}
+            />
+          </div>
+        )}
+
+        {/* 中文翻譯區塊（較小字體） */}
+        {product?.desc_zh && product.desc_zh !== product.desc_original && (
+          <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
+            <h4 className="text-sm font-bold text-gray-500 mb-2">中文翻譯</h4>
+            <div
+              className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap"
+              dangerouslySetInnerHTML={{ __html: product.desc_zh }}
+            />
+          </div>
+        )}
+
+        {!product?.desc_zh && !product?.desc_original && (
+          <p className="text-gray-500 italic">暫無產品描述</p>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div style={{ backgroundColor: "#f8f8f5" }} className="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden">
       {/* Header */}
@@ -530,6 +562,10 @@ export default function ProductDetailPage() {
                 </button>
               ))}
             </div>
+            {/* Desktop Description */}
+            <div className="hidden lg:block mt-8">
+              <DescriptionSection />
+            </div>
           </div>
 
           {/* Right Column: Product Information */}
@@ -620,35 +656,9 @@ export default function ProductDetailPage() {
               </div>
             )}
 
-            {/* Description */}
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">產品描述</h3>
-              <div className="space-y-4">
-                {/* 原文描述為主 */}
-                {product.desc_original && (
-                  <div>
-                    <div
-                      className="text-gray-800 leading-relaxed whitespace-pre-wrap text-base"
-                      dangerouslySetInnerHTML={{ __html: product.desc_original }}
-                    />
-                  </div>
-                )}
-
-                {/* 中文翻譯區塊（較小字體） */}
-                {product.desc_zh && product.desc_zh !== product.desc_original && (
-                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-                    <h4 className="text-sm font-bold text-gray-500 mb-2">中文翻譯</h4>
-                    <div
-                      className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap"
-                      dangerouslySetInnerHTML={{ __html: product.desc_zh }}
-                    />
-                  </div>
-                )}
-
-                {!product.desc_zh && !product.desc_original && (
-                  <p className="text-gray-500 italic">暫無產品描述</p>
-                )}
-              </div>
+            {/* Description (Mobile Only) */}
+            <div className="lg:hidden">
+              <DescriptionSection />
             </div>
 
             {/* Product Info */}

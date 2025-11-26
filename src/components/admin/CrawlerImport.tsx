@@ -510,6 +510,7 @@ export default function CrawlerImport() {
         category_ids,
         tag_ids: selectedCrawlerTags,
         image_urls: candidateImages.filter(i => i.isProduct).map(i => i.url),
+        original_url: publishTarget?.url || null,
         specs,
         variants: variants.map(v => ({
           name: Object.values(v.options).join(" / "),
@@ -682,6 +683,7 @@ export default function CrawlerImport() {
         category_ids: [], // Batch publish doesn't support individual category selection yet
         tag_ids: [],
         image_urls: Array.isArray(p.images) ? [...p.images] : [],
+        original_url: p.url || null,
       };
 
       try {
