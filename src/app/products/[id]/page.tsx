@@ -627,7 +627,10 @@ export default function ProductDetailPage() {
                 {/* 原文描述為主 */}
                 {product.desc_original && (
                   <div>
-                    <p className="text-gray-800 leading-relaxed whitespace-pre-wrap text-base">{product.desc_original}</p>
+                    <div
+                      className="text-gray-800 leading-relaxed whitespace-pre-wrap text-base"
+                      dangerouslySetInnerHTML={{ __html: product.desc_original }}
+                    />
                   </div>
                 )}
 
@@ -635,7 +638,10 @@ export default function ProductDetailPage() {
                 {product.desc_zh && product.desc_zh !== product.desc_original && (
                   <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
                     <h4 className="text-sm font-bold text-gray-500 mb-2">中文翻譯</h4>
-                    <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">{product.desc_zh}</p>
+                    <div
+                      className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap"
+                      dangerouslySetInnerHTML={{ __html: product.desc_zh }}
+                    />
                   </div>
                 )}
 
