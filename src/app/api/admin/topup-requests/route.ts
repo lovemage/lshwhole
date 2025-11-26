@@ -17,6 +17,7 @@ export async function GET(request: NextRequest) {
       .order("created_at", { ascending: false });
 
     if (error) {
+      console.error("Supabase error in GET topup-requests:", error);
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
