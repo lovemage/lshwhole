@@ -96,6 +96,7 @@ export default function ProductDetailPage() {
   const [isExpired, setIsExpired] = useState(false);
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
   const [currentVariant, setCurrentVariant] = useState<Variant | null>(null);
+  const [showViewCartButton, setShowViewCartButton] = useState(false);
 
   // 會員權限
   const { loading: permissionsLoading, error: permissionsError, data: permissions } = useMemberPermissions();
@@ -295,6 +296,7 @@ export default function ProductDetailPage() {
     }
 
     saveCartToStorage(currentCart);
+    setShowViewCartButton(true);
     console.log(
       `加入購物車：${quantity} x ${product.title_zh || product.title_original}`
     );
@@ -717,6 +719,18 @@ export default function ProductDetailPage() {
                     : '加入購物車'}
               </button>
             </div>
+
+            {/* View Cart Button */}
+            {showViewCartButton && (
+              <div className="mt-4">
+                <Link
+                  href="/cart"
+                  className="w-full block text-center font-bold py-2 px-4 rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors"
+                >
+                  檢視購物車
+                </Link>
+              </div>
+            )}
 
             {/* Related Products */}
             <div className="mt-8 pt-8 border-t border-gray-200">

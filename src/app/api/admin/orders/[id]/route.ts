@@ -141,35 +141,59 @@ export async function PUT(
 
       // Handle Cancellation Refund
       if (status === "CANCELLED" && currentOrder.status !== "CANCELLED") {
-        // Refund to wallet
-        const { data: wallet } = await admin
-          .from("wallets")
-          .select("balance_twd")
-          .eq("user_id", currentOrder.user_id)
-          .single();
+        // Get all order items to refund individually
+        const { data: items } = await admin
+          .from("order_items")
+          .select("id, unit_price_twd, qty, refund_amount")
+          .eq("order_id", id);
 
-        if (wallet) {
-          const refundAmount = currentOrder.total_twd;
-          const newBalance = wallet.balance_twd + refundAmount;
+        if (items && items.length > 0) {
+          let totalRefund = 0;
 
-          // Update Wallet
-          await admin
-            .from("wallets")
-            .update({
-              balance_twd: newBalance,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("user_id", currentOrder.user_id);
+          // Refund each item that hasn't been refunded yet
+          for (const item of items) {
+            if (item.refund_amount === 0) {
+              const itemRefund = item.unit_price_twd * item.qty;
+              totalRefund += itemRefund;
 
-          // Create Ledger
-          await admin.from("wallet_ledger").insert({
-            user_id: currentOrder.user_id,
-            type: "REFUND",
-            amount_twd: refundAmount,
-            charge_type: "ORDER_CANCEL",
-            external_ref: `ORDER_CANCEL_${id}_${Date.now()}`,
-            note: `訂單 #${id} 取消退款`
-          });
+              // Update item refund_amount
+              await admin
+                .from("order_items")
+                .update({ refund_amount: itemRefund })
+                .eq("id", item.id);
+            }
+          }
+
+          if (totalRefund > 0) {
+            // Update wallet balance
+            const { data: wallet } = await admin
+              .from("wallets")
+              .select("balance_twd")
+              .eq("user_id", currentOrder.user_id)
+              .single();
+
+            if (wallet) {
+              const newBalance = wallet.balance_twd + totalRefund;
+
+              await admin
+                .from("wallets")
+                .update({
+                  balance_twd: newBalance,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq("user_id", currentOrder.user_id);
+
+              // Create ledger entry
+              await admin.from("wallet_ledger").insert({
+                user_id: currentOrder.user_id,
+                type: "REFUND",
+                amount_twd: totalRefund,
+                charge_type: "ORDER_CANCEL",
+                external_ref: `ORDER_CANCEL_${id}_${Date.now()}`,
+                note: `訂單 #${id} 取消退款`
+              });
+            }
+          }
         }
       }
     }

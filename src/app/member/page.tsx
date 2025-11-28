@@ -599,7 +599,15 @@ export default function MemberPage() {
 
         <section className="grid gap-6 md:grid-cols-2">
           <div className="border bg-white p-4">
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">儲值金餘額</h2>
+            <div className="flex justify-between items-start mb-2">
+              <h2 className="text-lg font-semibold text-gray-900">儲值金餘額</h2>
+              <Link
+                href="/member/topup-history"
+                className="text-sm text-primary hover:underline"
+              >
+                查看記錄
+              </Link>
+            </div>
             <p className="text-sm text-gray-600 mb-1">目前可用金額</p>
             <div className="flex justify-between items-end">
               <p className="text-3xl font-bold text-primary">
