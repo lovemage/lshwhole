@@ -54,6 +54,8 @@ export async function sendEmail(
     // Note: Resend requires a verified domain. Using 'onboarding@resend.dev' for testing if no domain is set.
     // The user should configure this.
     const fromEmail = process.env.EMAIL_FROM || 'onboarding@resend.dev';
+    
+    console.log(`Sending email from: ${fromEmail} to: ${to}`);
 
     const resend = getResendClient();
     const { data: emailData, error: emailError } = await resend.emails.send({

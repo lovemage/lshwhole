@@ -20,6 +20,7 @@ export default function Footer() {
             <h3 className="text-sm font-semibold text-gray-500 tracking-wider uppercase">客戶服務</h3>
             <ul className="space-y-2">
               <li><Link className="text-base text-gray-600 hover:text-primary" href="#">聯絡我們</Link></li>
+              <li><a className="text-base text-gray-600 hover:text-primary" href="mailto:service@lshwholesale.com">service@lshwholesale.com</a></li>
               <li><Link className="text-base text-gray-600 hover:text-primary" href="#">常見問題</Link></li>
               <li><Link className="text-base text-gray-600 hover:text-primary" href="#">運送資訊</Link></li>
             </ul>
