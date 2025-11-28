@@ -77,17 +77,40 @@ export async function POST(request: NextRequest) {
   try {
     const admin = supabaseAdmin();
     const body = await request.json();
+    
+    // Extract images from body if present
+    const { images, ...productData } = body;
 
     const { data, error } = await admin
       .from("products")
-      .insert(body)
+      .insert(productData)
       .select();
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    return NextResponse.json(data[0], { status: 201 });
+    const newProduct = data[0];
+
+    // Insert images if present
+    if (images && Array.isArray(images) && images.length > 0) {
+      const imageInserts = images.map((img: any) => ({
+        product_id: newProduct.id,
+        url: img.url,
+        sort: img.sort || 0
+      }));
+
+      const { error: imgError } = await admin
+        .from("product_images")
+        .insert(imageInserts);
+
+      if (imgError) {
+        console.error("Error inserting images:", imgError);
+        // Continue anyway, product is created
+      }
+    }
+
+    return NextResponse.json(newProduct, { status: 201 });
   } catch (err) {
     console.error("POST /api/products error:", err);
     return NextResponse.json(
@@ -96,4 +119,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

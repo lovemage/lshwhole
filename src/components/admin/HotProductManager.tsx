@@ -283,6 +283,14 @@ export default function HotProductManager() {
     fetchCurrentSelectedProducts(); // 更新已選列表
   };
 
+  const handleRemoveInvalidDisplayProducts = async () => {
+    const invalidIds = currentSelectedProducts.filter(p => p.is_missing).map(p => p.id);
+    if (invalidIds.length === 0) return;
+    
+    if (!confirm(`確定要移除所有 ${invalidIds.length} 個失效商品嗎？`)) return;
+    await handleRemoveDisplayProducts(invalidIds);
+  };
+
   const toggleHotCandidate = (id: number) => {
     setSelectedHotCandidateIds(prev =>
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
@@ -570,7 +578,17 @@ export default function HotProductManager() {
 
             {/* 已選商品列表 */}
             <div className="p-4 border-b border-border-light bg-white">
-              <h4 className="text-sm font-bold text-text-primary-light mb-2">已設定商品 ({currentSelectedProducts.length})</h4>
+              <div className="flex justify-between items-center mb-2">
+                <h4 className="text-sm font-bold text-text-primary-light">已設定商品 ({currentSelectedProducts.length})</h4>
+                {currentSelectedProducts.some(p => p.is_missing) && (
+                  <button 
+                    onClick={handleRemoveInvalidDisplayProducts}
+                    className="text-xs px-2 py-1 bg-red-100 text-red-600 rounded hover:bg-red-200 font-medium"
+                  >
+                    移除所有失效商品
+                  </button>
+                )}
+              </div>
               {loadingSelectedProducts ? (
                 <p className="text-sm text-text-secondary-light">載入中...</p>
               ) : currentSelectedProducts.length === 0 ? (

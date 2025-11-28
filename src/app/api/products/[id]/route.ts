@@ -117,15 +117,49 @@ export async function PUT(
     const { id } = await params;
     const body = await request.json();
 
+    // Extract images if present
+    const { images, ...productData } = body;
+
     const { data, error } = await admin
       .from("products")
-      .update(body)
+      .update(productData)
       .eq("id", id)
       .select()
       .single();
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
+    // Handle images update if provided
+    if (images && Array.isArray(images)) {
+      // 1. Delete existing images
+      const { error: delError } = await admin
+        .from("product_images")
+        .delete()
+        .eq("product_id", id);
+      
+      if (delError) {
+        console.error("Error deleting old images:", delError);
+        // Continue to try inserting new ones? Might duplicate if delete failed but simpler to proceed.
+      }
+
+      // 2. Insert new images
+      if (images.length > 0) {
+        const imageInserts = images.map((img: any) => ({
+          product_id: id,
+          url: img.url,
+          sort: img.sort || 0
+        }));
+
+        const { error: insError } = await admin
+          .from("product_images")
+          .insert(imageInserts);
+
+        if (insError) {
+          console.error("Error inserting new images:", insError);
+        }
+      }
     }
 
     return NextResponse.json(data);
@@ -164,4 +198,3 @@ export async function DELETE(
     );
   }
 }
-

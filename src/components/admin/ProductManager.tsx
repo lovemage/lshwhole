@@ -137,6 +137,23 @@ export default function ProductManager() {
     }
   };
 
+  const openAddProduct = () => {
+    setEditingProduct(null);
+    setProductEditForm({
+      sku: "",
+      title_zh: "",
+      title_original: "",
+      desc_zh: "",
+      desc_original: "",
+      retail_price_twd: 0,
+      wholesale_price_twd: 0,
+      cost_twd: 0,
+      status: "draft",
+      images: [],
+    });
+    setShowProductEdit(true);
+  };
+
   const openEditProduct = async (p: any) => {
     setEditingProduct(p);
 
@@ -146,7 +163,13 @@ export default function ProductManager() {
       const res = await fetch(`/api/products/${p.id}`);
       if (res.ok) {
         const productData = await res.json();
-        images = productData.images || [];
+        // Convert string URLs to image objects
+        images = (productData.images || []).map((url: string, idx: number) => ({
+          url,
+          sort: idx,
+          is_product: true,
+          is_description: false
+        }));
       }
     } catch (err) {
       console.error("Failed to fetch product images:", err);
@@ -215,9 +238,17 @@ export default function ProductManager() {
   };
 
   const saveEditProduct = async () => {
-    if (!editingProduct) return;
     // 價格強制為整數
     const toInt = (v: any) => (v === null || v === undefined || v === "" ? null : Math.floor(Number(v)));
+    
+    // Prepare images payload
+    const imagesPayload = productEditForm.images.map((img, idx) => ({
+      url: img.url,
+      sort: idx, // Ensure sort order follows array order
+      is_product: img.is_product, // Note: backend currently only stores url and sort
+      is_description: img.is_description
+    }));
+
     const payload = {
       sku: productEditForm.sku,
       title_zh: productEditForm.title_zh,
@@ -228,17 +259,29 @@ export default function ProductManager() {
       wholesale_price_twd: toInt(productEditForm.wholesale_price_twd),
       cost_twd: toInt(productEditForm.cost_twd),
       status: productEditForm.status,
+      images: imagesPayload,
     };
-    const res = await fetch(`/api/products/${editingProduct.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (res.ok) {
 
+    let res;
+    if (editingProduct) {
+      res = await fetch(`/api/products/${editingProduct.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } else {
+      res = await fetch("/api/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    }
+
+    if (res.ok) {
       setShowProductEdit(false);
       setEditingProduct(null);
       fetchProducts(productPage, selectedProductL1);
+      alert(editingProduct ? "保存成功" : "新增成功");
     } else {
       const j = await res.json().catch(() => ({}));
       alert(j?.error || "保存失敗");
@@ -320,6 +363,12 @@ export default function ProductManager() {
         >
           搜尋
         </button>
+        <button
+          onClick={openAddProduct}
+          className="px-4 py-2 rounded-lg bg-success text-white font-medium hover:bg-success/90"
+        >
+          新增商品
+        </button>
       </div>
 
       {/* 工具列：批量操作 */}
@@ -393,9 +442,9 @@ export default function ProductManager() {
       {/* 編輯商品 Modal */}
       {showProductEdit && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-xl rounded-xl border border-border-light bg-card-light p-6">
+          <div className="w-full max-w-xl rounded-xl border border-border-light bg-card-light p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-text-primary-light">編輯商品</h3>
+              <h3 className="text-lg font-bold text-text-primary-light">{editingProduct ? "編輯商品" : "新增商品"}</h3>
               <button onClick={() => setShowProductEdit(false)} className="text-text-secondary-light">關閉</button>
             </div>
 
