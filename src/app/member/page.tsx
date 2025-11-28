@@ -621,7 +621,7 @@ export default function MemberPage() {
                 }}
                 className="px-4 py-2 bg-green-600 text-white text-sm font-bold rounded hover:bg-green-700 transition-colors"
               >
-                [儲值]
+                儲值
               </button>
             </div>
           </div>
@@ -939,7 +939,7 @@ export default function MemberPage() {
                         {/* Product Image */}
                         <div className="w-20 h-20 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0 border border-gray-200">
                           {item.product.images?.[0] ? (
-                            <img src={item.product.images[0]} alt="" className="w-full h-full object-cover" />
+                            <img src={item.product.images[0].replace(/^http:/, 'https:')} alt="" className="w-full h-full object-cover" />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center text-gray-400">
                               <span className="material-symbols-outlined">image</span>
