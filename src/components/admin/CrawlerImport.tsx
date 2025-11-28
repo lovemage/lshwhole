@@ -88,10 +88,8 @@ export default function CrawlerImport() {
   }
   const [candidateImages, setCandidateImages] = useState<CandidateImage[]>([]);
 
-  // Batch description images
-  const [showBatchDescImages, setShowBatchDescImages] = useState(false);
-  const [batchDescImages, setBatchDescImages] = useState<string[]>([]);
-  const [isBatchUploading, setIsBatchUploading] = useState(false);
+  // Batch image editor
+  const [showBatchImageEditor, setShowBatchImageEditor] = useState(false);
 
   useEffect(() => {
     fetchCategories();
@@ -247,6 +245,13 @@ export default function CrawlerImport() {
             : it.image
               ? [it.image]
               : [];
+      
+      const _images = images.map((url: string) => ({
+        url,
+        isProduct: true,
+        isDescription: false
+      }));
+
       return {
         productCode: it.productCode || it.code || it.sku || it.id || "無代碼",
         title: it.title || it.name || "無標題",
@@ -256,6 +261,7 @@ export default function CrawlerImport() {
         wholesalePriceTWD: it.wholesalePriceTWD || it.priceTWD || it.twd || null,
         url: it.url || it.link || null,
         images,
+        _images,
       };
     });
     setCrawlerProducts(mapped);
@@ -629,9 +635,6 @@ export default function CrawlerImport() {
       return;
     }
 
-    if (!confirm(`確定要上架 ${selectedCrawlerProducts.size} 件商品嗎？`)) return;
-
-    if (selectedCrawlerProducts.size === 0) return;
     if (!confirm(`確定要上架選中的 ${selectedCrawlerProducts.size} 件商品嗎？`)) return;
 
     setBatchPublishing(true);
@@ -640,11 +643,6 @@ export default function CrawlerImport() {
 
     const toInt = (v: any) =>
       v === null || v === undefined || v === "" ? null : Math.floor(Number(v));
-
-    // Prepare batch description images HTML
-    const batchDescHtml = batchDescImages
-      .map(url => `<img src="${url}" style="width: 100%; margin: 10px 0;" />`)
-      .join("");
 
     for (const idx of Array.from(selectedCrawlerProducts)) {
       const p = crawlerFiltered[idx];
@@ -666,10 +664,22 @@ export default function CrawlerImport() {
         retail = p._adjustMode === "fixed" ? retail + p._retailAdjust : retail * (1 + p._retailAdjust / 100);
       }
 
-      // Append batch description images if any
+      // Prepare images
+      let image_urls: string[] = [];
       let description = p.description || "";
-      if (batchDescHtml) {
-        description = description ? `${description}<br/>${batchDescHtml}` : batchDescHtml;
+
+      if (p._images && Array.isArray(p._images)) {
+        image_urls = p._images.filter((img: any) => img.isProduct).map((img: any) => img.url);
+        const descHtml = p._images
+          .filter((img: any) => img.isDescription)
+          .map((img: any) => `<img src="${img.url}" style="width: 100%; margin: 10px 0;" />`)
+          .join("");
+        if (descHtml) {
+          description = description ? `${description}<br/>${descHtml}` : descHtml;
+        }
+      } else {
+        // Fallback to original behavior
+        image_urls = Array.isArray(p.images) ? [...p.images] : [];
       }
 
       const payload = {
@@ -680,9 +690,9 @@ export default function CrawlerImport() {
         wholesale_price_twd: toInt(wholesale),
         retail_price_twd: toInt(retail),
         status: "published",
-        category_ids: [], // Batch publish doesn't support individual category selection yet
-        tag_ids: [],
-        image_urls: Array.isArray(p.images) ? [...p.images] : [],
+        category_ids: [selectedCrawlerL1, selectedCrawlerL2, selectedCrawlerL3].filter(Boolean),
+        tag_ids: selectedCrawlerTags,
+        image_urls: image_urls,
         original_url: p.url || null,
       };
 
@@ -703,38 +713,31 @@ export default function CrawlerImport() {
     alert(`批量上架完成\n成功：${successCount}\n失敗：${failCount}`);
     // Clear selection
     setSelectedCrawlerProducts(new Set());
-    setBatchDescImages([]); // Clear batch images after publish
   };
 
-  const handleBatchImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+  const updateBatchImage = (productIdx: number, imgIdx: number, field: 'isProduct' | 'isDescription') => {
+    const updated = [...crawlerProducts];
+    const p = updated[productIdx];
+    if (p && p._images && p._images[imgIdx]) {
+      p._images[imgIdx][field] = !p._images[imgIdx][field];
+      setCrawlerProducts(updated);
+      setCrawlerFiltered(applyFilterSort(updated));
+    }
+  };
 
-    setIsBatchUploading(true);
-    try {
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const formData = new FormData();
-        formData.append("file", file);
-
-        const res = await fetch("/api/upload", {
-          method: "POST",
-          body: formData,
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          if (data.url) {
-            setBatchDescImages((prev) => [...prev, data.url]);
-          }
-        }
+  const moveBatchImage = (productIdx: number, imgIdx: number, dir: -1 | 1) => {
+    const updated = [...crawlerProducts];
+    const p = updated[productIdx];
+    if (p && p._images) {
+      const arr = p._images;
+      const to = imgIdx + dir;
+      if (to >= 0 && to < arr.length) {
+        const tmp = arr[imgIdx];
+        arr[imgIdx] = arr[to];
+        arr[to] = tmp;
+        setCrawlerProducts(updated);
+        setCrawlerFiltered(applyFilterSort(updated));
       }
-    } catch (err) {
-      console.error("Batch upload error:", err);
-      alert("圖片上傳失敗");
-    } finally {
-      setIsBatchUploading(false);
-      e.target.value = "";
     }
   };
 
@@ -926,12 +929,11 @@ export default function CrawlerImport() {
                 批量調整價格
               </button>
               <button
-                onClick={() => setShowBatchDescImages(true)}
+                onClick={() => setShowBatchImageEditor(true)}
                 className="inline-flex items-center gap-2 rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm font-medium text-text-primary-light hover:bg-primary/10"
               >
-                <span className="material-symbols-outlined text-base">add_photo_alternate</span>
-                批量描述圖
-                {batchDescImages.length > 0 && <span className="bg-primary text-white text-xs rounded-full px-1.5">{batchDescImages.length}</span>}
+                <span className="material-symbols-outlined text-base">collections</span>
+                批量圖片編輯
               </button>
               <button
                 onClick={batchPublish}
@@ -1438,47 +1440,88 @@ export default function CrawlerImport() {
         </div>
       )}
 
-      {showBatchDescImages && (
+      {showBatchImageEditor && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-lg rounded-xl border border-border-light bg-card-light p-6">
+          <div className="w-full max-w-5xl rounded-xl border border-border-light bg-card-light p-6 h-[90vh] flex flex-col">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-text-primary-light">批量添加描述圖片</h3>
-              <button className="text-text-secondary-light" onClick={() => setShowBatchDescImages(false)}>
+              <div>
+                <h3 className="text-lg font-bold text-text-primary-light">批量圖片編輯</h3>
+                <p className="text-sm text-text-secondary-light">調整所選商品的圖片用途（商品圖/描述圖）及順序</p>
+              </div>
+              <button className="text-text-secondary-light" onClick={() => setShowBatchImageEditor(false)}>
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
 
-            <div className="space-y-4">
-              <p className="text-sm text-text-secondary-light">
-                上傳的圖片將會自動附加到所有選中商品的描述末尾。
-              </p>
+            <div className="flex-1 overflow-y-auto space-y-6 pr-2">
+              {Array.from(selectedCrawlerProducts).map((idx) => {
+                const p = crawlerFiltered[idx];
+                if (!p) return null;
+                const images = p._images || [];
 
-              <div className="grid grid-cols-3 gap-3">
-                <label className="cursor-pointer flex flex-col items-center justify-center aspect-square rounded-lg border-2 border-dashed border-border-light hover:bg-background-light transition-colors">
-                  <input type="file" multiple accept="image/*" className="hidden" onChange={handleBatchImageUpload} disabled={isBatchUploading} />
-                  <span className="material-symbols-outlined text-2xl text-text-secondary-light">add</span>
-                  <span className="text-xs text-text-secondary-light mt-1">{isBatchUploading ? "..." : "上傳"}</span>
-                </label>
-                {batchDescImages.map((url, idx) => (
-                  <div key={idx} className="relative aspect-square rounded-lg border border-border-light overflow-hidden group">
-                    <img src={url} alt="batch-desc" className="w-full h-full object-cover" />
-                    <button
-                      onClick={() => setBatchDescImages(prev => prev.filter((_, i) => i !== idx))}
-                      className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <span className="material-symbols-outlined text-sm block">close</span>
-                    </button>
+                return (
+                  <div key={idx} className="border border-border-light rounded-lg p-4 bg-background-light">
+                    <div className="flex justify-between mb-3">
+                      <div className="font-bold text-text-primary-light">{p.title}</div>
+                      <div className="text-sm text-text-secondary-light">{p.productCode}</div>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-4">
+                      {images.map((img: any, imgIdx: number) => (
+                        <div key={imgIdx} className="flex flex-col gap-2 p-2 border border-border-light rounded bg-white">
+                          <div className="aspect-square w-full relative">
+                            <img src={img.url} alt="" className="w-full h-full object-cover rounded" />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={img.isProduct}
+                                onChange={() => updateBatchImage(idx, imgIdx, 'isProduct')}
+                                className="w-3 h-3 rounded border-gray-300 text-primary"
+                              />
+                              <span className="text-xs">商品圖</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={img.isDescription}
+                                onChange={() => updateBatchImage(idx, imgIdx, 'isDescription')}
+                                className="w-3 h-3 rounded border-gray-300 text-primary"
+                              />
+                              <span className="text-xs">描述圖</span>
+                            </label>
+                          </div>
+                          <div className="flex justify-center gap-2 border-t border-border-light pt-1">
+                            <button
+                              onClick={() => moveBatchImage(idx, imgIdx, -1)}
+                              disabled={imgIdx === 0}
+                              className="text-text-secondary-light hover:text-primary disabled:opacity-30"
+                            >
+                              <span className="material-symbols-outlined text-base">arrow_left</span>
+                            </button>
+                            <button
+                              onClick={() => moveBatchImage(idx, imgIdx, 1)}
+                              disabled={imgIdx === images.length - 1}
+                              className="text-text-secondary-light hover:text-primary disabled:opacity-30"
+                            >
+                              <span className="material-symbols-outlined text-base">arrow_right</span>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      {images.length === 0 && <div className="col-span-full text-center text-sm text-text-secondary-light">無圖片</div>}
+                    </div>
                   </div>
-                ))}
-              </div>
+                );
+              })}
             </div>
 
-            <div className="mt-6 flex justify-end">
+            <div className="mt-4 pt-4 border-t border-border-light flex justify-end">
               <button
-                onClick={() => setShowBatchDescImages(false)}
-                className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90"
+                onClick={() => setShowBatchImageEditor(false)}
+                className="px-6 py-2 rounded-lg bg-primary text-white text-sm font-bold hover:bg-primary/90"
               >
-                完成 ({batchDescImages.length} 張)
+                完成編輯
               </button>
             </div>
           </div>

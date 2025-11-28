@@ -196,9 +196,6 @@ export default function HomePage() {
                           <p className="text-gray-700 text-sm font-normal leading-normal line-clamp-2">
                             {announcement.content.replace(/<[^>]*>/g, "")}
                           </p>
-                          <a href="#" className="text-primary hover:underline text-sm font-semibold">
-                            查看詳情
-                          </a>
                         </div>
                       ))}
                     </div>
@@ -217,9 +214,6 @@ export default function HomePage() {
                         <p className="text-gray-700 text-sm font-normal leading-normal line-clamp-3">
                           {announcement.content.replace(/<[^>]*>/g, "")}
                         </p>
-                        <a href="#" className="text-primary hover:underline text-sm font-semibold">
-                          查看詳情
-                        </a>
                       </div>
                     ))}
                   </div>

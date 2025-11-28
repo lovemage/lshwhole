@@ -1,4 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import dynamic from "next/dynamic";
+import "react-quill/dist/quill.snow.css";
+
+// Dynamic import for ReactQuill to avoid SSR issues
+const ReactQuill = dynamic(() => import("react-quill"), { ssr: false }) as any;
 
 interface Announcement {
   id: number;
@@ -14,6 +19,7 @@ export default function AnnouncementManager() {
   const [formData, setFormData] = useState({ title: "", content: "" });
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const quillRef = useRef<any>(null);
 
   useEffect(() => {
     fetchAnnouncements();
@@ -33,6 +39,57 @@ export default function AnnouncementManager() {
       setLoading(false);
     }
   };
+
+  const imageHandler = () => {
+    const input = document.createElement('input');
+    input.setAttribute('type', 'file');
+    input.setAttribute('accept', 'image/*');
+    input.click();
+
+    input.onchange = async () => {
+      const file = input.files ? input.files[0] : null;
+      if (!file) return;
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      try {
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData
+        });
+        
+        if (res.ok) {
+          const data = await res.json();
+          const quill = quillRef.current?.getEditor();
+          const range = quill?.getSelection(true);
+          if (quill && range) {
+             quill.insertEmbed(range.index, 'image', data.url);
+          }
+        } else {
+          alert('圖片上傳失敗');
+        }
+      } catch (err) {
+        console.error("Upload failed", err);
+        alert('圖片上傳發生錯誤');
+      }
+    };
+  };
+
+  const modules = useMemo(() => ({
+    toolbar: {
+      container: [
+        [{ 'header': [1, 2, false] }],
+        ['bold', 'italic', 'underline', 'strike', 'blockquote'],
+        [{'list': 'ordered'}, {'list': 'bullet'}, {'indent': '-1'}, {'indent': '+1'}],
+        ['link', 'image'],
+        ['clean']
+      ],
+      handlers: {
+        image: imageHandler
+      }
+    }
+  }), []);
 
   const handleSaveAnnouncement = async () => {
     if (!formData.title || !formData.content) {
@@ -186,16 +243,14 @@ export default function AnnouncementManager() {
                     </button>
                   </div>
                 </div>
-                <p className="text-text-primary-light line-clamp-2">
-                  {announcement.content.replace(/<[^>]*>/g, "")}
-                </p>
+                <div className="text-text-primary-light line-clamp-2" dangerouslySetInnerHTML={{ __html: announcement.content }} />
               </div>
             ))
           )}
         </div>
       ) : (
         // Announcement Form
-        <div className="space-y-4 max-w-2xl">
+        <div className="space-y-4 max-w-4xl">
           <div>
             <label className="block text-sm font-medium text-text-primary-light mb-2">
               標題
@@ -214,17 +269,18 @@ export default function AnnouncementManager() {
             <label className="block text-sm font-medium text-text-primary-light mb-2">
               內容
             </label>
-            <textarea
-              value={formData.content}
-              onChange={(e) =>
-                setFormData({ ...formData, content: e.target.value })
-              }
-              placeholder="輸入公告內容"
-              rows={8}
-              className="w-full px-4 py-2 rounded-lg border border-border-light bg-background-light text-text-primary-light placeholder:text-text-secondary-light focus:border-primary focus:ring-1 focus:ring-primary resize-none"
-            />
+            <div className="bg-white">
+              <ReactQuill
+                ref={quillRef}
+                theme="snow"
+                value={formData.content}
+                onChange={(value: string) => setFormData({ ...formData, content: value })}
+                modules={modules}
+                className="h-64 mb-12"
+              />
+            </div>
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-3 pt-4">
             <button
               onClick={handleSaveAnnouncement}
               disabled={loading}
