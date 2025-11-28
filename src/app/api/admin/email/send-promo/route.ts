@@ -6,7 +6,7 @@ export async function POST(request: NextRequest) {
   try {
     const admin = supabaseAdmin();
     const body = await request.json();
-    const { templateKey } = body;
+    const { templateKey, productIds } = body; // productIds: number[] | undefined
 
     if (templateKey !== "new_product_promo") {
       return NextResponse.json({ error: "Invalid template key" }, { status: 400 });
@@ -27,27 +27,41 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No users found" }, { status: 400 });
     }
 
-    // 2. Fetch "New Products" to populate {product_list}
-    // Get 5 latest published products
-    const { data: newProducts } = await admin
+    // 2. Fetch Products to populate {product_list}
+    let query = admin
       .from("products")
-      .select("id, title_zh, title_original, retail_price_twd")
-      .eq("status", "published")
-      .order("created_at", { ascending: false })
-      .limit(5);
+      .select("id, title_zh, title_original, retail_price_twd, images")
+      .eq("status", "published");
+
+    if (productIds && Array.isArray(productIds) && productIds.length > 0) {
+      query = query.in("id", productIds);
+    } else {
+      // Default: 5 latest
+      query = query.order("created_at", { ascending: false }).limit(5);
+    }
+
+    const { data: products } = await query;
 
     let productListHtml = "";
-    if (newProducts && newProducts.length > 0) {
-      productListHtml = `<ul style="list-style: none; padding: 0;">`;
-      newProducts.forEach(p => {
+    if (products && products.length > 0) {
+      productListHtml = `<div style="max-width: 100%;">`;
+      products.forEach(p => {
         const title = p.title_zh || p.title_original;
+        const image = (p.images && p.images.length > 0) ? p.images[0] : null;
+        
         productListHtml += `
-          <li style="margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
-            <strong>${title}</strong><br/>
-            售價: NT$ ${p.retail_price_twd}
-          </li>`;
+          <div style="border: 1px solid #eee; border-radius: 8px; overflow: hidden; margin-bottom: 15px; background-color: #fff;">
+            ${image ? `<div style="width: 100%; height: 200px; background-image: url('${image}'); background-size: cover; background-position: center;"></div>` : ''}
+            <div style="padding: 15px;">
+              <h3 style="margin: 0 0 10px 0; font-size: 16px; color: #333;">${title}</h3>
+              <p style="margin: 0; font-weight: bold; color: #d32f2f;">NT$ ${p.retail_price_twd}</p>
+              <div style="margin-top: 10px;">
+                <a href="https://lshwholesale.com/products/${p.id}" style="display: inline-block; font-size: 14px; text-decoration: none; color: #000; font-weight: bold;">查看商品 &rarr;</a>
+              </div>
+            </div>
+          </div>`;
       });
-      productListHtml += `</ul>`;
+      productListHtml += `</div>`;
     } else {
       productListHtml = "<p>前往網站查看最新商品！</p>";
     }

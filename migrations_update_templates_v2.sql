@@ -1,15 +1,13 @@
-import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase";
+-- Update email templates with optimized content and styles
 
-export async function GET(request: NextRequest) {
-  try {
-    const admin = supabaseAdmin();
+-- Common Style (Inline CSS for email compatibility)
+-- Container: max-width: 600px; margin: 0 auto; font-family: sans-serif; color: #333;
+-- Button: display: inline-block; padding: 10px 20px; background-color: #000; color: #fff; text-decoration: none; border-radius: 5px;
 
-    const templates = [
-      {
-        key: 'order_created',
-        subject: '【LSH Wholesale】訂單確認通知 #{order_id}',
-        body: `<div style="max-width: 600px; margin: 0 auto; font-family: sans-serif; color: #333;">
+-- 1. Order Created
+UPDATE email_templates SET 
+  subject = '【LSH Wholesale】訂單確認通知 #{order_id}',
+  body = '<div style="max-width: 600px; margin: 0 auto; font-family: sans-serif; color: #333;">
     <h2 style="color: #000;">訂單確認通知</h2>
     <p>親愛的會員 {name}，</p>
     <p>感謝您的訂購！您的訂單 <strong>#{order_id}</strong> 已成功建立。</p>
@@ -22,12 +20,13 @@ export async function GET(request: NextRequest) {
     </div>
     <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
     <p style="font-size: 12px; color: #999;">此郵件為系統自動發送，請勿直接回覆。</p>
-  </div>`
-      },
-      {
-        key: 'order_arrived',
-        subject: '【LSH Wholesale】商品抵台通知與運費付款 #{order_id}',
-        body: `<div style="max-width: 600px; margin: 0 auto; font-family: sans-serif; color: #333;">
+  </div>'
+WHERE key = 'order_created';
+
+-- 2. Order Arrived (Item Arrived) - With Payment Reminder
+UPDATE email_templates SET 
+  subject = '【LSH Wholesale】商品抵台通知與運費付款 #{order_id}',
+  body = '<div style="max-width: 600px; margin: 0 auto; font-family: sans-serif; color: #333;">
     <h2 style="color: #000;">商品抵達台灣通知</h2>
     <p>親愛的會員 {name}，</p>
     <p>通知您，您的訂單 <strong>#{order_id}</strong> 中的商品已抵達台灣倉庫。</p>
@@ -41,12 +40,13 @@ export async function GET(request: NextRequest) {
     </div>
     <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
     <p style="font-size: 12px; color: #999;">此郵件為系統自動發送，請勿直接回覆。</p>
-  </div>`
-      },
-      {
-        key: 'upgrade_success',
-        subject: '【LSH Wholesale】會員升級成功通知',
-        body: `<div style="max-width: 600px; margin: 0 auto; font-family: sans-serif; color: #333;">
+  </div>'
+WHERE key = 'order_arrived';
+
+-- 3. Upgrade Success
+UPDATE email_templates SET 
+  subject = '【LSH Wholesale】會員升級成功通知',
+  body = '<div style="max-width: 600px; margin: 0 auto; font-family: sans-serif; color: #333;">
     <h2 style="color: #000;">恭喜您，升級成功！</h2>
     <p>親愛的會員 {name}，</p>
     <p>您的會員等級已成功升級為： <span style="color: #d32f2f; font-weight: bold; font-size: 18px;">{level}</span></p>
@@ -56,12 +56,13 @@ export async function GET(request: NextRequest) {
     </div>
     <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
     <p style="font-size: 12px; color: #999;">此郵件為系統自動發送，請勿直接回覆。</p>
-  </div>`
-      },
-      {
-        key: 'upgrade_failed',
-        subject: '【LSH Wholesale】會員升級申請結果',
-        body: `<div style="max-width: 600px; margin: 0 auto; font-family: sans-serif; color: #333;">
+  </div>'
+WHERE key = 'upgrade_success';
+
+-- 4. Upgrade Failed
+UPDATE email_templates SET 
+  subject = '【LSH Wholesale】會員升級申請結果',
+  body = '<div style="max-width: 600px; margin: 0 auto; font-family: sans-serif; color: #333;">
     <h2 style="color: #000;">會員升級申請通知</h2>
     <p>親愛的會員 {name}，</p>
     <p>很抱歉通知您，您的會員升級申請未通過審核。</p>
@@ -73,12 +74,13 @@ export async function GET(request: NextRequest) {
     </div>
     <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
     <p style="font-size: 12px; color: #999;">此郵件為系統自動發送，請勿直接回覆。</p>
-  </div>`
-      },
-      {
-        key: 'topup_success',
-        subject: '【LSH Wholesale】儲值成功通知',
-        body: `<div style="max-width: 600px; margin: 0 auto; font-family: sans-serif; color: #333;">
+  </div>'
+WHERE key = 'upgrade_failed';
+
+-- 5. Topup Success
+UPDATE email_templates SET 
+  subject = '【LSH Wholesale】儲值成功通知',
+  body = '<div style="max-width: 600px; margin: 0 auto; font-family: sans-serif; color: #333;">
     <h2 style="color: #000;">儲值成功通知</h2>
     <p>親愛的會員 {name}，</p>
     <p>您的儲值申請已通過審核，款項已入帳。</p>
@@ -92,12 +94,13 @@ export async function GET(request: NextRequest) {
     </div>
     <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
     <p style="font-size: 12px; color: #999;">此郵件為系統自動發送，請勿直接回覆。</p>
-  </div>`
-      },
-      {
-        key: 'topup_failed',
-        subject: '【LSH Wholesale】儲值申請結果通知',
-        body: `<div style="max-width: 600px; margin: 0 auto; font-family: sans-serif; color: #333;">
+  </div>'
+WHERE key = 'topup_success';
+
+-- 6. Topup Failed
+UPDATE email_templates SET 
+  subject = '【LSH Wholesale】儲值申請結果通知',
+  body = '<div style="max-width: 600px; margin: 0 auto; font-family: sans-serif; color: #333;">
     <h2 style="color: #000;">儲值申請通知</h2>
     <p>親愛的會員 {name}，</p>
     <p>很抱歉通知您，您的儲值申請未通過審核。</p>
@@ -110,12 +113,13 @@ export async function GET(request: NextRequest) {
     </div>
     <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
     <p style="font-size: 12px; color: #999;">此郵件為系統自動發送，請勿直接回覆。</p>
-  </div>`
-      },
-      {
-        key: 'new_product_promo',
-        subject: '【LSH Wholesale】新品上架通知！',
-        body: `<div style="max-width: 600px; margin: 0 auto; font-family: sans-serif; color: #333;">
+  </div>'
+WHERE key = 'topup_failed';
+
+-- 7. New Product Promo
+UPDATE email_templates SET 
+  subject = '【LSH Wholesale】新品上架通知！',
+  body = '<div style="max-width: 600px; margin: 0 auto; font-family: sans-serif; color: #333;">
     <h2 style="color: #000; text-align: center;">🎉 新品上架 🎉</h2>
     <p>親愛的會員 {name}，</p>
     <p>我們有最新的精選商品上架囉！快來看看本期推薦：</p>
@@ -127,37 +131,5 @@ export async function GET(request: NextRequest) {
     </div>
     <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
     <p style="font-size: 12px; color: #999;">此郵件為系統自動發送，請勿直接回覆。</p>
-  </div>`
-      }
-    ];
-
-    const results = [];
-    for (const t of templates) {
-      const { error } = await admin
-        .from('email_templates')
-        .update({ subject: t.subject, body: t.body, updated_at: new Date().toISOString() })
-        .eq('key', t.key);
-      
-      if (!error) {
-        // If update returned 0 rows (key not found), try insert? 
-        // Supabase update doesn't return count by default unless select() used.
-        // But keys should exist from migration.
-        // If not exist, we should insert.
-        // Let's use upsert.
-        const { error: upsertError } = await admin
-          .from('email_templates')
-          .upsert({ key: t.key, subject: t.subject, body: t.body, updated_at: new Date().toISOString() }, { onConflict: 'key' });
-        
-        if (upsertError) results.push({ key: t.key, status: 'error', error: upsertError.message });
-        else results.push({ key: t.key, status: 'success' });
-      } else {
-        results.push({ key: t.key, status: 'error', error: error.message });
-      }
-    }
-
-    return NextResponse.json({ success: true, results });
-  } catch (err) {
-    console.error("Template Update error:", err);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-  }
-}
+  </div>'
+WHERE key = 'new_product_promo';

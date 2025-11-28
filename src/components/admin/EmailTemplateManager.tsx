@@ -22,6 +22,11 @@ export default function EmailTemplateManager() {
   const [sendingPromo, setSendingPromo] = useState(false);
   const quillRef = useRef<any>(null);
 
+  // Product Selection for Promo
+  const [products, setProducts] = useState<any[]>([]);
+  const [selectedProductIds, setSelectedProductIds] = useState<number[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
+
   useEffect(() => {
     fetchTemplates();
   }, []);
@@ -41,9 +46,31 @@ export default function EmailTemplateManager() {
     }
   };
 
+  const fetchProducts = async () => {
+    try {
+      setLoadingProducts(true);
+      // Fetch latest 50 published products
+      const res = await fetch("/api/products?limit=50&status=published");
+      if (res.ok) {
+        const data = await res.json();
+        const productList = data.data || [];
+        setProducts(productList);
+        // Default select top 5
+        setSelectedProductIds(productList.slice(0, 5).map((p: any) => p.id));
+      }
+    } catch (err) {
+      console.error("Failed to fetch products:", err);
+    } finally {
+      setLoadingProducts(false);
+    }
+  };
+
   const handleSelect = (t: EmailTemplate) => {
     setSelectedTemplate(t);
     setFormData({ subject: t.subject, body: t.body });
+    if (t.key === 'new_product_promo') {
+      fetchProducts();
+    }
   };
 
   const handleSave = async () => {
@@ -70,14 +97,21 @@ export default function EmailTemplateManager() {
   };
 
   const handleSendPromo = async () => {
-    if (!confirm("確定要發送此促銷郵件給所有會員嗎？(請注意 Resend 額度限制)")) return;
+    if (selectedProductIds.length === 0) {
+      alert("請至少選擇一個商品");
+      return;
+    }
+    if (!confirm(`確定要發送此促銷郵件給所有會員嗎？(包含 ${selectedProductIds.length} 個選定商品)`)) return;
 
     try {
       setSendingPromo(true);
       const res = await fetch("/api/admin/email/send-promo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ templateKey: 'new_product_promo' }),
+        body: JSON.stringify({ 
+          templateKey: 'new_product_promo',
+          productIds: selectedProductIds
+        }),
       });
 
       const result = await res.json();
@@ -227,6 +261,39 @@ export default function EmailTemplateManager() {
                   className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
                 />
               </div>
+
+              {selectedTemplate.key === 'new_product_promo' && (
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    選擇要推廣的商品 (將顯示於 {"{product_list}"})
+                  </label>
+                  {loadingProducts ? (
+                    <p className="text-sm text-gray-500">載入商品中...</p>
+                  ) : (
+                    <div className="max-h-48 overflow-y-auto grid grid-cols-1 gap-2 border border-gray-300 rounded p-2 bg-white">
+                      {products.map(p => (
+                        <label key={p.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-50 p-1 rounded">
+                          <input
+                            type="checkbox"
+                            checked={selectedProductIds.includes(p.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedProductIds([...selectedProductIds, p.id]);
+                              } else {
+                                setSelectedProductIds(selectedProductIds.filter(id => id !== p.id));
+                              }
+                            }}
+                            className="rounded border-gray-300"
+                          />
+                          <span className="flex-1 truncate">{p.title_zh || p.title_original}</span>
+                          <span className="text-gray-500 text-xs">NT$ {p.retail_price_twd}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-500 mt-2">已選擇 {selectedProductIds.length} 個商品</p>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-text-primary-light mb-1">
