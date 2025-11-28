@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
         byProduct.forEach((images, productId) => {
           const sortedUrls = images
             .sort((a, b) => a.sort - b.sort)
-            .map(img => img.url);
+            .map(img => img.url?.replace(/^http:\/\//i, 'https://'));
           imageMap.set(productId, sortedUrls);
         });
       }

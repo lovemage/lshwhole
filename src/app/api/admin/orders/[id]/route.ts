@@ -109,6 +109,8 @@ export async function PUT(
     const { id } = await params;
     const admin = supabaseAdmin();
     const body = await request.json();
+    
+    console.log("PUT /api/admin/orders/[id] body:", body);
 
     const {
       status,
