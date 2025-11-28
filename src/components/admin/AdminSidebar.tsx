@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { useState, useEffect } from "react";
 import { NAV_ITEMS } from "./constants";
 
 interface AdminSidebarProps {
@@ -12,6 +13,26 @@ export default function AdminSidebar({
   setActiveNav,
   currentUserPermissions,
 }: AdminSidebarProps) {
+  const [notifications, setNotifications] = useState<{ [key: string]: number }>({});
+
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      try {
+        const res = await fetch("/api/admin/notifications");
+        if (res.ok) {
+          const data = await res.json();
+          setNotifications(data);
+        }
+      } catch (e) {
+        console.error("Failed to fetch notifications:", e);
+      }
+    };
+    
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 60000); // Poll every 60s
+    return () => clearInterval(interval);
+  }, []);
+
   const filteredNavItems = NAV_ITEMS.filter(
     (item) =>
       currentUserPermissions === null || currentUserPermissions.includes(item.id)
@@ -37,14 +58,19 @@ export default function AdminSidebar({
             <button
               key={item.id}
               onClick={() => setActiveNav(item.id)}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+              className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors w-full ${
                 activeNav === item.id
                   ? "bg-primary/20 text-primary"
                   : "text-text-secondary-dark hover:bg-primary/10 hover:text-text-primary-dark"
               }`}
             >
               <span className="material-symbols-outlined">{item.icon}</span>
-              <p className="text-sm font-medium">{item.label}</p>
+              <p className="text-sm font-medium flex-1 text-left">{item.label}</p>
+              {notifications[item.id] > 0 && (
+                <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
+                  {notifications[item.id]}
+                </span>
+              )}
             </button>
           ))}
         </nav>
