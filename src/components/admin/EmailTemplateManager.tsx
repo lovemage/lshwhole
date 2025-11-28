@@ -153,6 +153,7 @@ export default function EmailTemplateManager() {
     topup_success: "儲值成功通知",
     topup_failed: "儲值失敗通知",
     new_product_promo: "新品上架促銷通知",
+    admin_topup_notification: "管理員通知 - 會員儲值申請",
   };
 
   return (
