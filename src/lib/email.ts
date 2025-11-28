@@ -8,8 +8,10 @@ function getResendClient() {
   if (!resendInstance) {
     const apiKey = process.env.RESEND_API_KEY;
     if (!apiKey) {
+      console.error('RESEND_API_KEY is missing in environment variables');
       throw new Error('RESEND_API_KEY environment variable is not set');
     }
+    console.log('Initializing Resend with API Key:', apiKey.slice(0, 5) + '...');
     resendInstance = new Resend(apiKey);
   }
   return resendInstance;
@@ -24,6 +26,7 @@ export async function sendEmail(
     const admin = supabaseAdmin();
 
     // 1. Fetch template
+    console.log(`Fetching email template: ${templateKey}`);
     const { data: template, error } = await admin
       .from('email_templates')
       .select('*')
@@ -31,9 +34,10 @@ export async function sendEmail(
       .single();
 
     if (error || !template) {
-      console.error(`Email template '${templateKey}' not found.`);
+      console.error(`Email template '${templateKey}' not found. Error:`, error);
       return { success: false, error: 'Template not found' };
     }
+    console.log(`Template '${templateKey}' found.`);
 
     // 2. Replace variables
     let subject = template.subject;

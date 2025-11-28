@@ -345,12 +345,16 @@ export async function POST(request: NextRequest) {
       .eq("user_id", user.id);
 
     // 10. 發送訂單確認信
+    console.log("Attempting to send order confirmation email. User email:", user.email);
     if (user.email) {
-      await sendEmail(user.email, 'order_created', {
+      const emailResult = await sendEmail(user.email, 'order_created', {
         name: recipient_name || '會員',
         order_id: order.id,
         amount: totalAmount,
       });
+      console.log("Email send result:", emailResult);
+    } else {
+      console.log("User has no email, skipping order confirmation email.");
     }
 
     return NextResponse.json({
