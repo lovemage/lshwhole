@@ -6,12 +6,13 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 interface TopupRecord {
-  id: number;
-  type: string;
+  id: string | number;
+  type: "LEDGER" | "REQUEST";
   amount_twd: number;
   external_ref: string;
   note: string;
   created_at: string;
+  status?: string; // For Request: PENDING, REJECTED
 }
 
 export default function TopupHistoryPage() {
@@ -30,20 +31,65 @@ export default function TopupHistoryPage() {
           return;
         }
 
-        const { data, error } = await supabase
+        // 1. Fetch Ledger (Success)
+        const { data: ledgerData, error: ledgerError } = await supabase
           .from("wallet_ledger")
           .select("id, type, amount_twd, external_ref, note, created_at")
           .eq("user_id", session.user.id)
           .eq("type", "TOPUP")
           .order("created_at", { ascending: false });
 
-        if (error) {
-          console.error("Error fetching topup history:", error);
+        if (ledgerError) {
+          console.error("Error fetching ledger:", ledgerError);
           setError("載入儲值記錄失敗");
           return;
         }
 
-        setRecords(data || []);
+        // 2. Fetch Requests (Pending/Rejected)
+        const { data: requestData, error: reqError } = await supabase
+          .from("wallet_topup_requests")
+          .select("id, amount_twd, status, created_at, bank_account_last_5")
+          .eq("user_id", session.user.id)
+          .in("status", ["PENDING", "REJECTED"])
+          .order("created_at", { ascending: false });
+
+        if (reqError) {
+          console.error("Error fetching requests:", reqError);
+        }
+
+        // 3. Combine
+        const combinedRecords: TopupRecord[] = [];
+
+        // Map Ledger items
+        (ledgerData || []).forEach((item: any) => {
+          combinedRecords.push({
+            id: `ledger-${item.id}`,
+            type: "LEDGER",
+            amount_twd: item.amount_twd,
+            external_ref: item.external_ref,
+            note: item.note,
+            created_at: item.created_at,
+            status: "SUCCESS"
+          });
+        });
+
+        // Map Request items
+        (requestData || []).forEach((item: any) => {
+          combinedRecords.push({
+            id: `req-${item.id}`,
+            type: "REQUEST",
+            amount_twd: item.amount_twd,
+            external_ref: `申請中 (後五碼: ${item.bank_account_last_5})`,
+            note: item.status === "REJECTED" ? "申請已拒絕" : "申請審核中",
+            created_at: item.created_at,
+            status: item.status
+          });
+        });
+
+        // Sort by date desc
+        combinedRecords.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+        setRecords(combinedRecords);
       } catch (err) {
         console.error("Failed to fetch topup history:", err);
         setError("載入儲值記錄失敗");
@@ -172,6 +218,9 @@ export default function TopupHistoryPage() {
                       時間
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      狀態
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       金額
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -187,6 +236,18 @@ export default function TopupHistoryPage() {
                     <tr key={record.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {new Date(record.created_at).toLocaleString("zh-TW")}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${
+                          record.status === 'SUCCESS' ? 'bg-green-100 text-green-800' :
+                          record.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
+                          record.status === 'REJECTED' ? 'bg-red-100 text-red-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {record.status === 'SUCCESS' ? '已入帳' :
+                           record.status === 'PENDING' ? '申請中' :
+                           record.status === 'REJECTED' ? '已拒絕' : record.status}
+                        </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">
                         +NT$ {record.amount_twd.toLocaleString()}

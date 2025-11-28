@@ -682,7 +682,7 @@ export default function ProductDetailPage() {
               </div>
             </div>
 
-            {/* Add to Cart */}
+            {/* Add to Cart & View Cart */}
             <div className="flex gap-4">
               <div className="flex items-center border border-gray-300 rounded-lg">
                 <button
@@ -707,7 +707,7 @@ export default function ProductDetailPage() {
               <button
                 onClick={handleAddToCart}
                 disabled={product.status !== 'published' || isExpired}
-                className={`flex-1 font-bold py-2 px-4 rounded-lg transition-all duration-100 transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 ${isExpired
+                className={`flex-1 font-bold py-2 px-4 rounded-lg transition-all duration-100 transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 whitespace-nowrap ${isExpired
                   ? "bg-gray-400 text-white"
                   : "bg-primary text-white hover:bg-primary/90"
                   }`}
@@ -718,19 +718,15 @@ export default function ProductDetailPage() {
                     ? '販售結束'
                     : '加入購物車'}
               </button>
-            </div>
-
-            {/* View Cart Button */}
-            {showViewCartButton && (
-              <div className="mt-4">
+              {showViewCartButton && (
                 <Link
                   href="/cart"
-                  className="w-full block text-center font-bold py-2 px-4 rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors"
+                  className="flex-1 flex items-center justify-center font-bold py-2 px-4 rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors whitespace-nowrap"
                 >
                   檢視購物車
                 </Link>
-              </div>
-            )}
+              )}
+            </div>
 
             {/* Related Products */}
             <div className="mt-8 pt-8 border-t border-gray-200">

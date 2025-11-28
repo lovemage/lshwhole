@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
       .from("wallet_topup_requests")
       .select(`
         *,
-        user:profiles!inner(email, display_name, phone)
+        profiles (email, display_name, phone)
       `)
       .eq("status", status)
       .order("created_at", { ascending: false });
@@ -22,7 +22,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    return NextResponse.json({ data });
+    // Map profiles to user for frontend compatibility
+    const mappedData = data?.map((item: any) => ({
+      ...item,
+      user: item.profiles
+    }));
+
+    return NextResponse.json({ data: mappedData });
   } catch (err) {
     console.error("GET topup requests error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
