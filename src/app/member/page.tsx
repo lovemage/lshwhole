@@ -87,9 +87,10 @@ export default function MemberPage() {
 
   // Top-up State
   const [isTopUpModalOpen, setIsTopUpModalOpen] = useState(false);
-  const [topUpForm, setTopUpForm] = useState({ amount: "", bankLast5: "" });
+  const [topUpForm, setTopUpForm] = useState({ amount: "", bankLast5: "", proofImage: "" });
   const [topUpSubmitting, setTopUpSubmitting] = useState(false);
   const [topUpSuccess, setTopUpSuccess] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Orders State
   const [orders, setOrders] = useState<Order[]>([]);
@@ -368,7 +369,7 @@ export default function MemberPage() {
 
   const handleTopUpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!topUpForm.amount || !topUpForm.bankLast5) return;
+    if (!topUpForm.amount || !topUpForm.bankLast5 || !topUpForm.proofImage) return;
     
     try {
       setTopUpSubmitting(true);
@@ -384,6 +385,7 @@ export default function MemberPage() {
         body: JSON.stringify({
           amount_twd: parseInt(topUpForm.amount),
           bank_account_last_5: topUpForm.bankLast5,
+          proof_image: topUpForm.proofImage,
         }),
       });
 
@@ -609,21 +611,21 @@ export default function MemberPage() {
               </Link>
             </div>
             <p className="text-sm text-gray-600 mb-1">目前可用金額</p>
-            <div className="flex justify-between items-end">
-              <p className="text-3xl font-bold text-primary">
-                NT$ {wallet?.balance_twd ?? 0}
-              </p>
-              <button
-                onClick={() => {
-                  setIsTopUpModalOpen(true);
-                  setTopUpSuccess(false);
-                  setTopUpForm({ amount: "", bankLast5: "" });
-                }}
-                className="px-4 py-2 bg-green-600 text-white text-sm font-bold rounded hover:bg-green-700 transition-colors"
-              >
-                儲值
-              </button>
-            </div>
+                <div className="flex justify-between items-end">
+                  <p className="text-3xl font-bold text-primary">
+                    NT$ {wallet?.balance_twd ?? 0}
+                  </p>
+                  <button
+                    onClick={() => {
+                      setIsTopUpModalOpen(true);
+                      setTopUpSuccess(false);
+                      setTopUpForm({ amount: "", bankLast5: "", proofImage: "" });
+                    }}
+                    className="px-4 py-2 bg-green-600 text-white text-sm font-bold rounded hover:bg-green-700 transition-colors"
+                  >
+                    儲值
+                  </button>
+                </div>
           </div>
 
           <div className="border bg-white p-4">
@@ -1196,6 +1198,78 @@ export default function MemberPage() {
                   />
                 </div>
 
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    匯款憑證 (截圖或照片)
+                  </label>
+                  <div className="mt-1 flex flex-col gap-2">
+                    {topUpForm.proofImage ? (
+                      <div className="relative w-full aspect-video bg-gray-100 rounded overflow-hidden border border-gray-200">
+                        <img 
+                          src={topUpForm.proofImage.replace(/^http:/, 'https:')} 
+                          alt="匯款憑證" 
+                          className="w-full h-full object-contain" 
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setTopUpForm({...topUpForm, proofImage: ""})}
+                          className="absolute top-2 right-2 bg-red-600 text-white rounded-full p-1 shadow hover:bg-red-700"
+                        >
+                          <span className="material-symbols-outlined text-sm block">close</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center w-full">
+                        <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
+                          <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                            {isUploading ? (
+                              <p className="text-sm text-gray-500">上傳中...</p>
+                            ) : (
+                              <>
+                                <span className="material-symbols-outlined text-gray-400 text-3xl mb-2">cloud_upload</span>
+                                <p className="text-sm text-gray-500">點擊上傳圖片</p>
+                              </>
+                            )}
+                          </div>
+                          <input 
+                            type="file" 
+                            className="hidden" 
+                            accept="image/*"
+                            disabled={isUploading}
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              
+                              try {
+                                setIsUploading(true);
+                                const formData = new FormData();
+                                formData.append('file', file);
+                                
+                                const res = await fetch('/api/upload', {
+                                  method: 'POST',
+                                  body: formData
+                                });
+                                
+                                if (res.ok) {
+                                  const data = await res.json();
+                                  setTopUpForm({...topUpForm, proofImage: data.url});
+                                } else {
+                                  alert('上傳失敗');
+                                }
+                              } catch (err) {
+                                console.error(err);
+                                alert('上傳發生錯誤');
+                              } finally {
+                                setIsUploading(false);
+                              }
+                            }}
+                          />
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 <div className="flex gap-3 pt-2">
                   <button
                     type="button"
@@ -1206,8 +1280,8 @@ export default function MemberPage() {
                   </button>
                   <button
                     type="submit"
-                    disabled={topUpSubmitting}
-                    className="flex-1 px-4 py-2 bg-primary text-white font-bold rounded hover:bg-primary/90 disabled:opacity-50"
+                    disabled={topUpSubmitting || isUploading || !topUpForm.proofImage}
+                    className="flex-1 px-4 py-2 bg-primary text-white font-bold rounded hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {topUpSubmitting ? "提交中..." : "完成匯款"}
                   </button>

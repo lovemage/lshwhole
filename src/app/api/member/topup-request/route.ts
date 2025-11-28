@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { amount_twd, bank_account_last_5 } = body;
+    const { amount_twd, bank_account_last_5, proof_image } = body;
 
     if (!amount_twd || amount_twd <= 0) {
       return NextResponse.json({ error: "儲值金額必須大於 0" }, { status: 400 });
@@ -31,6 +31,10 @@ export async function POST(request: NextRequest) {
 
     if (!bank_account_last_5 || bank_account_last_5.length !== 5) {
       return NextResponse.json({ error: "請輸入正確的帳號後五碼" }, { status: 400 });
+    }
+
+    if (!proof_image) {
+        return NextResponse.json({ error: "請上傳匯款憑證" }, { status: 400 });
     }
 
     const admin = supabaseAdmin();
@@ -41,6 +45,7 @@ export async function POST(request: NextRequest) {
         user_id: user.id,
         amount_twd,
         bank_account_last_5,
+        proof_image,
         status: "PENDING"
       });
 

@@ -36,6 +36,7 @@ export default function MemberManager() {
   // Topup Requests
   const [topupRequests, setTopupRequests] = useState<any[]>([]);
   const [requestsLoading, setRequestsLoading] = useState(false);
+  const [viewProofImage, setViewProofImage] = useState<string | null>(null);
 
   useEffect(() => {
     fetchMembers(0);
@@ -445,6 +446,7 @@ export default function MemberManager() {
                     <th className="text-left py-3 px-4 text-sm font-medium">會員</th>
                     <th className="text-left py-3 px-4 text-sm font-medium">金額</th>
                     <th className="text-left py-3 px-4 text-sm font-medium">帳號後五碼</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium">憑證</th>
                     <th className="text-left py-3 px-4 text-sm font-medium">操作</th>
                   </tr>
                 </thead>
@@ -458,6 +460,18 @@ export default function MemberManager() {
                       </td>
                       <td className="py-3 px-4 text-sm font-bold text-green-600">NT$ {req.amount_twd}</td>
                       <td className="py-3 px-4 text-sm">{req.bank_account_last_5}</td>
+                      <td className="py-3 px-4 text-sm">
+                        {req.proof_image ? (
+                          <button
+                            onClick={() => setViewProofImage(req.proof_image)}
+                            className="text-primary hover:underline text-xs"
+                          >
+                            查看
+                          </button>
+                        ) : (
+                          <span className="text-gray-400 text-xs">無</span>
+                        )}
+                      </td>
                       <td className="py-3 px-4 text-sm flex gap-2">
                         <button
                           onClick={() => handleRequestAction(req.id, "APPROVE")}
@@ -652,6 +666,21 @@ export default function MemberManager() {
                 )}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 憑證預覽 Modal */}
+      {viewProofImage && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4" onClick={() => setViewProofImage(null)}>
+          <div className="relative max-w-4xl max-h-screen">
+            <img src={viewProofImage.replace(/^http:/, 'https:')} alt="匯款憑證" className="max-w-full max-h-[90vh] object-contain" />
+            <button
+              onClick={() => setViewProofImage(null)}
+              className="absolute top-4 right-4 bg-white/20 hover:bg-white/40 text-white rounded-full p-2"
+            >
+              <span className="material-symbols-outlined">close</span>
+            </button>
           </div>
         </div>
       )}

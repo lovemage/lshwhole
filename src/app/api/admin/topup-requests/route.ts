@@ -125,7 +125,7 @@ export async function PUT(request: NextRequest) {
         // 3. Update Request Status
         await admin
         .from("wallet_topup_requests")
-        .update({ status: "APPROVED", updated_at: new Date().toISOString() })
+        .update({ status: "APPROVED", note: note, updated_at: new Date().toISOString() })
         .eq("id", id);
 
         // Send Email
@@ -140,7 +140,7 @@ export async function PUT(request: NextRequest) {
     } else if (action === "REJECT") {
         await admin
         .from("wallet_topup_requests")
-        .update({ status: "REJECTED", updated_at: new Date().toISOString() })
+        .update({ status: "REJECTED", note: note, updated_at: new Date().toISOString() })
         .eq("id", id);
 
         // Send Email

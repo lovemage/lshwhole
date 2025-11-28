@@ -48,7 +48,7 @@ export default function TopupHistoryPage() {
         // 2. Fetch Requests (Pending/Rejected)
         const { data: requestData, error: reqError } = await supabase
           .from("wallet_topup_requests")
-          .select("id, amount_twd, status, created_at, bank_account_last_5")
+          .select("id, amount_twd, status, created_at, bank_account_last_5, note")
           .eq("user_id", session.user.id)
           .in("status", ["PENDING", "REJECTED"])
           .order("created_at", { ascending: false });
@@ -80,7 +80,7 @@ export default function TopupHistoryPage() {
             type: "REQUEST",
             amount_twd: item.amount_twd,
             external_ref: `申請中 (後五碼: ${item.bank_account_last_5})`,
-            note: item.status === "REJECTED" ? "申請已拒絕" : "申請審核中",
+            note: item.note || (item.status === "REJECTED" ? "申請已拒絕" : "申請審核中"),
             created_at: item.created_at,
             status: item.status
           });
