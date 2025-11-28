@@ -105,7 +105,7 @@ export async function POST(
       .from("wallet_ledger")
       .insert({
         user_id: user.id,
-        type: "PAYMENT",
+        type: "PURCHASE",
         amount_twd: -totalAmount,
         charge_type: "SHIPPING",
         external_ref: externalRef,

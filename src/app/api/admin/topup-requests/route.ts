@@ -8,12 +8,10 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status") || "PENDING";
 
-    const { data, error } = await admin
+    // 1. Fetch Requests (without join)
+    const { data: requests, error } = await admin
       .from("wallet_topup_requests")
-      .select(`
-        *,
-        profiles (email, display_name, phone)
-      `)
+      .select("*")
       .eq("status", status)
       .order("created_at", { ascending: false });
 
@@ -22,10 +20,32 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    // Map profiles to user for frontend compatibility
-    const mappedData = data?.map((item: any) => ({
+    if (!requests || requests.length === 0) {
+      return NextResponse.json({ data: [] });
+    }
+
+    // 2. Fetch Profiles separately
+    const userIds = [...new Set(requests.map((r: any) => r.user_id))];
+    const { data: profiles, error: profilesError } = await admin
+      .from("profiles")
+      .select("user_id, email, display_name, phone")
+      .in("user_id", userIds);
+
+    if (profilesError) {
+      console.error("Error fetching profiles:", profilesError);
+      // Continue without profiles if error, or return empty?
+      // Better to return what we have, profiles might be null
+    }
+
+    const profileMap = new Map();
+    (profiles || []).forEach((p: any) => {
+      profileMap.set(p.user_id, p);
+    });
+
+    // 3. Map together
+    const mappedData = requests.map((item: any) => ({
       ...item,
-      user: item.profiles
+      user: profileMap.get(item.user_id) || { email: "Unknown", display_name: "Unknown" }
     }));
 
     return NextResponse.json({ data: mappedData });
