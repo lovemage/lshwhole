@@ -68,7 +68,7 @@ export async function GET(
           byProduct.forEach((images, productId) => {
             const sortedUrls = images
               .sort((a, b) => a.sort - b.sort)
-              .map(img => img.url);
+              .map(img => img.url?.replace(/^http:\/\//i, 'https://'));
             imageMap.set(productId, sortedUrls);
           });
         }
@@ -217,6 +217,7 @@ export async function PUT(
       .eq("id", id);
 
     if (error) {
+      console.error("Update order error:", error);
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
