@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import dynamic from "next/dynamic";
-import "react-quill/dist/quill.snow.css";
+import "react-quill-new/dist/quill.snow.css";
 
 // Dynamic import for ReactQuill to avoid SSR issues
-const ReactQuill = dynamic(() => import("react-quill"), { ssr: false }) as any;
+const ReactQuill = dynamic(() => import("react-quill-new"), { ssr: false }) as any;
 
 interface EmailTemplate {
   id: number;
@@ -71,7 +71,7 @@ export default function EmailTemplateManager() {
 
   const handleSendPromo = async () => {
     if (!confirm("確定要發送此促銷郵件給所有會員嗎？(請注意 Resend 額度限制)")) return;
-    
+
     try {
       setSendingPromo(true);
       const res = await fetch("/api/admin/email/send-promo", {
@@ -79,7 +79,7 @@ export default function EmailTemplateManager() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ templateKey: 'new_product_promo' }),
       });
-      
+
       const result = await res.json();
       if (res.ok) {
         alert(`發送成功！\n成功: ${result.successCount}\n失敗: ${result.failCount}`);
@@ -112,13 +112,13 @@ export default function EmailTemplateManager() {
           method: 'POST',
           body: formData
         });
-        
+
         if (res.ok) {
           const data = await res.json();
           const quill = quillRef.current?.getEditor();
           const range = quill?.getSelection(true);
           if (quill && range) {
-             quill.insertEmbed(range.index, 'image', data.url);
+            quill.insertEmbed(range.index, 'image', data.url);
           }
         } else {
           alert('圖片上傳失敗');
@@ -135,7 +135,7 @@ export default function EmailTemplateManager() {
       container: [
         [{ 'header': [1, 2, false] }],
         ['bold', 'italic', 'underline', 'strike', 'blockquote'],
-        [{'list': 'ordered'}, {'list': 'bullet'}, {'indent': '-1'}, {'indent': '+1'}],
+        [{ 'list': 'ordered' }, { 'list': 'bullet' }, { 'indent': '-1' }, { 'indent': '+1' }],
         ['link', 'image'],
         ['clean']
       ],
@@ -158,7 +158,7 @@ export default function EmailTemplateManager() {
   return (
     <div className="py-6 space-y-6">
       <h2 className="text-2xl font-bold text-text-primary-light">Email 通知模板管理</h2>
-      
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Template List */}
         <div className="md:col-span-1 rounded-xl border border-border-light bg-card-light overflow-hidden">
@@ -175,9 +175,8 @@ export default function EmailTemplateManager() {
                 <button
                   key={t.id}
                   onClick={() => handleSelect(t)}
-                  className={`w-full text-left p-4 hover:bg-background-light transition-colors ${
-                    selectedTemplate?.id === t.id ? "bg-primary/5 border-l-4 border-primary" : ""
-                  }`}
+                  className={`w-full text-left p-4 hover:bg-background-light transition-colors ${selectedTemplate?.id === t.id ? "bg-primary/5 border-l-4 border-primary" : ""
+                    }`}
                 >
                   <p className="font-medium text-text-primary-light">
                     {templateNames[t.key] || t.key}
@@ -217,7 +216,7 @@ export default function EmailTemplateManager() {
                   </button>
                 )}
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-text-primary-light mb-1">郵件主旨</label>
                 <input

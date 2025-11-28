@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import dynamic from "next/dynamic";
-import "react-quill/dist/quill.snow.css";
+import "react-quill-new/dist/quill.snow.css";
 
 // Dynamic import for ReactQuill to avoid SSR issues
-const ReactQuill = dynamic(() => import("react-quill"), { ssr: false }) as any;
+const ReactQuill = dynamic(() => import("react-quill-new"), { ssr: false }) as any;
 
 interface Announcement {
   id: number;
@@ -58,13 +58,13 @@ export default function AnnouncementManager() {
           method: 'POST',
           body: formData
         });
-        
+
         if (res.ok) {
           const data = await res.json();
           const quill = quillRef.current?.getEditor();
           const range = quill?.getSelection(true);
           if (quill && range) {
-             quill.insertEmbed(range.index, 'image', data.url);
+            quill.insertEmbed(range.index, 'image', data.url);
           }
         } else {
           alert('圖片上傳失敗');
@@ -81,7 +81,7 @@ export default function AnnouncementManager() {
       container: [
         [{ 'header': [1, 2, false] }],
         ['bold', 'italic', 'underline', 'strike', 'blockquote'],
-        [{'list': 'ordered'}, {'list': 'bullet'}, {'indent': '-1'}, {'indent': '+1'}],
+        [{ 'list': 'ordered' }, { 'list': 'bullet' }, { 'indent': '-1' }, { 'indent': '+1' }],
         ['link', 'image'],
         ['clean']
       ],
@@ -169,11 +169,10 @@ export default function AnnouncementManager() {
               setEditingId(null);
               setFormData({ title: "", content: "" });
             }}
-            className={`px-4 py-2 font-medium border-b-2 transition-colors ${
-              !showForm
+            className={`px-4 py-2 font-medium border-b-2 transition-colors ${!showForm
                 ? "border-primary text-primary"
                 : "border-transparent text-text-secondary-light hover:text-text-primary-light"
-            }`}
+              }`}
           >
             公告列表
           </button>
@@ -183,11 +182,10 @@ export default function AnnouncementManager() {
               setEditingId(null);
               setFormData({ title: "", content: "" });
             }}
-            className={`px-4 py-2 font-medium border-b-2 transition-colors ${
-              showForm && !editingId
+            className={`px-4 py-2 font-medium border-b-2 transition-colors ${showForm && !editingId
                 ? "border-primary text-primary"
                 : "border-transparent text-text-secondary-light hover:text-text-primary-light"
-            }`}
+              }`}
           >
             新增公告
           </button>
