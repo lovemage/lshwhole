@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { createClient } from "@supabase/supabase-js";
+import { sendEmail } from "@/lib/email";
 
 // 會員端：查詢訂單列表
 export async function GET(request: NextRequest) {
@@ -342,6 +343,15 @@ export async function POST(request: NextRequest) {
       .from("profiles")
       .update({ last_purchase_date: new Date().toISOString() })
       .eq("user_id", user.id);
+
+    // 10. 發送訂單確認信
+    if (user.email) {
+      await sendEmail(user.email, 'order_created', {
+        name: recipient_name || '會員',
+        order_id: order.id,
+        amount: totalAmount,
+      });
+    }
 
     return NextResponse.json({
       success: true,

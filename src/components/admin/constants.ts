@@ -12,6 +12,7 @@ export const NAV_ITEMS = [
   { id: "sub_accounts", label: "子帳管理", icon: "manage_accounts" },
   { id: "banners", label: "橫幅管理", icon: "view_carousel" },
   { id: "shipping_settings", label: "運費管理", icon: "local_shipping" },
+  { id: "email_templates", label: "Email 模板", icon: "mail" },
   { id: "settings", label: "系統設置", icon: "settings" },
 ];
 

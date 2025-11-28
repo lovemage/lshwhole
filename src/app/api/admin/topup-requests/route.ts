@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
+import { sendEmail } from "@/lib/email";
 
 export async function GET(request: NextRequest) {
   try {
@@ -53,6 +54,13 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Request already processed" }, { status: 400 });
     }
 
+    // Fetch user profile for email
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("email, display_name")
+      .eq("user_id", reqData.user_id)
+      .single();
+
     if (action === "APPROVE") {
         // Process Topup Logic
         const userId = reqData.user_id;
@@ -94,11 +102,28 @@ export async function PUT(request: NextRequest) {
         .update({ status: "APPROVED", updated_at: new Date().toISOString() })
         .eq("id", id);
 
+        // Send Email
+        if (profile?.email) {
+          await sendEmail(profile.email, 'topup_success', {
+            name: profile.display_name || '會員',
+            amount: amount,
+            balance: newBalance
+          });
+        }
+
     } else if (action === "REJECT") {
         await admin
         .from("wallet_topup_requests")
         .update({ status: "REJECTED", updated_at: new Date().toISOString() })
         .eq("id", id);
+
+        // Send Email
+        if (profile?.email) {
+          await sendEmail(profile.email, 'topup_failed', {
+            name: profile.display_name || '會員',
+            reason: note || '資料不符或其他原因'
+          });
+        }
     }
 
     return NextResponse.json({ success: true });

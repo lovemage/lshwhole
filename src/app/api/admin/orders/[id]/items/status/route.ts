@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
+import { sendEmail } from "@/lib/email";
 
 export async function PUT(
   request: NextRequest,
@@ -51,6 +52,34 @@ export async function PUT(
 
     if (updateError) {
       return NextResponse.json({ error: "更新狀態失敗" }, { status: 500 });
+    }
+
+    // Send email if status is ARRIVED
+    if (status === 'ARRIVED') {
+      try {
+        const { data: order } = await admin
+          .from("orders")
+          .select("id, user_id, recipient_name")
+          .eq("id", id)
+          .single();
+        
+        if (order) {
+          const { data: profile } = await admin
+            .from("profiles")
+            .select("email, display_name")
+            .eq("user_id", order.user_id)
+            .single();
+          
+          if (profile && profile.email) {
+            await sendEmail(profile.email, 'order_arrived', {
+              name: order.recipient_name || profile.display_name || '會員',
+              order_id: order.id,
+            });
+          }
+        }
+      } catch (e) {
+        console.error("Failed to send arrival email:", e);
+      }
     }
 
     return NextResponse.json({ success: true });
