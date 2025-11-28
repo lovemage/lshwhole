@@ -1,7 +1,19 @@
 import { Resend } from 'resend';
 import { supabaseAdmin } from './supabase';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Lazy initialization to avoid build-time errors
+let resendInstance: Resend | null = null;
+
+function getResendClient() {
+  if (!resendInstance) {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      throw new Error('RESEND_API_KEY environment variable is not set');
+    }
+    resendInstance = new Resend(apiKey);
+  }
+  return resendInstance;
+}
 
 export async function sendEmail(
   to: string,
@@ -10,7 +22,7 @@ export async function sendEmail(
 ) {
   try {
     const admin = supabaseAdmin();
-    
+
     // 1. Fetch template
     const { data: template, error } = await admin
       .from('email_templates')
@@ -39,6 +51,7 @@ export async function sendEmail(
     // The user should configure this.
     const fromEmail = process.env.EMAIL_FROM || 'onboarding@resend.dev';
 
+    const resend = getResendClient();
     const { data: emailData, error: emailError } = await resend.emails.send({
       from: fromEmail,
       to,
