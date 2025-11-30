@@ -15,6 +15,8 @@ interface CartItem {
   quantity: number;
   image: string;
   origin: string;
+  variantId?: string;
+  variantName?: string;
 }
 
 const CART_STORAGE_KEY = "lsx_cart";
@@ -176,6 +178,7 @@ export default function CheckoutPage() {
       const items = cartItems.map((item) => ({
         product_id: parseInt(item.id),
         qty: item.quantity,
+        variant_id: item.variantId ? parseInt(item.variantId) : null,
       }));
 
       const response = await fetch("/api/orders", {
@@ -509,8 +512,10 @@ export default function CheckoutPage() {
                   <div className="bg-gray-50 p-4 rounded-lg space-y-3">
                     <h3 className="font-semibold text-gray-900 mb-2">訂單項目</h3>
                     {cartItems.map((item) => (
-                      <div key={item.id} className="flex justify-between text-sm">
-                        <span>{item.name} x {item.quantity}</span>
+                      <div key={item.id + (item.variantId || "")} className="flex justify-between text-sm">
+                        <span>
+                          {item.name} {item.variantName ? `(${item.variantName})` : ""} x {item.quantity}
+                        </span>
                         <span>NT${Math.floor(item.price * item.quantity)}</span>
                       </div>
                     ))}

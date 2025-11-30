@@ -36,6 +36,22 @@ export default function ProductManager() {
     status: "draft" as "draft" | "published",
     images: [] as any[],
   });
+  
+  // Spec & Variant Management
+  interface Spec {
+    name: string;
+    values: string[];
+  }
+  interface Variant {
+    id: string; // temp ID or real ID
+    options: Record<string, string>;
+    price: number;
+    stock: number;
+    sku: string;
+  }
+  const [specs, setSpecs] = useState<Spec[]>([]);
+  const [variants, setVariants] = useState<Variant[]>([]);
+
   const [isTranslating, setIsTranslating] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
@@ -151,14 +167,21 @@ export default function ProductManager() {
       status: "draft",
       images: [],
     });
+    setSpecs([]);
+    setVariants([]);
     setShowProductEdit(true);
   };
 
   const openEditProduct = async (p: any) => {
     setEditingProduct(p);
+    setSpecs([]);
+    setVariants([]);
 
-    // Fetch product images
+    // Fetch product images and details (specs, variants)
     let images = [];
+    let fetchedSpecs: Spec[] = [];
+    let fetchedVariants: Variant[] = [];
+
     try {
       const res = await fetch(`/api/products/${p.id}`);
       if (res.ok) {
@@ -170,9 +193,17 @@ export default function ProductManager() {
           is_product: true,
           is_description: false
         }));
+        fetchedSpecs = productData.specs || [];
+        fetchedVariants = (productData.variants || []).map((v: any) => ({
+          id: v.id,
+          options: v.options,
+          price: v.price,
+          stock: v.stock,
+          sku: v.sku
+        }));
       }
     } catch (err) {
-      console.error("Failed to fetch product images:", err);
+      console.error("Failed to fetch product details:", err);
     }
 
     setProductEditForm({
@@ -187,6 +218,8 @@ export default function ProductManager() {
       status: (p.status === "published" ? "published" : "draft") as "draft" | "published",
       images: images,
     });
+    setSpecs(fetchedSpecs);
+    setVariants(fetchedVariants);
     setShowProductEdit(true);
   };
 
@@ -237,6 +270,94 @@ export default function ProductManager() {
     }));
   };
 
+  // Spec Helpers (Copied from CrawlerImport)
+  const addSpec = () => {
+    setSpecs([...specs, { name: "", values: [] }]);
+  };
+
+  const updateSpecName = (idx: number, name: string) => {
+    const newSpecs = [...specs];
+    newSpecs[idx].name = name;
+    setSpecs(newSpecs);
+  };
+
+  const addSpecValue = (idx: number, value: string) => {
+    if (!value.trim()) return;
+    const newSpecs = [...specs];
+    if (!newSpecs[idx].values.includes(value.trim())) {
+      newSpecs[idx].values.push(value.trim());
+      setSpecs(newSpecs);
+      generateVariants(newSpecs);
+    }
+  };
+
+  const removeSpecValue = (specIdx: number, valIdx: number) => {
+    const newSpecs = [...specs];
+    newSpecs[specIdx].values.splice(valIdx, 1);
+    setSpecs(newSpecs);
+    generateVariants(newSpecs);
+  };
+
+  const removeSpec = (idx: number) => {
+    const newSpecs = [...specs];
+    newSpecs.splice(idx, 1);
+    setSpecs(newSpecs);
+    generateVariants(newSpecs);
+  };
+
+  const generateVariants = (currentSpecs: Spec[]) => {
+    if (currentSpecs.length === 0) {
+      setVariants([]);
+      return;
+    }
+
+    // Generate Cartesian product
+    const combine = (acc: any[], specIdx: number): any[] => {
+      if (specIdx === currentSpecs.length) return acc;
+
+      const spec = currentSpecs[specIdx];
+      if (spec.values.length === 0) return combine(acc, specIdx + 1); // Skip empty specs
+
+      const nextAcc: any[] = [];
+      if (acc.length === 0) {
+        spec.values.forEach(v => {
+          nextAcc.push({ [spec.name]: v });
+        });
+      } else {
+        acc.forEach(item => {
+          spec.values.forEach(v => {
+            nextAcc.push({ ...item, [spec.name]: v });
+          });
+        });
+      }
+      return combine(nextAcc, specIdx + 1);
+    };
+
+    const optionsList = combine([], 0);
+
+    // Create variants preserving existing data if possible
+    const newVariants = optionsList.map((opts, i) => {
+      const key = JSON.stringify(opts);
+      // Try to find existing variant with same options to keep price/stock
+      const existing = variants.find(v => JSON.stringify(v.options) === key);
+      return existing || {
+        id: "temp-" + Date.now() + "-" + i,
+        options: opts,
+        price: productEditForm.retail_price_twd,
+        stock: 10,
+        sku: `${productEditForm.sku}-${i + 1}`
+      };
+    });
+
+    setVariants(newVariants);
+  };
+
+  const updateVariant = (idx: number, field: keyof Variant, value: any) => {
+    const newVariants = [...variants];
+    newVariants[idx] = { ...newVariants[idx], [field]: value };
+    setVariants(newVariants);
+  };
+
   const saveEditProduct = async () => {
     // 價格強制為整數
     const toInt = (v: any) => (v === null || v === undefined || v === "" ? null : Math.floor(Number(v)));
@@ -260,6 +381,14 @@ export default function ProductManager() {
       cost_twd: toInt(productEditForm.cost_twd),
       status: productEditForm.status,
       images: imagesPayload,
+      specs: specs,
+      variants: variants.map(v => ({
+        name: Object.values(v.options).join(" / "),
+        options: v.options,
+        price: toInt(v.price),
+        stock: toInt(v.stock),
+        sku: v.sku
+      }))
     };
 
     let res;
@@ -515,6 +644,106 @@ export default function ProductManager() {
                 <div className="mt-1 text-xs text-text-secondary-light">
                   預設：批發價 = 成本 × 1.25，零售價 = 成本 × 1.35，可手動調整
                 </div>
+              </div>
+
+              {/* 規格與變體管理 */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-medium text-text-primary-light">規格設定 (顏色/尺寸等)</label>
+                  <button
+                    type="button"
+                    onClick={addSpec}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    + 新增規格
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {specs.map((spec, idx) => (
+                    <div key={idx} className="p-3 border border-border-light rounded-lg bg-background-light">
+                      <div className="flex items-center gap-2 mb-2">
+                        <input
+                          placeholder="規格名稱 (例: 顏色)"
+                          value={spec.name}
+                          onChange={(e) => updateSpecName(idx, e.target.value)}
+                          className="flex-1 rounded border border-border-light px-2 py-1 text-sm"
+                        />
+                        <button onClick={() => removeSpec(idx)} className="text-text-secondary-light hover:text-red-500">
+                          <span className="material-symbols-outlined text-lg">delete</span>
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {spec.values.map((val, vIdx) => (
+                          <div key={vIdx} className="flex items-center gap-1 bg-white border border-border-light rounded px-2 py-1">
+                            <span className="text-sm">{val}</span>
+                            <button onClick={() => removeSpecValue(idx, vIdx)} className="text-text-secondary-light hover:text-red-500">
+                              <span className="material-symbols-outlined text-sm">close</span>
+                            </button>
+                          </div>
+                        ))}
+                        <input
+                          placeholder="+ 值 (Enter新增)"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              addSpecValue(idx, e.currentTarget.value);
+                              e.currentTarget.value = "";
+                            }
+                          }}
+                          className="w-24 rounded border border-border-light px-2 py-1 text-sm"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {specs.length > 0 && (
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      onClick={() => generateVariants(specs)}
+                      className="w-full py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200"
+                    >
+                      (重)生成變體列表
+                    </button>
+                  </div>
+                )}
+                {variants.length > 0 && (
+                  <div className="mt-3 space-y-2 max-h-60 overflow-y-auto">
+                    <div className="flex text-xs font-bold text-text-secondary-light px-2 mb-1">
+                      <div className="w-1/3">規格組合</div>
+                      <div className="w-20 px-2">價格</div>
+                      <div className="w-16 px-2">庫存</div>
+                      <div className="flex-1 px-2">SKU</div>
+                    </div>
+                    {variants.map((v, vIdx) => (
+                      <div key={v.id || vIdx} className="flex items-center gap-2 p-2 border border-border-light rounded bg-white text-sm">
+                        <div className="w-1/3 truncate font-medium" title={Object.values(v.options).join("/")}>
+                          {Object.values(v.options).join("/")}
+                        </div>
+                        <input
+                          type="number"
+                          placeholder="價格"
+                          value={v.price}
+                          onChange={(e) => updateVariant(vIdx, "price", Number(e.target.value))}
+                          className="w-20 rounded border border-border-light px-2 py-1"
+                        />
+                        <input
+                          type="number"
+                          placeholder="庫存"
+                          value={v.stock}
+                          onChange={(e) => updateVariant(vIdx, "stock", Number(e.target.value))}
+                          className="w-16 rounded border border-border-light px-2 py-1"
+                        />
+                        <input
+                          placeholder="SKU"
+                          value={v.sku}
+                          onChange={(e) => updateVariant(vIdx, "sku", e.target.value)}
+                          className="flex-1 rounded border border-border-light px-2 py-1"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* 圖片管理 */}

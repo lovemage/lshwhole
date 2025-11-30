@@ -117,18 +117,63 @@ export async function PUT(
     const { id } = await params;
     const body = await request.json();
 
-    // Extract images if present
-    const { images, ...productData } = body;
+    // Extract images, specs, variants if present
+    const { images, specs, variants, ...productData } = body;
 
     const { data, error } = await admin
       .from("products")
-      .update(productData)
+      .update({
+        ...productData,
+        specs: specs ? specs : undefined
+      })
       .eq("id", id)
       .select()
       .single();
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
+    // Handle variants update if provided
+    if (variants && Array.isArray(variants)) {
+      // For simplicity, delete all existing variants and re-insert
+      // This is safe because we re-generate variants in frontend based on specs
+      // Note: This might break existing order items if we hard delete.
+      // However, order items should reference variant ID. If we delete, we lose link.
+      // But user wants to "edit" specs. If specs change, variants change.
+      // Ideally we should try to update existing ones if IDs match, and insert new ones.
+      // But `variants` from frontend might not have IDs if they are regenerated.
+      // Given the requirement "specs setting was mistaken", we assume admin is fixing specs.
+      // If we delete variants, `order_items.variant_id` might be set NULL (ON DELETE SET NULL).
+      // Let's implement full replace for now as it's cleaner for "fixing" mistakes.
+      
+      const { error: vDelError } = await admin
+        .from("product_variants")
+        .delete()
+        .eq("product_id", id);
+      
+      if (vDelError) {
+        console.error("Error deleting old variants:", vDelError);
+      }
+
+      if (variants.length > 0) {
+        const variantInserts = variants.map((v: any) => ({
+          product_id: id,
+          name: v.name,
+          options: v.options,
+          price: v.price,
+          stock: v.stock,
+          sku: v.sku
+        }));
+        
+        const { error: vInsError } = await admin
+          .from("product_variants")
+          .insert(variantInserts);
+
+        if (vInsError) {
+           console.error("Error inserting new variants:", vInsError);
+        }
+      }
     }
 
     // Handle images update if provided

@@ -374,11 +374,16 @@ export default function OrderManager() {
                                           )}
                                         </div>
                                         <div>
-                                          <p className="font-medium text-text-primary-light line-clamp-1">{item.product?.title_zh || item.product?.title_original || "未知商品"}</p>
-                                          <p className="text-xs text-text-secondary-light">{item.product?.sku}</p>
-                                        </div>
-                                      </div>
-                                    </td>
+                                  <p className="font-medium text-text-primary-light line-clamp-1">{item.product?.title_zh || item.product?.title_original || "未知商品"}</p>
+                                  <p className="text-xs text-text-secondary-light">{item.product?.sku}</p>
+                                  {item.spec_name && (
+                                    <p className="text-xs text-primary bg-primary/5 px-1 rounded mt-0.5 inline-block">
+                                      規格: {item.spec_name}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
                                     <td className="p-3">NT$ {item.unit_price_twd?.toLocaleString()}</td>
                                     <td className="p-3">{item.qty}</td>
                                     <td className="p-3 font-medium">NT$ {(item.unit_price_twd * item.qty).toLocaleString()}</td>
@@ -557,6 +562,11 @@ export default function OrderManager() {
                               <div className="text-sm">
                                 <p className="font-medium line-clamp-1">{item.product?.title_zh || item.product?.title_original}</p>
                                 <p className="text-text-secondary-light text-xs">{item.product?.sku}</p>
+                                {item.spec_name && (
+                                  <p className="text-xs text-primary bg-primary/5 px-1 rounded mt-0.5 inline-block">
+                                    規格: {item.spec_name}
+                                  </p>
+                                )}
                                 {item.product?.original_url && (
                                   <a href={item.product.original_url} target="_blank" className="text-xs text-primary hover:underline flex items-center gap-1 mt-1">
                                     <span className="material-symbols-outlined text-[10px]">open_in_new</span>

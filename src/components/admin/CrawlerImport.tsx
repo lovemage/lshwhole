@@ -441,7 +441,12 @@ export default function CrawlerImport() {
   const toggleCandidateType = (idx: number, type: 'isProduct' | 'isDescription') => {
     setCandidateImages((prev) => {
       const arr = [...prev];
-      arr[idx] = { ...arr[idx], [type]: !arr[idx][type] };
+      const newVal = !arr[idx][type];
+      arr[idx] = { ...arr[idx], [type]: newVal };
+      if (newVal) {
+        if (type === 'isProduct') arr[idx].isDescription = false;
+        else arr[idx].isProduct = false;
+      }
       return arr;
     });
   };
@@ -719,7 +724,12 @@ export default function CrawlerImport() {
     const updated = [...crawlerProducts];
     const p = updated[productIdx];
     if (p && p._images && p._images[imgIdx]) {
-      p._images[imgIdx][field] = !p._images[imgIdx][field];
+      const newVal = !p._images[imgIdx][field];
+      p._images[imgIdx][field] = newVal;
+      if (newVal) {
+        if (field === 'isProduct') p._images[imgIdx].isDescription = false;
+        else p._images[imgIdx].isProduct = false;
+      }
       setCrawlerProducts(updated);
       setCrawlerFiltered(applyFilterSort(updated));
     }

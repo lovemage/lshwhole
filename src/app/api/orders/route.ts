@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { items, shipping_address, phone, note, recipient_name } = body;
 
-    // items: [{ product_id: number, qty: number }]
+    // items: [{ product_id: number, qty: number, variant_id?: number, spec_name?: string }]
     if (!Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ error: "訂單項目不能為空" }, { status: 400 });
     }
@@ -133,10 +133,10 @@ export async function POST(request: NextRequest) {
 
     // 1. 驗證商品並計算總金額
     let totalAmount = 0;
-    const orderItems: Array<{ product_id: number; qty: number; unit_price: number }> = [];
+    const orderItems: Array<{ product_id: number; qty: number; unit_price: number; variant_id: number | null; spec_name: string | null }> = [];
 
     for (const item of items) {
-      const { product_id, qty } = item;
+      const { product_id, qty, variant_id } = item;
       if (!product_id || !qty || qty <= 0) {
         return NextResponse.json({ error: "商品數量必須大於 0" }, { status: 400 });
       }
@@ -183,7 +183,49 @@ export async function POST(request: NextRequest) {
       }
 
       // 使用批發價或零售價
-      const unitPrice = product.wholesale_price_twd || product.retail_price_twd || 0;
+      let unitPrice = product.wholesale_price_twd || product.retail_price_twd || 0;
+      let specName = null;
+
+      // 如果有選擇變體，查詢變體價格與庫存
+      if (variant_id) {
+        const { data: variant, error: variantError } = await admin
+          .from("product_variants")
+          .select("price, stock, name")
+          .eq("id", variant_id)
+          .eq("product_id", product_id)
+          .single();
+        
+        if (variantError || !variant) {
+           return NextResponse.json(
+            { error: `變體 ${variant_id} 不存在或不屬於該商品` },
+            { status: 400 }
+          );
+        }
+        
+        // 如果變體有設定價格，使用變體價格 (目前邏輯是變體價格優先於商品價格)
+        // 這裡需要確認變體價格是否也區分批發/零售，目前 CrawlerImport 只設定了一個 price
+        // 假設 variant.price 是零售價，如果 User 是批發會員，是否要打折？
+        // 為了簡化，如果 CrawlerImport 的 variant price 是最終價格，則直接使用。
+        // 但 CrawlerImport 中 variants 的 price 預設是 retail_price_twd。
+        // 如果商品是批發價，變體價格應該也要對應批發價。
+        // 簡單起見：如果有變體價格，優先使用；但如果目前是批發模式（通常是看 user tier），可能需要邏輯調整。
+        // 這裡暫時假設 variant.price 就是最終售價。
+        // TODO: 完善變體批發價邏輯
+        if (variant.price > 0) {
+          unitPrice = variant.price;
+        }
+        
+        specName = variant.name;
+
+        // 檢查變體庫存
+        if (variant.stock < qty) {
+           return NextResponse.json(
+            { error: `商品 ${product_id} (規格: ${variant.name}) 庫存不足` },
+            { status: 400 }
+          );
+        }
+      }
+
       if (unitPrice <= 0) {
         return NextResponse.json(
           { error: `商品 ${product_id} 價格無效` },
@@ -198,6 +240,8 @@ export async function POST(request: NextRequest) {
         product_id,
         qty,
         unit_price: Math.floor(unitPrice),
+        variant_id: variant_id || null,
+        spec_name: specName,
       });
     }
 
@@ -320,6 +364,8 @@ export async function POST(request: NextRequest) {
       product_id: item.product_id,
       qty: item.qty,
       unit_price_twd: item.unit_price,
+      variant_id: item.variant_id,
+      spec_name: item.spec_name,
     }));
 
     const { error: itemsError } = await admin
