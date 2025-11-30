@@ -1022,8 +1022,8 @@ export default function CrawlerImport() {
       </div>
 
       {showPublish && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-3xl rounded-xl border border-border-light bg-card-light p-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-3xl rounded-xl border border-border-light bg-card-light p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold text-text-primary-light">上架商品</h3>
               <button className="text-text-secondary-light" onClick={() => setShowPublish(false)}>關閉</button>

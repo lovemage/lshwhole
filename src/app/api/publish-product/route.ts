@@ -40,14 +40,27 @@ export async function POST(request: NextRequest) {
       original_url: original_url ? String(original_url) : null,
     };
 
+    // 使用 upsert 處理重複 SKU (更新現有商品)
     const { data: product, error: pErr } = await admin
       .from("products")
-      .insert(productPayload)
+      .upsert(productPayload, { onConflict: 'sku' })
       .select("id")
       .single();
 
-    if (pErr) return NextResponse.json({ error: pErr.message }, { status: 400 });
+    if (pErr) {
+      // 若 upsert 失敗，可能是因為 unique constraint 但非 SKU (少見)，或是其他錯誤
+      console.error("Upsert failed:", pErr);
+      return NextResponse.json({ error: pErr.message }, { status: 400 });
+    }
     const productId = product.id as number;
+
+    // 清除舊有關聯資料 (為了確保資料一致性，先刪除再重新插入)
+    await Promise.all([
+      admin.from("product_category_map").delete().eq("product_id", productId),
+      admin.from("product_tag_map").delete().eq("product_id", productId),
+      admin.from("product_images").delete().eq("product_id", productId),
+      admin.from("product_variants").delete().eq("product_id", productId),
+    ]);
 
     // 分類關聯
     if (Array.isArray(category_ids) && category_ids.length > 0) {
@@ -56,7 +69,7 @@ export async function POST(request: NextRequest) {
         .map((cid: number) => ({ product_id: productId, category_id: cid }));
       if (rows.length > 0) {
         const { error: cErr } = await admin.from("product_category_map").insert(rows);
-        if (cErr) return NextResponse.json({ error: cErr.message }, { status: 400 });
+        if (cErr) console.error("Category insert failed:", cErr);
       }
     }
 
@@ -64,14 +77,14 @@ export async function POST(request: NextRequest) {
     if (Array.isArray(tag_ids) && tag_ids.length > 0) {
       const rows = tag_ids.map((tid: number) => ({ product_id: productId, tag_id: tid }));
       const { error: tErr } = await admin.from("product_tag_map").insert(rows);
-      if (tErr) return NextResponse.json({ error: tErr.message }, { status: 400 });
+      if (tErr) console.error("Tag insert failed:", tErr);
     }
 
     // 圖片
     if (Array.isArray(image_urls) && image_urls.length > 0) {
       const rows = image_urls.map((url: string, idx: number) => ({ product_id: productId, url, sort: idx }));
       const { error: iErr } = await admin.from("product_images").insert(rows);
-      if (iErr) return NextResponse.json({ error: iErr.message }, { status: 400 });
+      if (iErr) console.error("Image insert failed:", iErr);
     }
 
     // 變體
@@ -85,7 +98,7 @@ export async function POST(request: NextRequest) {
         sku: v.sku
       }));
       const { error: vErr } = await admin.from("product_variants").insert(rows);
-      if (vErr) return NextResponse.json({ error: "Failed to insert variants: " + vErr.message }, { status: 400 });
+      if (vErr) console.error("Variant insert failed:", vErr);
     }
 
     return NextResponse.json({ id: productId });
