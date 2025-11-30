@@ -35,7 +35,8 @@ export async function GET(
           id,
           title_zh,
           title_original,
-          sku
+          sku,
+          original_url
         )
       `)
       .eq("order_id", id);

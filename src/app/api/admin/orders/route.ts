@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
       .select(`
         id, user_id, status, total_twd, created_at, updated_at, hold_id,
         order_items (
-          id, product_id, qty, unit_price_twd,
+          id, product_id, qty, unit_price_twd, spec_name,
           products (
             sku, title_zh, title_original, original_url
           )
