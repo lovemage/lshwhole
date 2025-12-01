@@ -7,6 +7,7 @@ import AdminHeader from "@/components/admin/AdminHeader";
 import DashboardHome from "@/components/admin/DashboardHome";
 import AnnouncementManager from "@/components/admin/AnnouncementManager";
 import CategoryManager from "@/components/admin/CategoryManager";
+import TagManager from "@/components/admin/TagManager";
 import CrawlerImport from "@/components/admin/CrawlerImport";
 import ProductManager from "@/components/admin/ProductManager";
 import MemberManager from "@/components/admin/MemberManager";
@@ -57,6 +58,8 @@ function AdminDashboard() {
         return <AnnouncementManager />;
       case "categories":
         return <CategoryManager />;
+      case "tags":
+        return <TagManager />;
       case "crawler":
         return <CrawlerImport />;
       case "products":
@@ -122,8 +125,10 @@ function AdminDashboard() {
                   ? "公告管理"
                   : activeNav === "categories"
                     ? "分類管理"
-                    : activeNav === "crawler"
-                      ? "爬蟲導入"
+                    : activeNav === "tags"
+                      ? "標籤管理"
+                      : activeNav === "crawler"
+                        ? "爬蟲導入"
                       : activeNav === "members"
                         ? "會員管理"
                         : activeNav === "orders"
@@ -150,9 +155,11 @@ function AdminDashboard() {
                 {activeNav === "announcements"
                   ? "管理和編輯公告內容"
                   : activeNav === "categories"
-                    ? "管理商品分類（L1/L2/L3）與標籤"
-                    : activeNav === "crawler"
-                      ? "上架前資料檢視與轉換（JSON / Excel 匯入、匯率換算、利潤率）"
+                    ? "管理商品分類（L1/L2/L3）"
+                    : activeNav === "tags"
+                      ? "管理商品標籤（品牌、屬性、活動）"
+                      : activeNav === "crawler"
+                        ? "上架前資料檢視與轉換（JSON / Excel 匯入、匯率換算、利潤率）"
                       : activeNav === "members"
                         ? "管理會員資料、會員資格與錢包儲值"
                         : activeNav === "orders"

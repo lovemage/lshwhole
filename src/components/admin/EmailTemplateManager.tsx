@@ -13,6 +13,17 @@ interface EmailTemplate {
   updated_at: string;
 }
 
+interface Category {
+  id: number;
+  name: string;
+  level: number;
+}
+
+interface Relation {
+  parent_category_id: number;
+  child_category_id: number;
+}
+
 export default function EmailTemplateManager() {
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
   const [loading, setLoading] = useState(false);
@@ -27,8 +38,17 @@ export default function EmailTemplateManager() {
   const [selectedProductIds, setSelectedProductIds] = useState<number[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
 
+  // Categories for Filter
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [relations, setRelations] = useState<Relation[]>([]);
+  const [selectedL1, setSelectedL1] = useState<number | null>(null);
+  const [selectedL2, setSelectedL2] = useState<number | null>(null);
+  const [selectedL3, setSelectedL3] = useState<number | null>(null);
+
   useEffect(() => {
     fetchTemplates();
+    fetchCategories();
+    fetchRelations();
   }, []);
 
   const fetchTemplates = async () => {
@@ -46,17 +66,47 @@ export default function EmailTemplateManager() {
     }
   };
 
-  const fetchProducts = async () => {
+  const fetchCategories = async () => {
+    try {
+      const res = await fetch("/api/categories");
+      if (res.ok) {
+        const data = await res.json();
+        setCategories(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch categories:", err);
+    }
+  };
+
+  const fetchRelations = async () => {
+    try {
+      const res = await fetch("/api/category-relations");
+      if (res.ok) {
+        const data = await res.json();
+        setRelations(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch relations:", err);
+    }
+  };
+
+  const fetchProducts = async (categoryId?: number | null) => {
     try {
       setLoadingProducts(true);
-      // Fetch latest 50 published products
-      const res = await fetch("/api/products?limit=50&status=published");
+      // Fetch products, optionally filter by category
+      let url = "/api/products?limit=50&status=published";
+      if (categoryId) {
+        url += `&category_id=${categoryId}`;
+      }
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         const productList = data.data || [];
         setProducts(productList);
-        // Default select top 5
-        setSelectedProductIds(productList.slice(0, 5).map((p: any) => p.id));
+        // Only default select if no category filter (initial load)
+        if (!categoryId && selectedProductIds.length === 0) {
+          setSelectedProductIds(productList.slice(0, 5).map((p: any) => p.id));
+        }
       }
     } catch (err) {
       console.error("Failed to fetch products:", err);
@@ -69,8 +119,40 @@ export default function EmailTemplateManager() {
     setSelectedTemplate(t);
     setFormData({ subject: t.subject, body: t.body });
     if (t.key === 'new_product_promo') {
-      fetchProducts();
+      fetchProducts(selectedL3 || selectedL2 || selectedL1 || null);
     }
+  };
+
+  // Derived categories
+  const l1Categories = categories.filter(c => c.level === 1);
+  const l2Categories = useMemo(() => {
+    if (!selectedL1) return [];
+    const childIds = relations.filter(r => r.parent_category_id === selectedL1).map(r => r.child_category_id);
+    return categories.filter(c => c.level === 2 && childIds.includes(c.id));
+  }, [selectedL1, categories, relations]);
+  
+  const l3Categories = useMemo(() => {
+    if (!selectedL2) return [];
+    const childIds = relations.filter(r => r.parent_category_id === selectedL2).map(r => r.child_category_id);
+    return categories.filter(c => c.level === 3 && childIds.includes(c.id));
+  }, [selectedL2, categories, relations]);
+
+  const handleL1Change = (id: number) => {
+    setSelectedL1(id);
+    setSelectedL2(null);
+    setSelectedL3(null);
+    fetchProducts(id);
+  };
+
+  const handleL2Change = (id: number) => {
+    setSelectedL2(id);
+    setSelectedL3(null);
+    fetchProducts(id);
+  };
+
+  const handleL3Change = (id: number) => {
+    setSelectedL3(id);
+    fetchProducts(id);
   };
 
   const handleSave = async () => {
@@ -196,17 +278,14 @@ export default function EmailTemplateManager() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Template List */}
-        <div className="md:col-span-1 rounded-xl border border-border-light bg-card-light overflow-hidden">
-          <div className="p-4 border-b border-border-light bg-background-light">
-            <h3 className="font-bold text-text-primary-light">模板列表</h3>
-          </div>
-          <div className="divide-y divide-border-light">
-            {loading ? (
-              <p className="p-4 text-text-secondary-light">載入中...</p>
-            ) : templates.length === 0 ? (
-              <p className="p-4 text-text-secondary-light">無模板資料</p>
-            ) : (
-              templates.map((t) => (
+        <div className="md:col-span-1 space-y-4">
+          {/* Promo Templates */}
+          <div className="rounded-xl border border-border-light bg-card-light overflow-hidden">
+            <div className="p-4 border-b border-border-light bg-blue-50">
+              <h3 className="font-bold text-primary">行銷推廣</h3>
+            </div>
+            <div className="divide-y divide-border-light">
+              {templates.filter(t => t.key === 'new_product_promo').map((t) => (
                 <button
                   key={t.id}
                   onClick={() => handleSelect(t)}
@@ -220,8 +299,38 @@ export default function EmailTemplateManager() {
                     {t.subject}
                   </p>
                 </button>
-              ))
-            )}
+              ))}
+            </div>
+          </div>
+
+          {/* System Templates */}
+          <div className="rounded-xl border border-border-light bg-card-light overflow-hidden">
+            <div className="p-4 border-b border-border-light bg-background-light">
+              <h3 className="font-bold text-text-primary-light">系統通知</h3>
+            </div>
+            <div className="divide-y divide-border-light">
+              {loading ? (
+                <p className="p-4 text-text-secondary-light">載入中...</p>
+              ) : templates.length === 0 ? (
+                <p className="p-4 text-text-secondary-light">無模板資料</p>
+              ) : (
+                templates.filter(t => t.key !== 'new_product_promo').map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => handleSelect(t)}
+                    className={`w-full text-left p-4 hover:bg-background-light transition-colors ${selectedTemplate?.id === t.id ? "bg-primary/5 border-l-4 border-primary" : ""
+                      }`}
+                  >
+                    <p className="font-medium text-text-primary-light">
+                      {templateNames[t.key] || t.key}
+                    </p>
+                    <p className="text-xs text-text-secondary-light truncate mt-1">
+                      {t.subject}
+                    </p>
+                  </button>
+                ))
+              )}
+            </div>
           </div>
         </div>
 
@@ -267,10 +376,44 @@ export default function EmailTemplateManager() {
                   <label className="block text-sm font-bold text-gray-700 mb-2">
                     選擇要推廣的商品 (將顯示於 {"{product_list}"})
                   </label>
+
+                  {/* Category Filter */}
+                  <div className="flex gap-2 mb-3">
+                    <select
+                      value={selectedL1 || ""}
+                      onChange={(e) => handleL1Change(Number(e.target.value))}
+                      className="px-2 py-1 text-sm border rounded"
+                    >
+                      <option value="">全部一級分類</option>
+                      {l1Categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                    
+                    <select
+                      value={selectedL2 || ""}
+                      onChange={(e) => handleL2Change(Number(e.target.value))}
+                      className="px-2 py-1 text-sm border rounded"
+                      disabled={!selectedL1}
+                    >
+                      <option value="">全部二級分類</option>
+                      {l2Categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+
+                    <select
+                      value={selectedL3 || ""}
+                      onChange={(e) => handleL3Change(Number(e.target.value))}
+                      className="px-2 py-1 text-sm border rounded"
+                      disabled={!selectedL2}
+                    >
+                      <option value="">全部三級分類</option>
+                      {l3Categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+
                   {loadingProducts ? (
                     <p className="text-sm text-gray-500">載入商品中...</p>
                   ) : (
                     <div className="max-h-48 overflow-y-auto grid grid-cols-1 gap-2 border border-gray-300 rounded p-2 bg-white">
+                      {products.length === 0 && <p className="text-sm text-gray-400 p-2">無符合商品</p>}
                       {products.map(p => (
                         <label key={p.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-50 p-1 rounded">
                           <input

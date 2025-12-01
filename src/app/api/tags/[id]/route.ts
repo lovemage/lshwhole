@@ -37,7 +37,7 @@ export async function PUT(
     const { id } = await params;
     const admin = supabaseAdmin();
     const body = await request.json();
-    const { name, sort, description } = body;
+    const { name, sort, description, category } = body;
 
     const { data, error } = await admin
       .from("tags")
@@ -45,6 +45,7 @@ export async function PUT(
         name,
         sort,
         description,
+        category,
         updated_at: new Date().toISOString(),
       })
       .eq("id", id)
@@ -90,4 +91,3 @@ export async function DELETE(
     );
   }
 }
-

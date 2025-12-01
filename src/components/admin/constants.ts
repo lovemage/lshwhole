@@ -2,6 +2,7 @@ export const NAV_ITEMS = [
   { id: "dashboard", label: "儀表看板", icon: "dashboard" },
   { id: "announcements", label: "公告管理", icon: "campaign" },
   { id: "categories", label: "分類管理", icon: "category" },
+  { id: "tags", label: "標籤管理", icon: "label" },
   { id: "crawler", label: "爬蟲導入", icon: "cloud_download" },
   { id: "products", label: "商品管理", icon: "inventory_2" },
   { id: "members", label: "會員管理", icon: "group" },

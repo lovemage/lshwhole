@@ -4,12 +4,19 @@ import { supabaseAdmin } from "@/lib/supabase";
 export async function GET(request: NextRequest) {
   try {
     const admin = supabaseAdmin();
+    const { searchParams } = new URL(request.url);
+    const category = searchParams.get("category");
 
-    const { data, error } = await admin
+    let query = admin
       .from("tags")
       .select("*")
-      .eq("active", true)
-      .order("sort", { ascending: true });
+      .eq("active", true);
+
+    if (category) {
+      query = query.eq("category", category);
+    }
+
+    const { data, error } = await query.order("sort", { ascending: true });
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
@@ -29,7 +36,7 @@ export async function POST(request: NextRequest) {
   try {
     const admin = supabaseAdmin();
     const body = await request.json();
-    const { slug, name, sort, description } = body;
+    const { slug, name, sort, description, category } = body;
 
     if (!slug || !name) {
       return NextResponse.json(
@@ -45,6 +52,7 @@ export async function POST(request: NextRequest) {
         name,
         sort: sort || 0,
         description: description || "",
+        category: category || "A2", // Default to A2 (Product Attribute)
         active: true,
       })
       .select();
@@ -62,4 +70,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

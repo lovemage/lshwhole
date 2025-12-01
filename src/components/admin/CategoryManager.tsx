@@ -35,17 +35,11 @@ export default function CategoryManager() {
   const [categoryFormData, setCategoryFormData] = useState({ slug: "", name: "", sort: 0, description: "", icon: "", level: 1, retail_visible: true });
   const [categoryLoading, setCategoryLoading] = useState(false);
   const [showIconPicker, setShowIconPicker] = useState(false);
-  // 標籤管理狀態
-  const [showTagForm, setShowTagForm] = useState(false);
-  const [editingTagId, setEditingTagId] = useState<number | null>(null);
-  const [tagFormData, setTagFormData] = useState({ slug: "", name: "", sort: 0, description: "" });
-  const [tagLoading, setTagLoading] = useState(false);
   // 分類說明 Modal
   const [showCategoryHelp, setShowCategoryHelp] = useState(false);
 
   useEffect(() => {
     fetchCategories();
-    fetchTags();
     fetchCategoryRelations();
   }, []);
 
@@ -73,17 +67,6 @@ export default function CategoryManager() {
     }
   };
 
-  const fetchTags = async () => {
-    try {
-      const res = await fetch("/api/tags");
-      if (res.ok) {
-        const data = await res.json();
-        setTags(data);
-      }
-    } catch (err) {
-      console.error("Failed to fetch tags:", err);
-    }
-  };
 
   const isRelated = (parentId: number | null, childId: number) => {
     if (!parentId) return false;
@@ -174,48 +157,6 @@ export default function CategoryManager() {
     }
   };
 
-  const handleSaveTag = async () => {
-    if (!tagFormData.slug || !tagFormData.name) {
-      alert("請填寫 Slug 和名稱");
-      return;
-    }
-    try {
-      setTagLoading(true);
-      const method = editingTagId ? "PUT" : "POST";
-      const url = editingTagId ? `/api/tags/${editingTagId}` : "/api/tags";
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(tagFormData),
-      });
-      if (res.ok) {
-        alert(editingTagId ? "標籤已更新" : "標籤已建立");
-        setShowTagForm(false);
-        setEditingTagId(null);
-        setTagFormData({ slug: "", name: "", sort: 0, description: "" });
-        fetchTags();
-      }
-    } catch (err) {
-      console.error("Failed to save tag:", err);
-      alert("保存失敗");
-    } finally {
-      setTagLoading(false);
-    }
-  };
-
-  const handleDeleteTag = async (id: number) => {
-    if (!confirm("確定要刪除此標籤嗎？")) return;
-    try {
-      const res = await fetch(`/api/tags/${id}`, { method: "DELETE" });
-      if (res.ok) {
-        alert("標籤已刪除");
-        fetchTags();
-      }
-    } catch (err) {
-      console.error("Failed to delete tag:", err);
-      alert("刪除失敗");
-    }
-  };
 
   return (
     <div className="py-6 space-y-6">
@@ -782,124 +723,6 @@ export default function CategoryManager() {
         </div>
       )}
 
-      <div className="rounded-xl border border-border-light bg-card-light p-6">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-lg font-bold text-text-primary-light">標籤</h3>
-          <button
-            onClick={() => {
-              setShowTagForm(true);
-              setEditingTagId(null);
-              setTagFormData({ slug: "", name: "", sort: 0, description: "" });
-            }}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-white hover:bg-primary/90"
-          >
-            <span className="material-symbols-outlined text-sm">add</span>
-            <span>新增標籤</span>
-          </button>
-        </div>
-        <div className="space-y-2 max-h-72 overflow-y-auto">
-          {tags
-            .sort((a, b) => a.sort - b.sort)
-            .map((tag) => (
-              <div key={tag.id} className="p-3 rounded-lg bg-background-light border border-border-light">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <p className="font-medium text-text-primary-light">{tag.name}</p>
-                    <p className="text-xs text-text-secondary-light">{tag.slug}</p>
-                  </div>
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => {
-                        setEditingTagId(tag.id);
-                        setTagFormData({ slug: tag.slug, name: tag.name, sort: tag.sort, description: tag.description });
-                        setShowTagForm(true);
-                      }}
-                      className="text-xs px-2 py-1 bg-primary/20 text-primary rounded hover:bg-primary/30"
-                    >
-                      編輯
-                    </button>
-                    <button
-                      onClick={() => handleDeleteTag(tag.id)}
-                      className="text-xs px-2 py-1 bg-danger/20 text-danger rounded hover:bg-danger/30"
-                    >
-                      刪除
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          {tags.length === 0 && (
-            <p className="text-sm text-text-secondary-light">尚無標籤，點擊右上角「新增標籤」。</p>
-          )}
-        </div>
-      </div>
-
-      {showTagForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-card-light rounded-xl p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-bold text-text-primary-light mb-4">{editingTagId ? "編輯標籤" : "新增標籤"}</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-text-primary-light mb-1">Slug (英文大寫)</label>
-                <input
-                  type="text"
-                  value={tagFormData.slug}
-                  onChange={(e) => setTagFormData({ ...tagFormData, slug: e.target.value.toUpperCase() })}
-                  className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-                  placeholder="例：LIVE_BROADCAST"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-text-primary-light mb-1">名稱</label>
-                <input
-                  type="text"
-                  value={tagFormData.name}
-                  onChange={(e) => setTagFormData({ ...tagFormData, name: e.target.value })}
-                  className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-                  placeholder="例：直播商品"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-text-primary-light mb-1">排序</label>
-                <input
-                  type="number"
-                  value={tagFormData.sort}
-                  onChange={(e) => setTagFormData({ ...tagFormData, sort: parseInt(e.target.value) || 0 })}
-                  className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-text-primary-light mb-1">描述</label>
-                <textarea
-                  value={tagFormData.description}
-                  onChange={(e) => setTagFormData({ ...tagFormData, description: e.target.value })}
-                  className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-                  rows={3}
-                  placeholder="標籤描述（供管理員參考）"
-                />
-              </div>
-            </div>
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => {
-                  setShowTagForm(false);
-                  setEditingTagId(null);
-                }}
-                className="flex-1 px-4 py-2 rounded-lg border border-border-light text-text-primary-light hover:bg-background-light"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleSaveTag}
-                disabled={tagLoading}
-                className="flex-1 px-4 py-2 rounded-lg bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-50"
-              >
-                {tagLoading ? "保存中..." : "保存"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
