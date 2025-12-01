@@ -58,9 +58,17 @@ export default function TagManager() {
   const filteredTags = tags.filter((t) => t.category === selectedCategory || (!t.category && selectedCategory === "A2"));
 
   const handleSave = async () => {
-    if (!formData.slug || !formData.name) {
-      alert("請填寫 Slug 和名稱");
-      return;
+    // Validation
+    if (batchMode && !editingTagId) {
+      if (!batchInput.trim()) {
+        alert("請輸入標籤名稱");
+        return;
+      }
+    } else {
+      if (!formData.slug || !formData.name) {
+        alert("請填寫 Slug 和名稱");
+        return;
+      }
     }
 
     try {
