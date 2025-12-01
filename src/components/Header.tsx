@@ -8,7 +8,7 @@ import CartBadge from "@/components/CartBadge";
 
 interface Category { id: number; name: string; level: number; sort: number; icon?: string; retail_visible?: boolean; slug: string; }
 interface Relation { parent_category_id: number; child_category_id: number; }
-interface Tag { id: number; name: string; slug: string; sort: number; }
+interface Tag { id: number; name: string; slug: string; sort: number; category?: string; }
 
 export default function Header() {
   const router = useRouter();
@@ -20,6 +20,7 @@ export default function Header() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [relations, setRelations] = useState<Relation[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
+  const [activeCategoryIds, setActiveCategoryIds] = useState<number[]>([]);
   const [isMegaMenuOpen, setIsMegaMenuOpen] = useState(false);
   const [mobileCategoryOpen, setMobileCategoryOpen] = useState<number | null>(null); // For mobile accordion L1
   const [mobileL2Open, setMobileL2Open] = useState<number | null>(null); // For mobile accordion L2
@@ -27,14 +28,16 @@ export default function Header() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [cRes, rRes, tRes] = await Promise.all([
+        const [cRes, rRes, tRes, acRes] = await Promise.all([
           fetch("/api/categories"),
           fetch("/api/category-relations"),
           fetch("/api/tags"),
+          fetch("/api/categories/active-ids"),
         ]);
         if (cRes.ok) setCategories(await cRes.json());
         if (rRes.ok) setRelations(await rRes.json());
         if (tRes.ok) setTags(await tRes.json());
+        if (acRes.ok) setActiveCategoryIds(await acRes.json());
       } catch (e) {
         console.error("Failed to fetch menu data", e);
       }
@@ -100,10 +103,43 @@ export default function Header() {
   };
 
   // Hierarchy Logic
-  const l1Categories = useMemo(() => categories.filter(c => c.level === 1).sort((a, b) => a.sort - b.sort), [categories]);
+  // 計算哪些分類應該顯示（自己有商品，或者子分類有顯示）
+  const visibleCategoryIds = useMemo(() => {
+    const visible = new Set<number>();
+    const processing = new Set<number>(); // 避免循環依賴
+
+    const check = (id: number): boolean => {
+      if (processing.has(id)) return false; // 循環檢測
+      if (visible.has(id)) return true;
+
+      // 1. 自己有商品
+      if (activeCategoryIds.includes(id)) {
+        visible.add(id);
+        return true;
+      }
+
+      // 2. 子分類有顯示
+      processing.add(id);
+      const childIds = relations.filter(r => r.parent_category_id === id).map(r => r.child_category_id);
+      const hasVisibleChild = childIds.some(childId => check(childId));
+      processing.delete(id);
+
+      if (hasVisibleChild) {
+        visible.add(id);
+        return true;
+      }
+      return false;
+    };
+
+    categories.forEach(c => check(c.id));
+    return visible;
+  }, [categories, relations, activeCategoryIds]);
+
+  const l1Categories = useMemo(() => categories.filter(c => c.level === 1 && visibleCategoryIds.has(c.id)).sort((a, b) => a.sort - b.sort), [categories, visibleCategoryIds]);
+  
   const getChildren = (parentId: number, level: number) => {
     const childIds = relations.filter(r => r.parent_category_id === parentId).map(r => r.child_category_id);
-    return categories.filter(c => c.level === level && childIds.includes(c.id)).sort((a, b) => a.sort - b.sort);
+    return categories.filter(c => c.level === level && childIds.includes(c.id) && visibleCategoryIds.has(c.id)).sort((a, b) => a.sort - b.sort);
   };
 
   return (
@@ -331,15 +367,48 @@ export default function Header() {
                   ))}
                   
                   {/* Tags in Mobile */}
-                  <div className="mt-2 pt-2 border-t border-gray-100">
-                    <div className="text-xs font-bold text-gray-500 mb-1">標籤</div>
-                    <div className="flex flex-wrap gap-2">
-                      {tags.map(tag => (
-                        <Link key={tag.id} href={`/products?tag_id=${tag.id}`} onClick={() => setIsMobileMenuOpen(false)} className="px-2 py-1 bg-gray-100 rounded text-xs text-gray-700">
-                          {tag.name}
-                        </Link>
-                      ))}
-                    </div>
+                  <div className="mt-2 pt-2 border-t border-gray-100 flex flex-col gap-3">
+                    {/* A1 Tags */}
+                    {tags.filter(t => t.category === "A1").length > 0 && (
+                      <div>
+                        <div className="text-xs font-bold text-gray-500 mb-1">品牌分類</div>
+                        <div className="flex flex-wrap gap-2">
+                          {tags.filter(t => t.category === "A1").sort((a, b) => a.sort - b.sort).map(tag => (
+                            <Link key={tag.id} href={`/products?tag_id=${tag.id}`} onClick={() => setIsMobileMenuOpen(false)} className="px-2 py-1 bg-primary/10 text-primary rounded text-xs">
+                              {tag.name}
+                            </Link>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* A2 Tags */}
+                    {tags.filter(t => !t.category || t.category === "A2").length > 0 && (
+                      <div>
+                        <div className="text-xs font-bold text-gray-500 mb-1">商品分類</div>
+                        <div className="flex flex-wrap gap-2">
+                          {tags.filter(t => !t.category || t.category === "A2").sort((a, b) => a.sort - b.sort).map(tag => (
+                            <Link key={tag.id} href={`/products?tag_id=${tag.id}`} onClick={() => setIsMobileMenuOpen(false)} className="px-2 py-1 bg-blue-50 text-blue-600 rounded text-xs">
+                              {tag.name}
+                            </Link>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* A3 Tags */}
+                    {tags.filter(t => t.category === "A3").length > 0 && (
+                      <div>
+                         <div className="text-xs font-bold text-gray-500 mb-1">活動分類</div>
+                         <div className="flex flex-wrap gap-2">
+                          {tags.filter(t => t.category === "A3").sort((a, b) => a.sort - b.sort).map(tag => (
+                            <Link key={tag.id} href={`/products?tag_id=${tag.id}`} onClick={() => setIsMobileMenuOpen(false)} className="px-2 py-1 bg-red-50 text-red-600 rounded text-xs">
+                              {tag.name}
+                            </Link>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
