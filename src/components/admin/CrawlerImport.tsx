@@ -21,6 +21,7 @@ interface Tag {
   description: string;
   active: boolean;
   created_at: string;
+  category?: string;
 }
 
 export default function CrawlerImport() {
@@ -39,6 +40,7 @@ export default function CrawlerImport() {
   const [selectedCrawlerL2, setSelectedCrawlerL2] = useState<number | null>(null);
   const [selectedCrawlerL3, setSelectedCrawlerL3] = useState<number | null>(null);
   const [selectedCrawlerTags, setSelectedCrawlerTags] = useState<number[]>([]);
+  const [tagSearchTerm, setTagSearchTerm] = useState("");
 
   const [showPublish, setShowPublish] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -865,28 +867,89 @@ export default function CrawlerImport() {
           </div>
         </div>
         <div className="mt-3">
-          <label className="block text-sm font-medium text-text-primary-light mb-2">標籤（可多選）</label>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-48 overflow-y-auto">
-            {tags
-              .sort((a, b) => a.sort - b.sort)
-              .map((tag) => (
-                <label key={tag.id} className="flex items-center gap-2 rounded-lg border border-border-light bg-background-light px-3 py-2">
-                  <input
-                    type="checkbox"
-                    checked={selectedCrawlerTags.includes(tag.id)}
-                    onChange={(e) => {
-                      setSelectedCrawlerTags((prev) =>
-                        e.target.checked ? [...prev, tag.id] : prev.filter((id) => id !== tag.id)
-                      );
-                    }}
-                  />
-                  <span className="text-sm text-text-primary-light">{tag.name}</span>
-                  <span className="text-xs text-text-secondary-light">{tag.slug}</span>
-                </label>
-              ))}
-            {tags.length === 0 && <p className="text-sm text-text-secondary-light">
-              尚無標籤
-            </p>}
+          <div className="flex items-center justify-between mb-2">
+            <label className="block text-sm font-medium text-text-primary-light">標籤（可多選）</label>
+            <input 
+              type="text" 
+              placeholder="搜尋標籤..." 
+              value={tagSearchTerm}
+              onChange={(e) => setTagSearchTerm(e.target.value)}
+              className="text-xs px-2 py-1 rounded border border-border-light bg-background-light"
+            />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-h-60 overflow-y-auto border border-border-light rounded-lg p-2 bg-background-light">
+            {/* A1: Brand */}
+            <div>
+              <div className="text-xs font-bold text-text-secondary-light mb-2 sticky top-0 bg-background-light py-1 z-10 border-b border-border-light">品牌分類 (A1)</div>
+              <div className="space-y-1">
+                {tags
+                  .filter(t => (t.category === 'A1') && (t.name.toLowerCase().includes(tagSearchTerm.toLowerCase()) || t.slug.toLowerCase().includes(tagSearchTerm.toLowerCase())))
+                  .sort((a, b) => a.sort - b.sort)
+                  .map(tag => (
+                    <label key={tag.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-card-light cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedCrawlerTags.includes(tag.id)}
+                        onChange={(e) => {
+                          setSelectedCrawlerTags((prev) =>
+                            e.target.checked ? [...prev, tag.id] : prev.filter((id) => id !== tag.id)
+                          );
+                        }}
+                        className="rounded border-gray-300 text-primary focus:ring-primary"
+                      />
+                      <span className="text-sm text-text-primary-light">{tag.name}</span>
+                    </label>
+                  ))}
+              </div>
+            </div>
+            {/* A2: Attributes */}
+            <div>
+              <div className="text-xs font-bold text-text-secondary-light mb-2 sticky top-0 bg-background-light py-1 z-10 border-b border-border-light">商品屬性 (A2)</div>
+              <div className="space-y-1">
+                {tags
+                  .filter(t => (!t.category || t.category === 'A2') && (t.name.toLowerCase().includes(tagSearchTerm.toLowerCase()) || t.slug.toLowerCase().includes(tagSearchTerm.toLowerCase())))
+                  .sort((a, b) => a.sort - b.sort)
+                  .map(tag => (
+                    <label key={tag.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-card-light cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedCrawlerTags.includes(tag.id)}
+                        onChange={(e) => {
+                          setSelectedCrawlerTags((prev) =>
+                            e.target.checked ? [...prev, tag.id] : prev.filter((id) => id !== tag.id)
+                          );
+                        }}
+                        className="rounded border-gray-300 text-primary focus:ring-primary"
+                      />
+                      <span className="text-sm text-text-primary-light">{tag.name}</span>
+                    </label>
+                  ))}
+              </div>
+            </div>
+            {/* A3: Activity */}
+            <div>
+              <div className="text-xs font-bold text-text-secondary-light mb-2 sticky top-0 bg-background-light py-1 z-10 border-b border-border-light">活動分類 (A3)</div>
+              <div className="space-y-1">
+                {tags
+                  .filter(t => (t.category === 'A3') && (t.name.toLowerCase().includes(tagSearchTerm.toLowerCase()) || t.slug.toLowerCase().includes(tagSearchTerm.toLowerCase())))
+                  .sort((a, b) => a.sort - b.sort)
+                  .map(tag => (
+                    <label key={tag.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-card-light cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedCrawlerTags.includes(tag.id)}
+                        onChange={(e) => {
+                          setSelectedCrawlerTags((prev) =>
+                            e.target.checked ? [...prev, tag.id] : prev.filter((id) => id !== tag.id)
+                          );
+                        }}
+                        className="rounded border-gray-300 text-primary focus:ring-primary"
+                      />
+                      <span className="text-sm text-text-primary-light">{tag.name}</span>
+                    </label>
+                  ))}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1285,16 +1348,28 @@ export default function CrawlerImport() {
                 {/* 標籤選擇（共用選擇狀態） */}
                 <div>
                   <div className="text-sm text-text-secondary-light mb-1">標籤</div>
-                  <div className="flex flex-wrap gap-2">
-                    {tags.map((t) => (
-                      <label key={t.id} className="inline-flex items-center gap-1 text-sm">
-                        <input type="checkbox" checked={selectedCrawlerTags.includes(t.id)} onChange={(e) => {
-                          if (e.target.checked) setSelectedCrawlerTags([...selectedCrawlerTags, t.id]);
-                          else setSelectedCrawlerTags(selectedCrawlerTags.filter(x => x !== t.id));
-                        }} />
-                        <span>{t.name}</span>
-                      </label>
-                    ))}
+                  <div className="max-h-40 overflow-y-auto border border-border-light rounded p-2">
+                    {["A1", "A2", "A3"].map(cat => {
+                      const catName = cat === "A1" ? "品牌" : cat === "A2" ? "屬性" : "活動";
+                      const catTags = tags.filter(t => t.category === cat || (!t.category && cat === "A2"));
+                      if (catTags.length === 0) return null;
+                      return (
+                        <div key={cat} className="mb-2 last:mb-0">
+                          <div className="text-xs font-bold text-text-secondary-light mb-1">{catName}</div>
+                          <div className="flex flex-wrap gap-2">
+                            {catTags.map((t) => (
+                              <label key={t.id} className="inline-flex items-center gap-1 text-sm bg-white border border-border-light px-2 py-1 rounded">
+                                <input type="checkbox" checked={selectedCrawlerTags.includes(t.id)} onChange={(e) => {
+                                  if (e.target.checked) setSelectedCrawlerTags([...selectedCrawlerTags, t.id]);
+                                  else setSelectedCrawlerTags(selectedCrawlerTags.filter(x => x !== t.id));
+                                }} />
+                                <span>{t.name}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
                     {tags.length === 0 && <div className="text-xs text-text-secondary-light">尚無標籤</div>}
                   </div>
                 </div>

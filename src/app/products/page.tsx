@@ -18,7 +18,7 @@ interface RetailProduct {
 
 interface Category { id: number; name: string; level: number; sort: number; icon?: string; retail_visible?: boolean; }
 interface Relation { parent_category_id: number; child_category_id: number; }
-interface Tag { id: number; name: string; slug: string; sort: number; }
+interface Tag { id: number; name: string; slug: string; sort: number; category?: string; }
 
 export default function ProductsPage() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -245,6 +245,96 @@ export default function ProductsPage() {
 
             {/* 四層分類導航 */}
             <div className="space-y-4">
+              {/* 商品標籤 - 移到分類上方並改為下拉 */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* A1: Brand Tags - Dropdown */}
+                <div className="relative group">
+                   <select
+                    value={tags.find(t => t.id === selectedTagId && t.category === "A1") ? selectedTagId! : ""}
+                    onChange={(e) => {
+                       const val = e.target.value;
+                       handleTagChange(val ? Number(val) : null);
+                    }}
+                    className={`w-full px-4 py-2 border rounded-lg appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30 ${
+                      tags.find(t => t.id === selectedTagId && t.category === "A1") 
+                        ? "border-primary bg-primary text-white" 
+                        : "border-gray-300 bg-white text-gray-700"
+                    }`}
+                   >
+                    <option value="" className="bg-white text-gray-700">選擇品牌分類</option>
+                    {tags
+                      .filter(t => t.category === "A1")
+                      .sort((a, b) => a.slug.localeCompare(b.slug))
+                      .map(t => (
+                        <option key={t.id} value={t.id} className="bg-white text-gray-700">{t.name}</option>
+                      ))}
+                   </select>
+                   <div className={`absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none ${
+                      tags.find(t => t.id === selectedTagId && t.category === "A1") ? "text-white" : "text-gray-500"
+                   }`}>
+                     <span className="material-symbols-outlined">expand_more</span>
+                   </div>
+                </div>
+
+                {/* A2: Attribute Tags - Dropdown */}
+                <div className="relative group">
+                   <select
+                    value={tags.find(t => t.id === selectedTagId && (!t.category || t.category === "A2")) ? selectedTagId! : ""}
+                    onChange={(e) => {
+                       const val = e.target.value;
+                       handleTagChange(val ? Number(val) : null);
+                    }}
+                    className={`w-full px-4 py-2 border rounded-lg appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30 ${
+                      tags.find(t => t.id === selectedTagId && (!t.category || t.category === "A2"))
+                        ? "border-blue-500 bg-blue-500 text-white" 
+                        : "border-gray-300 bg-white text-gray-700"
+                    }`}
+                   >
+                    <option value="" className="bg-white text-gray-700">選擇商品分類</option>
+                    {tags
+                      .filter(t => !t.category || t.category === "A2")
+                      .sort((a, b) => a.sort - b.sort)
+                      .map(t => (
+                        <option key={t.id} value={t.id} className="bg-white text-gray-700">{t.name}</option>
+                      ))}
+                   </select>
+                    <div className={`absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none ${
+                      tags.find(t => t.id === selectedTagId && (!t.category || t.category === "A2")) ? "text-white" : "text-gray-500"
+                   }`}>
+                     <span className="material-symbols-outlined">expand_more</span>
+                   </div>
+                </div>
+
+                {/* A3: Activity Tags - Dropdown */}
+                <div className="relative group">
+                   <select
+                    value={tags.find(t => t.id === selectedTagId && t.category === "A3") ? selectedTagId! : ""}
+                    onChange={(e) => {
+                       const val = e.target.value;
+                       handleTagChange(val ? Number(val) : null);
+                    }}
+                    className={`w-full px-4 py-2 border rounded-lg appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30 ${
+                      tags.find(t => t.id === selectedTagId && t.category === "A3") 
+                        ? "border-red-500 bg-red-500 text-white" 
+                        : "border-gray-300 bg-white text-gray-700"
+                    }`}
+                   >
+                    <option value="" className="bg-white text-gray-700">選擇活動分類</option>
+                    {tags
+                      .filter(t => t.category === "A3")
+                      .sort((a, b) => a.sort - b.sort)
+                      .map(t => (
+                        <option key={t.id} value={t.id} className="bg-white text-gray-700">{t.name}</option>
+                      ))}
+                   </select>
+                    <div className={`absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none ${
+                      tags.find(t => t.id === selectedTagId && t.category === "A3") ? "text-white" : "text-gray-500"
+                   }`}>
+                     <span className="material-symbols-outlined">expand_more</span>
+                   </div>
+                </div>
+              </div>
+
               {/* L1 分類 */}
               <div>
                 <h3 className="text-sm font-medium text-gray-700 mb-2">國家/地區</h3>
@@ -360,38 +450,6 @@ export default function ProductsPage() {
                           )
                         )}
                         <span>{c.name}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* 商品標籤 */}
-              {tags.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-medium text-gray-700 mb-2">商品標籤</h3>
-                  <div className="flex gap-2 flex-wrap">
-                    <button
-                      onClick={() => handleTagChange(null)}
-                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                        selectedTagId === null
-                          ? "bg-purple-500 text-white"
-                          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                      }`}
-                    >
-                      全部
-                    </button>
-                    {tags.map((tag) => (
-                      <button
-                        key={tag.id}
-                        onClick={() => handleTagChange(tag.id)}
-                        className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                          selectedTagId === tag.id
-                            ? "bg-purple-500 text-white"
-                            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                        }`}
-                      >
-                        {tag.name}
                       </button>
                     ))}
                   </div>

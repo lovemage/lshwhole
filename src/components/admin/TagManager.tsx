@@ -33,6 +33,8 @@ export default function TagManager() {
     category: "A1",
   });
   const [formLoading, setFormLoading] = useState(false);
+  const [batchInput, setBatchInput] = useState("");
+  const [batchMode, setBatchMode] = useState(false);
 
   useEffect(() => {
     fetchTags();
@@ -63,24 +65,72 @@ export default function TagManager() {
 
     try {
       setFormLoading(true);
-      const method = editingTagId ? "PUT" : "POST";
-      const url = editingTagId ? `/api/tags/${editingTagId}` : "/api/tags";
       
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
-
-      if (res.ok) {
-        alert(editingTagId ? "標籤已更新" : "標籤已建立");
+      if (batchMode && !editingTagId) {
+        // Batch creation
+        const lines = batchInput.split("\n").filter(l => l.trim());
+        let successCount = 0;
+        
+        for (const line of lines) {
+          // Format: Name (Slug is auto-generated) OR Name|Slug
+          let name = line.trim();
+          let slug = "";
+          
+          if (line.includes("|")) {
+            [name, slug] = line.split("|").map(s => s.trim());
+          }
+          
+          if (!slug) {
+            // Auto generate slug
+            const prefix = formData.category === "A1" ? "BRAND_" : formData.category === "A3" ? "PROMO_" : "ATTR_";
+            // Simple slugify: UPPERCASE, replace spaces/special chars with _
+            const slugBase = name.toUpperCase().replace(/[^A-Z0-9]/g, "_");
+            slug = `${prefix}${slugBase}`;
+          }
+          
+          const payload = {
+            ...formData,
+            name,
+            slug,
+            sort: 0, // Default sort
+          };
+          
+          const res = await fetch("/api/tags", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          
+          if (res.ok) successCount++;
+        }
+        
+        alert(`批量建立完成，成功 ${successCount} 筆`);
         setShowForm(false);
-        setEditingTagId(null);
-        setFormData({ slug: "", name: "", sort: 0, description: "", category: selectedCategory });
+        setBatchInput("");
+        setBatchMode(false);
         fetchTags();
+        
       } else {
-        const j = await res.json().catch(() => ({}));
-        alert(j?.error || "保存失敗");
+        // Single creation/edit
+        const method = editingTagId ? "PUT" : "POST";
+        const url = editingTagId ? `/api/tags/${editingTagId}` : "/api/tags";
+        
+        const res = await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(formData),
+        });
+
+        if (res.ok) {
+          alert(editingTagId ? "標籤已更新" : "標籤已建立");
+          setShowForm(false);
+          setEditingTagId(null);
+          setFormData({ slug: "", name: "", sort: 0, description: "", category: selectedCategory });
+          fetchTags();
+        } else {
+          const j = await res.json().catch(() => ({}));
+          alert(j?.error || "保存失敗");
+        }
       }
     } catch (err) {
       console.error("Failed to save tag:", err);
@@ -107,6 +157,8 @@ export default function TagManager() {
   const openAdd = () => {
     setEditingTagId(null);
     setFormData({ slug: "", name: "", sort: 0, description: "", category: selectedCategory });
+    setBatchMode(false);
+    setBatchInput("");
     setShowForm(true);
   };
 
@@ -250,75 +302,126 @@ export default function TagManager() {
                   {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-text-primary-light mb-1">
-                  Slug (英文代碼)
-                </label>
-                <input
-                  type="text"
-                  value={formData.slug}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      slug: e.target.value.toUpperCase(),
-                    })
-                  }
-                  className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-                  placeholder={formData.category === "A1" ? "BRAND_NIKE" : "ATTR_MEN"}
-                />
-                <p className="text-xs text-text-secondary-light mt-1">
-                  {formData.category === "A1" ? "品牌建議使用 BRAND_ 開頭" : formData.category === "A3" ? "活動建議使用 PROMO_ 開頭" : ""}
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-text-primary-light mb-1">
-                  名稱
-                </label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      name: e.target.value,
-                    })
-                  }
-                  className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-                  placeholder="例：Nike"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-text-primary-light mb-1">
-                  排序
-                </label>
-                <input
-                  type="number"
-                  value={formData.sort}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      sort: parseInt(e.target.value) || 0,
-                    })
-                  }
-                  className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-text-primary-light mb-1">
-                  描述
-                </label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      description: e.target.value,
-                    })
-                  }
-                  className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-                  rows={3}
-                />
-              </div>
+              
+              {!editingTagId && (
+                <div className="flex items-center gap-2 mb-2">
+                   <input
+                    type="checkbox"
+                    id="batchMode"
+                    checked={batchMode}
+                    onChange={(e) => setBatchMode(e.target.checked)}
+                    className="rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <label htmlFor="batchMode" className="text-sm font-medium text-text-primary-light cursor-pointer">
+                    批量輸入模式
+                  </label>
+                </div>
+              )}
+
+              {batchMode ? (
+                <div>
+                   <label className="block text-sm font-medium text-text-primary-light mb-1">
+                    批量輸入名稱 (一行一個)
+                  </label>
+                  <p className="text-xs text-text-secondary-light mb-2">
+                    格式: 名稱 (Slug自動生成) 或 名稱|Slug
+                  </p>
+                  <textarea
+                    value={batchInput}
+                    onChange={(e) => setBatchInput(e.target.value)}
+                    className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm min-h-[200px]"
+                    placeholder="Nike
+Adidas|BRAND_ADIDAS
+Puma"
+                  />
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary-light mb-1">
+                      Slug (英文代碼)
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={formData.slug}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            slug: e.target.value.toUpperCase(),
+                          })
+                        }
+                        className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                        placeholder={formData.category === "A1" ? "BRAND_NIKE" : "ATTR_MEN"}
+                      />
+                      {!editingTagId && (
+                        <button
+                          onClick={() => {
+                             const prefix = formData.category === "A1" ? "BRAND_" : formData.category === "A3" ? "PROMO_" : "ATTR_";
+                             const slugBase = formData.name.toUpperCase().replace(/[^A-Z0-9]/g, "_");
+                             setFormData({...formData, slug: `${prefix}${slugBase}`});
+                          }}
+                          className="px-3 py-1 bg-gray-100 text-xs rounded hover:bg-gray-200 whitespace-nowrap"
+                        >
+                          自動生成
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-xs text-text-secondary-light mt-1">
+                      {formData.category === "A1" ? "品牌建議使用 BRAND_ 開頭" : formData.category === "A3" ? "活動建議使用 PROMO_ 開頭" : ""}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary-light mb-1">
+                      名稱
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.name}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          name: e.target.value,
+                        })
+                      }
+                      className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                      placeholder="例：Nike"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary-light mb-1">
+                      排序
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.sort}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          sort: parseInt(e.target.value) || 0,
+                        })
+                      }
+                      className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary-light mb-1">
+                      描述
+                    </label>
+                    <textarea
+                      value={formData.description}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          description: e.target.value,
+                        })
+                      }
+                      className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                      rows={3}
+                    />
+                  </div>
+                </>
+              )}
             </div>
             <div className="flex gap-3 mt-6">
               <button
