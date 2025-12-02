@@ -72,6 +72,9 @@ export default function ProductsPage() {
 
   // Tag Sections Expanded State (Default: A1 expanded, others collapsed)
   const [expandedTagSections, setExpandedTagSections] = useState<Set<string>>(new Set(['A1']));
+  
+  // Brand Filter Letter
+  const [brandLetter, setBrandLetter] = useState<string>('All');
 
   // 商品
   const [products, setProducts] = useState<RetailProduct[]>([]);
@@ -243,9 +246,44 @@ export default function ProductsPage() {
     if (filteredTags.length === 0) return null;
 
     const isExpanded = expandedTagSections.has(categoryCode);
+    const isBrandSection = categoryCode === 'A1';
+
+    // Grouping logic for Brands (A1)
+    let displayTags = filteredTags;
+    let alphabet: string[] = [];
+
+    if (isBrandSection) {
+        // Extract unique first letters
+        const letters = new Set<string>();
+        filteredTags.forEach(t => {
+            const first = t.name.charAt(0).toUpperCase();
+            // Check if it is a letter
+            if (/[A-Z]/.test(first)) {
+                letters.add(first);
+            } else {
+                letters.add('#');
+            }
+        });
+        alphabet = Array.from(letters).sort((a, b) => {
+             if (a === '#') return 1;
+             if (b === '#') return -1;
+             return a.localeCompare(b);
+        });
+
+        // Filter based on selected letter
+        if (brandLetter !== 'All') {
+            displayTags = filteredTags.filter(t => {
+                const first = t.name.charAt(0).toUpperCase();
+                if (brandLetter === '#') {
+                    return !/[A-Z]/.test(first);
+                }
+                return first === brandLetter;
+            });
+        }
+    }
 
     return (
-      <div className="mb-4 last:mb-0 border border-gray-100 rounded-2xl overflow-hidden">
+      <div className="mb-4 last:mb-0 border border-gray-100 rounded-2xl overflow-hidden bg-white">
         <button 
           onClick={() => toggleTagSection(categoryCode)}
           className="w-full flex items-center justify-between p-4 bg-gray-50/50 hover:bg-gray-50 transition-colors"
@@ -259,24 +297,57 @@ export default function ProductsPage() {
           </span>
         </button>
         
-        <div className={`transition-all duration-300 ease-in-out ${isExpanded ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"}`}>
-          <div className="p-4 pt-0 flex flex-wrap gap-2">
-            {filteredTags.map(tag => {
-              const isSelected = selectedTagIds.includes(tag.id);
-              return (
-                <button
-                  key={tag.id}
-                  onClick={() => toggleTag(tag.id)}
-                  className={`px-4 py-2 rounded-full text-sm font-bold transition-all duration-300 transform active:scale-95 ${
-                    isSelected
-                      ? `${colorClass} text-white shadow-md shadow-primary/30 ring-2 ring-white`
-                      : "bg-white text-gray-600 border border-gray-100 hover:border-primary/30 hover:shadow-sm"
-                  }`}
-                >
-                  {tag.name}
-                </button>
-              );
-            })}
+        <div className={`transition-all duration-300 ease-in-out ${isExpanded ? "max-h-[800px] opacity-100" : "max-h-0 opacity-0"}`}>
+          <div className="p-4 pt-0">
+             {isBrandSection && (
+                 <div className="mb-4 flex flex-wrap gap-1 border-b border-gray-100 pb-3">
+                     <button
+                        onClick={() => setBrandLetter('All')}
+                        className={`px-2 py-1 text-xs font-bold rounded-md transition-colors ${
+                            brandLetter === 'All' 
+                            ? 'bg-gray-800 text-white' 
+                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                        }`}
+                     >
+                        ALL
+                     </button>
+                     {alphabet.map(letter => (
+                         <button
+                            key={letter}
+                            onClick={() => setBrandLetter(letter)}
+                            className={`w-6 h-6 flex items-center justify-center text-xs font-bold rounded-md transition-colors ${
+                                brandLetter === letter
+                                ? 'bg-primary text-white'
+                                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                            }`}
+                         >
+                            {letter}
+                         </button>
+                     ))}
+                 </div>
+             )}
+             
+             <div className={`${isBrandSection ? "max-h-[400px] overflow-y-auto pr-1 custom-scrollbar" : ""} flex flex-wrap gap-2`}>
+                {displayTags.map(tag => {
+                const isSelected = selectedTagIds.includes(tag.id);
+                return (
+                    <button
+                    key={tag.id}
+                    onClick={() => toggleTag(tag.id)}
+                    className={`px-4 py-2 rounded-full text-sm font-bold transition-all duration-300 transform active:scale-95 ${
+                        isSelected
+                        ? `${colorClass} text-white shadow-md shadow-primary/30 ring-2 ring-white`
+                        : "bg-white text-gray-600 border border-gray-100 hover:border-primary/30 hover:shadow-sm"
+                    }`}
+                    >
+                    {tag.name}
+                    </button>
+                );
+                })}
+                {displayTags.length === 0 && (
+                    <p className="text-sm text-gray-400 w-full text-center py-4">沒有相關標籤</p>
+                )}
+             </div>
           </div>
         </div>
       </div>
