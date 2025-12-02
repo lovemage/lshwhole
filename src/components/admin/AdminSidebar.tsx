@@ -39,7 +39,7 @@ export default function AdminSidebar({
   );
 
   return (
-    <aside className="flex w-64 flex-col bg-sidebar-dark text-text-primary-dark p-4">
+    <aside className="flex w-64 flex-col bg-sidebar-dark text-text-primary-dark p-4 h-full overflow-y-auto">
       <div className="flex items-center gap-3 p-4">
         <div className="size-8 text-primary">
           <svg fill="none" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">

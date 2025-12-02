@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     const offset = Number(searchParams.get("offset") || "0");
     const search = searchParams.get("search") || "";
     const categoryIdRaw = searchParams.get("category_id");
-    const tagIdRaw = searchParams.get("tag_id");
+    const tagIdsRaw = searchParams.get("tag_ids");
 
     // 嘗試根據 Authorization header 取得目前會員 tier（零售 / 批發 / VIP）
     let userTier: "retail" | "wholesale" | "vip" | null = null;
@@ -128,22 +128,26 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 若有傳入標籤，篩選有該標籤的商品
-    if (tagIdRaw) {
-      const tagId = Number(tagIdRaw);
-      const { data: ptm, error: tagMapErr } = await admin
-        .from("product_tag_map")
-        .select("product_id")
-        .eq("tag_id", tagId);
-      if (tagMapErr) return NextResponse.json({ error: tagMapErr.message }, { status: 400 });
+    // 若有傳入標籤，篩選有該標籤的商品 (支援多選, OR 邏輯)
+    if (tagIdsRaw) {
+      const tagIds = tagIdsRaw.split(',').map(Number).filter(n => !isNaN(n));
+      
+      if (tagIds.length > 0) {
+        const { data: ptm, error: tagMapErr } = await admin
+          .from("product_tag_map")
+          .select("product_id")
+          .in("tag_id", tagIds);
+        
+        if (tagMapErr) return NextResponse.json({ error: tagMapErr.message }, { status: 400 });
 
-      const tagProductIds = (ptm || []).map((x: any) => x.product_id);
+        const tagProductIds = Array.from(new Set((ptm || []).map((x: any) => x.product_id)));
 
-      // 如果已有分類篩選，取交集；否則直接使用標籤篩選結果
-      if (filteredProductIds !== null) {
-        filteredProductIds = filteredProductIds.filter(id => tagProductIds.includes(id));
-      } else {
-        filteredProductIds = tagProductIds;
+        // 如果已有分類篩選，取交集；否則直接使用標籤篩選結果
+        if (filteredProductIds !== null) {
+          filteredProductIds = filteredProductIds.filter(id => tagProductIds.includes(id));
+        } else {
+          filteredProductIds = tagProductIds;
+        }
       }
     }
 
@@ -159,7 +163,10 @@ export async function GET(request: NextRequest) {
 
     const ids = (products || []).map((p: any) => p.id);
     let coverMap = new Map<number, string>();
+    let tagsMap = new Map<number, any[]>();
+
     if (ids.length > 0) {
+      // Fetch Images
       const { data: imgs, error: imgErr } = await admin
         .from("product_images")
         .select("product_id, url, sort")
@@ -177,6 +184,24 @@ export async function GET(request: NextRequest) {
       coverMap = new Map(
         Array.from(byProd.entries()).map(([pid, v]) => [pid, v.url])
       );
+
+      // Fetch Tags
+      const { data: tagsData, error: tagsErr } = await admin
+        .from("product_tag_map")
+        .select("product_id, tag_id, tags(id, name, slug, category, sort)")
+        .in("product_id", ids);
+
+      if (!tagsErr && tagsData) {
+        tagsData.forEach((item: any) => {
+          const pid = item.product_id;
+          const tag = item.tags;
+          if (tag) {
+            const currentTags = tagsMap.get(pid) || [];
+            currentTags.push(tag);
+            tagsMap.set(pid, currentTags);
+          }
+        });
+      }
     }
 
     const result = (products || []).map((p: any) => ({
@@ -186,6 +211,7 @@ export async function GET(request: NextRequest) {
       wholesale_price_twd:
         isWholesaleTier && p.wholesale_price_visible ? p.wholesale_price_twd : null,
       cover_image_url: coverMap.get(p.id) || null,
+      tags: (tagsMap.get(p.id) || []).sort((a, b) => (a.sort || 0) - (b.sort || 0)),
     }));
 
     return NextResponse.json({ data: result, count: count || 0 });
@@ -194,4 +220,3 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
-

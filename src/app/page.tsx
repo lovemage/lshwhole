@@ -22,6 +22,7 @@ export default function HomePage() {
     id: number;
     title: string;
     retail_price_twd: number | null;
+    wholesale_price_twd: number | null;
     cover_image_url: string | null;
   }
 
@@ -162,353 +163,219 @@ export default function HomePage() {
     })();
   }, []);
 
+  const renderProductCard = (product: any, isLimited = false) => {
+    const isWholesale = userTier === "wholesale" || userTier === "vip";
+    const price = isWholesale ? (product.wholesale_price_twd ?? product.retail_price_twd) : product.retail_price_twd;
+    const retailPrice = product.retail_price_twd;
+
+    return (
+      <Link
+        key={product.id}
+        href={`/products/${product.id}`}
+        className="group flex flex-col bg-white rounded-[1.5rem] sm:rounded-[2rem] p-3 hover:shadow-[0_15px_30px_-5px_rgba(0,0,0,0.05)] transition-all duration-300 border border-transparent hover:border-primary/20 hover:-translate-y-1.5"
+      >
+        <div className="aspect-square w-full overflow-hidden rounded-2xl bg-gray-50 relative mb-3">
+          {isLimited && (
+             <div className="absolute top-2 left-2 z-10">
+                <CountdownTimer endTime={product.limited_time_end} className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-lg shadow-sm" />
+             </div>
+          )}
+          <img
+            src={product.cover_image_url || "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?q=80&w=1200&auto=format&fit=crop"}
+            alt={product.title}
+            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+          />
+          {/* Quick View Button (Desktop) */}
+          <div className="absolute bottom-3 right-3 translate-y-10 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300">
+             <div className="w-10 h-10 bg-white rounded-full shadow-lg flex items-center justify-center text-primary hover:bg-primary hover:text-white transition-colors">
+                <span className="material-symbols-outlined text-[20px]">arrow_forward</span>
+             </div>
+          </div>
+        </div>
+        
+        <div className="flex flex-col grow px-1">
+          <h3 className="text-[15px] text-gray-700 leading-snug grow line-clamp-2 font-bold mb-2 group-hover:text-primary transition-colors tracking-tight">
+            {product.title || product.title_zh || product.title_original}
+          </h3>
+          
+          <div className="mt-auto flex items-end justify-between border-t border-gray-50 pt-3">
+            <div className="flex flex-col">
+              {userTier === 'guest' ? (
+                  <p className="text-xs text-gray-400 font-medium bg-gray-100 px-2 py-1 rounded-md">登入查看價格</p>
+              ) : (
+                  <>
+                    <div className="flex flex-col">
+                      <span className={`text-lg font-black tracking-tight ${isWholesale ? 'text-primary' : 'text-gray-800'}`}>
+                        NT$ {price?.toLocaleString() ?? '???'}
+                      </span>
+                      {isWholesale && retailPrice && (
+                          <span className="text-xs text-gray-300 line-through decoration-gray-300">NT$ {retailPrice.toLocaleString()}</span>
+                      )}
+                    </div>
+                  </>
+              )}
+            </div>
+            
+            {/* Cart Icon */}
+            <button className="w-8 h-8 rounded-full bg-gray-50 text-gray-400 flex items-center justify-center hover:bg-primary hover:text-white transition-colors group-hover:scale-110">
+               <span className="material-symbols-outlined text-[18px]">shopping_bag</span>
+            </button>
+          </div>
+        </div>
+      </Link>
+    );
+  };
+
+  const SectionHeader = ({ title, icon, colorClass = "text-gray-900" }: { title: string, icon?: string, colorClass?: string }) => (
+    <div className="flex justify-center items-center mb-8 relative">
+       <div className="absolute inset-0 flex items-center" aria-hidden="true">
+          <div className="w-full border-t border-dashed border-gray-200"></div>
+       </div>
+       <div className="relative flex items-center gap-2 bg-[#f8f8f5] px-6 py-2 rounded-full border border-gray-100 shadow-sm">
+          {icon && <span className={`material-symbols-outlined ${colorClass}`}>{icon}</span>}
+          <h2 className={`text-xl font-black tracking-tight ${colorClass}`}>{title}</h2>
+       </div>
+    </div>
+  );
+
   return (
-    <div className="relative flex h-auto min-h-screen w-full flex-col group/design-root overflow-x-hidden" style={{ backgroundColor: '#f8f8f5' }}>
+    <div className="relative flex h-auto min-h-screen w-full flex-col group/design-root overflow-x-hidden" style={{ backgroundColor: '#fffdf5' }}>
       <div className="layout-container flex h-full grow flex-col">
         <Header />
 
-        <main className="flex-1">
+        <main className="flex-1 w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
           {/* Announcements Section */}
           {!loading && announcements.length > 0 && showAnnouncements && (
-            <div className="px-4 sm:px-6 lg:px-10 py-6 bg-white border-b border-gray-200">
-              <div className="layout-content-container flex flex-col max-w-7xl mx-auto">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-gray-900 text-lg font-bold leading-tight tracking-[-0.015em]">公告事項</h2>
+            <div className="mb-8">
+              <div className="bg-white rounded-3xl p-6 shadow-sm border border-blue-100 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
+                <div className="flex items-center justify-between mb-4 relative z-10">
+                  <div className="flex items-center gap-2">
+                    <span className="bg-blue-100 text-blue-600 p-2 rounded-xl">
+                      <span className="material-symbols-outlined">campaign</span>
+                    </span>
+                    <h2 className="text-gray-900 text-lg font-bold">最新公告</h2>
+                  </div>
                   <button
                     onClick={() => setShowAnnouncements(false)}
                     className="flex items-center justify-center w-8 h-8 rounded-full hover:bg-gray-100 transition-colors"
-                    aria-label="關閉公告"
                   >
-                    <span className="material-symbols-outlined text-gray-500 text-xl">close</span>
+                    <span className="material-symbols-outlined text-gray-400 text-lg">close</span>
                   </button>
                 </div>
 
-                {/* 桌面版：水平滾動 */}
-                <div className="hidden sm:block">
-                  <div className="flex overflow-x-auto [-ms-scrollbar-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden -mx-4">
-                    <div className="flex items-stretch p-4 gap-4">
-                      {announcements.map((announcement) => (
-                        <div
-                          key={announcement.id}
-                          className="flex flex-col gap-3 rounded-xl bg-blue-50 border border-blue-200 p-4 min-w-80 flex-shrink-0"
-                        >
-                          <h3 className="text-gray-900 text-base font-bold leading-tight">{announcement.title}</h3>
-                          <p className="text-gray-700 text-sm font-normal leading-normal line-clamp-2">
-                            {announcement.content.replace(/<[^>]*>/g, "")}
-                          </p>
-                        </div>
-                      ))}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 relative z-10">
+                  {announcements.map((announcement) => (
+                    <div
+                      key={announcement.id}
+                      className="bg-blue-50/50 rounded-2xl p-4 border border-blue-100 hover:bg-blue-50 transition-colors"
+                    >
+                      <h3 className="text-gray-900 text-sm font-bold mb-1">{announcement.title}</h3>
+                      <p className="text-gray-600 text-xs line-clamp-2">
+                        {announcement.content.replace(/<[^>]*>/g, "")}
+                      </p>
                     </div>
-                  </div>
-                </div>
-
-                {/* 移動版：垂直堆疊 */}
-                <div className="block sm:hidden">
-                  <div className="flex flex-col gap-4">
-                    {announcements.map((announcement) => (
-                      <div
-                        key={announcement.id}
-                        className="flex flex-col gap-3 rounded-xl bg-blue-50 border border-blue-200 p-4"
-                      >
-                        <h3 className="text-gray-900 text-base font-bold leading-tight">{announcement.title}</h3>
-                        <p className="text-gray-700 text-sm font-normal leading-normal line-clamp-3">
-                          {announcement.content.replace(/<[^>]*>/g, "")}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
+                  ))}
                 </div>
               </div>
             </div>
           )}
 
           {/* Hero Banner */}
-          <div className="px-4 sm:px-6 lg:px-10 py-8">
-            <div className="layout-content-container flex flex-col max-w-7xl mx-auto flex-1 gap-8">
-              <section>
-                <BannerCarousel
-                  type="index"
-                  className="min-h-[480px] lg:min-h-[560px] rounded-xl"
-                />
-              </section>
-
-              {/* Feature cards */}
-              <section className="flex flex-wrap gap-4 p-0">
-                <div className="flex min-w-[158px] flex-1 flex-col gap-2 rounded-xl p-6 border border-gray-200 bg-white">
-                  <p className="text-gray-700 text-base font-medium leading-normal">批量折扣</p>
-                  <p className="text-gray-900 tracking-light text-2xl font-bold leading-tight">競爭力價格</p>
-                </div>
-                <div className="flex min-w-[158px] flex-1 flex-col gap-2 rounded-xl p-6 border border-gray-200 bg-white">
-                  <p className="text-gray-700 text-base font-medium leading-normal">全球運送</p>
-                  <p className="text-gray-900 tracking-light text-2xl font-bold leading-tight">快速可靠</p>
-                </div>
-                <div className="flex min-w-[158px] flex-1 flex-col gap-2 rounded-xl p-6 border border-gray-200 bg-white">
-                  <p className="text-gray-700 text-base font-medium leading-normal">品質檢驗</p>
-                  <p className="text-gray-900 tracking-light text-2xl font-bold leading-tight">嚴選供應商</p>
-                </div>
-              </section>
-
-
-              {/* Hot-Selling Products */}
-              <section>
-                <div className="flex justify-between items-center px-0 pb-3 pt-5">
-                  <h2 className="text-gray-900 text-[22px] font-bold leading-tight tracking-[-0.015em]">熱銷商品</h2>
-                  <Link className="text-primary hover:underline text-sm font-semibold" href="/hot-products">查看全部</Link>
-                </div>
-                <div className="flex overflow-x-auto [-ms-scrollbar-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden -mx-4">
-                  <div className="flex items-stretch p-4 gap-4">
-                    {bsLoading && Array.from({ length: 5 }).map((_, idx) => (
-                      <div key={`bs-skel-${idx}`} className="flex h-full flex-1 flex-col gap-4 rounded-xl bg-white shadow-sm border border-gray-200 min-w-60 overflow-hidden">
-                        <div className="w-full bg-gray-100 aspect-square animate-pulse" />
-                        <div className="p-4 pt-0">
-                          <div className="h-5 bg-gray-100 rounded w-4/5 mb-2" />
-                          <div className="h-6 bg-gray-100 rounded w-2/5" />
-                        </div>
-                      </div>
-                    ))}
-
-                    {!bsLoading && bestsellers.map((product) => (
-                      <div key={product.id} className="flex h-full flex-1 flex-col gap-4 rounded-xl bg-white shadow-sm border border-gray-200 min-w-60 overflow-hidden">
-                        <div
-                          className="w-full bg-center bg-no-repeat aspect-square bg-cover"
-                          style={{ backgroundImage: `url("${product.cover_image_url || 'https://via.placeholder.com/300'}")` }}
-                        />
-                        <div className="flex flex-col flex-1 justify-between p-4 pt-0 gap-4">
-                          <div>
-                            <p className="text-gray-800 text-base font-medium leading-normal line-clamp-2">{product.title}</p>
-                            <p className="text-primary text-lg font-bold leading-normal">{product.retail_price_twd ? `NT$ ${product.retail_price_twd}` : '價格待定'}</p>
-                          </div>
-                          <Link href={`/products/${product.id}`} className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-primary text-white text-sm font-bold leading-normal tracking-[0.015em] hover:bg-primary/90 transition-colors">
-                            <span className="truncate">立即購買</span>
-                          </Link>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </section>
-
-              {/* Limited Time Products Section */}
-              {limitedTimeProducts.length > 0 && (
-                <section>
-                  <div className="flex justify-between items-center px-0 pb-3 pt-5">
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-gray-900 text-[22px] font-bold leading-tight tracking-[-0.015em]">限定時間商品</h2>
-                      <span className="bg-red-100 text-red-600 text-xs font-bold px-2 py-1 rounded-full">LIMITED</span>
-                    </div>
-                  </div>
-                  <div className="flex overflow-x-auto [-ms-scrollbar-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden -mx-4">
-                    <div className="flex items-stretch p-4 gap-4">
-                      {limitedLoading && Array.from({ length: 4 }).map((_, idx) => (
-                        <div key={`lt-skel-${idx}`} className="flex h-full flex-1 flex-col gap-4 rounded-xl bg-white shadow-sm border border-gray-200 min-w-60 overflow-hidden animate-pulse">
-                          <div className="w-full bg-gray-100 aspect-square" />
-                          <div className="p-4 pt-0">
-                            <div className="h-5 bg-gray-100 rounded w-4/5 mb-2" />
-                            <div className="h-6 bg-gray-100 rounded w-2/5" />
-                          </div>
-                        </div>
-                      ))}
-
-                      {!limitedLoading && limitedTimeProducts.map((product) => (
-                        <div key={product.id} className="relative flex h-full flex-1 flex-col gap-4 rounded-xl bg-white shadow-sm border border-gray-200 min-w-60 overflow-hidden group">
-                          <div className="absolute top-2 left-2 z-10">
-                            <CountdownTimer endTime={product.limited_time_end} className="bg-white/90 backdrop-blur px-2 py-1 rounded-lg shadow-sm" />
-                          </div>
-                          <div
-                            className="w-full bg-center bg-no-repeat aspect-square bg-cover"
-                            style={{ backgroundImage: `url("${product.cover_image_url || 'https://via.placeholder.com/300'}")` }}
-                          />
-                          <div className="flex flex-col flex-1 justify-between p-4 pt-0 gap-4">
-                            <div>
-                              <p className="text-gray-800 text-base font-medium leading-normal line-clamp-2">{product.title}</p>
-                              {userTier !== "guest" && (
-                                <p className="text-primary text-lg font-bold leading-normal mt-1">
-                                  {(userTier === "wholesale" || userTier === "vip")
-                                    ? (product.wholesale_price_twd ? `NT$ ${product.wholesale_price_twd}` : `NT$ ${product.retail_price_twd}`)
-                                    : (product.retail_price_twd ? `NT$ ${product.retail_price_twd}` : '價格待定')}
-                                </p>
-                              )}
-                            </div>
-                            <Link href={`/products/${product.id}`} className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-red-600 text-white text-sm font-bold leading-normal tracking-[0.015em] hover:bg-red-700 transition-colors">
-                              <span className="truncate">立即搶購</span>
-                            </Link>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </section>
-              )}
-
-              {/* Popular Products Carousel */}
-              <section>
-                <div className="flex justify-between items-center px-0 pb-3 pt-5">
-                  <h2 className="text-gray-900 text-[22px] font-bold leading-tight tracking-[-0.015em]">人氣商品</h2>
-                  <a className="text-primary hover:underline text-sm font-semibold" href="#">查看全部</a>
-                </div>
-                <div className="flex overflow-x-auto [-ms-scrollbar-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden -mx-4">
-                  <div className="flex items-stretch p-4 gap-4">
-                    {displayProducts.popular.length === 0 ? (
-                      <div className="p-4 text-gray-500">尚無人氣商品</div>
-                    ) : (
-                      displayProducts.popular.map((product) => (
-                        <div key={product.id} className="flex h-full flex-1 flex-col gap-4 rounded-xl bg-white shadow-sm border border-gray-200 min-w-60 overflow-hidden">
-                          <div
-                            className="w-full bg-center bg-no-repeat aspect-square bg-cover"
-                            style={{
-                              backgroundImage: `url("${product.cover_image_url || 'https://via.placeholder.com/300'}")`,
-                            }}
-                          />
-                          <div className="flex flex-col flex-1 justify-between p-4 pt-0 gap-4">
-                            <div>
-                              <p className="text-gray-800 text-base font-medium leading-normal line-clamp-2">{product.title_zh || product.title_original}</p>
-                              <p className="text-gray-500 text-sm font-normal leading-normal">{product.sku}</p>
-                              {userTier !== "guest" && (
-                                <p className="text-primary text-lg font-bold leading-normal mt-1">
-                                  {(userTier === "wholesale" || userTier === "vip")
-                                    ? (product.wholesale_price_twd ? `NT$ ${product.wholesale_price_twd}` : `NT$ ${product.retail_price_twd}`)
-                                    : (product.retail_price_twd ? `NT$ ${product.retail_price_twd}` : '價格待定')}
-                                </p>
-                              )}
-                            </div>
-                            <Link href={`/products/${product.id}`} className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-100 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-200 transition-colors">
-                              <span className="truncate">查看詳情</span>
-                            </Link>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </section>
-
-              {/* Korea Carousel */}
-              <section>
-                <div className="flex justify-between items-center px-0 pb-3 pt-5">
-                  <h2 className="text-gray-900 text-[22px] font-bold leading-tight tracking-[-0.015em]">韓國熱銷商品</h2>
-                  <a className="text-primary hover:underline text-sm font-semibold" href="#">查看全部</a>
-                </div>
-                <div className="flex overflow-x-auto [-ms-scrollbar-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden -mx-4">
-                  <div className="flex items-stretch p-4 gap-4">
-                    {displayProducts.korea.length === 0 ? (
-                      <div className="p-4 text-gray-500">尚無韓國熱銷商品</div>
-                    ) : (
-                      displayProducts.korea.map((product) => (
-                        <div key={product.id} className="flex h-full flex-1 flex-col gap-4 rounded-xl bg-white shadow-sm border border-gray-200 min-w-60 overflow-hidden">
-                          <div
-                            className="w-full bg-center bg-no-repeat aspect-square bg-cover"
-                            style={{
-                              backgroundImage: `url("${product.cover_image_url || 'https://via.placeholder.com/300'}")`,
-                            }}
-                          />
-                          <div className="flex flex-col flex-1 justify-between p-4 pt-0 gap-4">
-                            <div>
-                              <p className="text-gray-800 text-base font-medium leading-normal line-clamp-2">{product.title_zh || product.title_original}</p>
-                              <p className="text-gray-500 text-sm font-normal leading-normal">{product.sku}</p>
-                              {userTier !== "guest" && (
-                                <p className="text-primary text-lg font-bold leading-normal mt-1">
-                                  {(userTier === "wholesale" || userTier === "vip")
-                                    ? (product.wholesale_price_twd ? `NT$ ${product.wholesale_price_twd}` : `NT$ ${product.retail_price_twd}`)
-                                    : (product.retail_price_twd ? `NT$ ${product.retail_price_twd}` : '價格待定')}
-                                </p>
-                              )}
-                            </div>
-                            <Link href={`/products/${product.id}`} className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-100 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-200 transition-colors">
-                              <span className="truncate">查看詳情</span>
-                            </Link>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </section>
-
-              {/* Japan Carousel */}
-              <section>
-                <div className="flex justify-between items-center px-0 pb-3 pt-5">
-                  <h2 className="text-gray-900 text-[22px] font-bold leading-tight tracking-[-0.015em]">日本發現商品</h2>
-                  <a className="text-primary hover:underline text-sm font-semibold" href="#">查看全部</a>
-                </div>
-                <div className="flex overflow-x-auto [-ms-scrollbar-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden -mx-4">
-                  <div className="flex items-stretch p-4 gap-4">
-                    {displayProducts.japan.length === 0 ? (
-                      <div className="p-4 text-gray-500">尚無日本熱銷商品</div>
-                    ) : (
-                      displayProducts.japan.map((product) => (
-                        <div key={product.id} className="flex h-full flex-1 flex-col gap-4 rounded-xl bg-white shadow-sm border border-gray-200 min-w-60 overflow-hidden">
-                          <div
-                            className="w-full bg-center bg-no-repeat aspect-square bg-cover"
-                            style={{
-                              backgroundImage: `url("${product.cover_image_url || 'https://via.placeholder.com/300'}")`,
-                            }}
-                          />
-                          <div className="flex flex-col flex-1 justify-between p-4 pt-0 gap-4">
-                            <div>
-                              <p className="text-gray-800 text-base font-medium leading-normal line-clamp-2">{product.title_zh || product.title_original}</p>
-                              <p className="text-gray-500 text-sm font-normal leading-normal">{product.sku}</p>
-                              {userTier !== "guest" && (
-                                <p className="text-primary text-lg font-bold leading-normal mt-1">
-                                  {(userTier === "wholesale" || userTier === "vip")
-                                    ? (product.wholesale_price_twd ? `NT$ ${product.wholesale_price_twd}` : `NT$ ${product.retail_price_twd}`)
-                                    : (product.retail_price_twd ? `NT$ ${product.retail_price_twd}` : '價格待定')}
-                                </p>
-                              )}
-                            </div>
-                            <Link href={`/products/${product.id}`} className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-100 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-200 transition-colors">
-                              <span className="truncate">查看詳情</span>
-                            </Link>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </section>
-
-              {/* Thailand Carousel */}
-              <section>
-                <div className="flex justify-between items-center px-0 pb-3 pt-5">
-                  <h2 className="text-gray-900 text-[22px] font-bold leading-tight tracking-[-0.015em]">泰國趨勢商品</h2>
-                  <a className="text-primary hover:underline text-sm font-semibold" href="#">查看全部</a>
-                </div>
-                <div className="flex overflow-x-auto [-ms-scrollbar-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden -mx-4">
-                  <div className="flex items-stretch p-4 gap-4">
-                    {displayProducts.thailand.length === 0 ? (
-                      <div className="p-4 text-gray-500">尚無泰國趨勢商品</div>
-                    ) : (
-                      displayProducts.thailand.map((product) => (
-                        <div key={product.id} className="flex h-full flex-1 flex-col gap-4 rounded-xl bg-white shadow-sm border border-gray-200 min-w-60 overflow-hidden">
-                          <div
-                            className="w-full bg-center bg-no-repeat aspect-square bg-cover"
-                            style={{
-                              backgroundImage: `url("${product.cover_image_url || 'https://via.placeholder.com/300'}")`,
-                            }}
-                          />
-                          <div className="flex flex-col flex-1 justify-between p-4 pt-0 gap-4">
-                            <div>
-                              <p className="text-gray-800 text-base font-medium leading-normal line-clamp-2">{product.title_zh || product.title_original}</p>
-                              <p className="text-gray-500 text-sm font-normal leading-normal">{product.sku}</p>
-                              {userTier !== "guest" && (
-                                <p className="text-primary text-lg font-bold leading-normal mt-1">
-                                  {(userTier === "wholesale" || userTier === "vip")
-                                    ? (product.wholesale_price_twd ? `NT$ ${product.wholesale_price_twd}` : `NT$ ${product.retail_price_twd}`)
-                                    : (product.retail_price_twd ? `NT$ ${product.retail_price_twd}` : '價格待定')}
-                                </p>
-                              )}
-                            </div>
-                            <Link href={`/products/${product.id}`} className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-100 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-200 transition-colors">
-                              <span className="truncate">查看詳情</span>
-                            </Link>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </section>
+          <section className="mb-12">
+            <div className="rounded-[2.5rem] overflow-hidden shadow-xl shadow-yellow-500/10 border-4 border-white ring-1 ring-gray-100 transform hover:scale-[1.005] transition-transform duration-500">
+              <BannerCarousel
+                type="index"
+                className="w-full h-[280px] sm:h-[400px] md:h-[500px] lg:h-[600px]"
+              />
             </div>
-          </div>
+          </section>
+
+          {/* Features */}
+          <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-16 px-2">
+            {[
+              { title: "批量折扣", subtitle: "最具競爭力的批發價格", icon: "percent", color: "bg-yellow-50 text-yellow-600" },
+              { title: "全球運送", subtitle: "快速可靠的物流服務", icon: "public", color: "bg-blue-50 text-blue-600" },
+              { title: "品質檢驗", subtitle: "嚴格把關優質供應商", icon: "verified", color: "bg-green-50 text-green-600" }
+            ].map((feature, idx) => (
+              <div key={idx} className="flex items-center gap-4 p-5 bg-white rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${feature.color}`}>
+                  <span className="material-symbols-outlined text-2xl">{feature.icon}</span>
+                </div>
+                <div>
+                  <h3 className="text-gray-900 font-bold text-lg">{feature.title}</h3>
+                  <p className="text-gray-500 text-sm">{feature.subtitle}</p>
+                </div>
+              </div>
+            ))}
+          </section>
+
+          {/* Hot-Selling Products */}
+          <section className="mb-16">
+            <SectionHeader title="本週熱銷排行" icon="local_fire_department" colorClass="text-red-500" />
+            
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 lg:gap-6">
+              {bsLoading && Array.from({ length: 5 }).map((_, idx) => (
+                <div key={`bs-skel-${idx}`} className="bg-white rounded-3xl aspect-[3/4] animate-pulse"></div>
+              ))}
+              {!bsLoading && bestsellers.map((product) => renderProductCard(product))}
+            </div>
+          </section>
+
+          {/* Limited Time Products Section */}
+          {limitedTimeProducts.length > 0 && (
+            <section className="mb-16">
+              <SectionHeader title="限時搶購專區" icon="timer" colorClass="text-orange-500" />
+              
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 lg:gap-6">
+                {limitedLoading && Array.from({ length: 5 }).map((_, idx) => (
+                  <div key={`lt-skel-${idx}`} className="bg-white rounded-3xl aspect-[3/4] animate-pulse"></div>
+                ))}
+                {!limitedLoading && limitedTimeProducts.map((product) => renderProductCard(product, true))}
+              </div>
+            </section>
+          )}
+
+          {/* Popular Products */}
+          {displayProducts.popular.length > 0 && (
+            <section className="mb-16">
+              <SectionHeader title="人氣推薦" icon="thumb_up" colorClass="text-primary" />
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 lg:gap-6">
+                {displayProducts.popular.map((product) => renderProductCard(product))}
+              </div>
+            </section>
+          )}
+
+          {/* Korea Section */}
+          {displayProducts.korea.length > 0 && (
+            <section className="mb-16">
+              <SectionHeader title="韓國直送" icon="flight_takeoff" colorClass="text-purple-500" />
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 lg:gap-6">
+                {displayProducts.korea.map((product) => renderProductCard(product))}
+              </div>
+            </section>
+          )}
+
+          {/* Japan Section */}
+          {displayProducts.japan.length > 0 && (
+            <section className="mb-16">
+              <SectionHeader title="日本選物" icon="ramen_dining" colorClass="text-pink-500" />
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 lg:gap-6">
+                {displayProducts.japan.map((product) => renderProductCard(product))}
+              </div>
+            </section>
+          )}
+
+          {/* Thailand Section */}
+          {displayProducts.thailand.length > 0 && (
+            <section className="mb-16">
+              <SectionHeader title="泰國好物" icon="sunny" colorClass="text-orange-400" />
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 lg:gap-6">
+                {displayProducts.thailand.map((product) => renderProductCard(product))}
+              </div>
+            </section>
+          )}
+
         </main>
 
         <Footer />

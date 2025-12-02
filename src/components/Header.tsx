@@ -22,6 +22,7 @@ export default function Header() {
   const [tags, setTags] = useState<Tag[]>([]);
   const [activeCategoryIds, setActiveCategoryIds] = useState<number[]>([]);
   const [isMegaMenuOpen, setIsMegaMenuOpen] = useState(false);
+  const [mobileStartShoppingOpen, setMobileStartShoppingOpen] = useState(false); // For "Start Shopping" main accordion
   const [mobileCategoryOpen, setMobileCategoryOpen] = useState<number | null>(null); // For mobile accordion L1
   const [mobileL2Open, setMobileL2Open] = useState<number | null>(null); // For mobile accordion L2
 
@@ -316,14 +317,14 @@ export default function Header() {
               <div className="border-b border-gray-100">
                 <button 
                   className="w-full flex justify-between items-center py-2 text-gray-700 font-medium hover:text-primary"
-                  onClick={() => setMobileCategoryOpen(mobileCategoryOpen === -1 ? null : -1)} // Toggle
+                  onClick={() => setMobileStartShoppingOpen(!mobileStartShoppingOpen)}
                 >
                   <span>開始購物</span>
-                  <span className="material-symbols-outlined">{mobileCategoryOpen === -1 ? 'expand_less' : 'expand_more'}</span>
+                  <span className="material-symbols-outlined">{mobileStartShoppingOpen ? 'expand_less' : 'expand_more'}</span>
                 </button>
                 
                 {/* L1 List */}
-                <div className={`pl-4 flex flex-col space-y-1 overflow-hidden transition-all duration-300 ${mobileCategoryOpen === -1 ? 'max-h-[1000px] pb-2' : 'max-h-0'}`}>
+                <div className={`pl-4 flex flex-col space-y-1 overflow-hidden transition-all duration-300 ${mobileStartShoppingOpen ? 'max-h-[1000px] pb-2' : 'max-h-0'}`}>
                   {l1Categories.map(l1 => (
                     <div key={l1.id}>
                       <div className="flex justify-between items-center py-1">
@@ -336,7 +337,7 @@ export default function Header() {
                       </div>
                       
                       {/* L2 List */}
-                      {mobileCategoryOpen === l1.id && (
+                      <div className={`transition-all duration-300 overflow-hidden ${mobileCategoryOpen === l1.id ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}>
                         <div className="pl-4 flex flex-col space-y-1 border-l-2 border-gray-100 my-1">
                           {getChildren(l1.id, 2).map(l2 => (
                             <div key={l2.id}>
@@ -350,7 +351,7 @@ export default function Header() {
                               </div>
 
                               {/* L3 List */}
-                              {mobileL2Open === l2.id && (
+                              <div className={`transition-all duration-300 overflow-hidden ${mobileL2Open === l2.id ? 'max-h-[300px] opacity-100' : 'max-h-0 opacity-0'}`}>
                                 <div className="pl-3 flex flex-col space-y-1 pb-1">
                                   {getChildren(l2.id, 3).map(l3 => (
                                     <Link key={l3.id} href={`/products?category_id=${l3.id}`} onClick={() => setIsMobileMenuOpen(false)} className="text-xs text-gray-500 block py-0.5">
@@ -358,58 +359,14 @@ export default function Header() {
                                     </Link>
                                   ))}
                                 </div>
-                              )}
+                              </div>
                             </div>
                           ))}
                         </div>
-                      )}
+                      </div>
                     </div>
                   ))}
                   
-                  {/* Tags in Mobile */}
-                  <div className="mt-2 pt-2 border-t border-gray-100 flex flex-col gap-3">
-                    {/* A1 Tags */}
-                    {tags.filter(t => t.category === "A1").length > 0 && (
-                      <div>
-                        <div className="text-xs font-bold text-gray-500 mb-1">品牌分類</div>
-                        <div className="flex flex-wrap gap-2">
-                          {tags.filter(t => t.category === "A1").sort((a, b) => a.sort - b.sort).map(tag => (
-                            <Link key={tag.id} href={`/products?tag_id=${tag.id}`} onClick={() => setIsMobileMenuOpen(false)} className="px-2 py-1 bg-primary/10 text-primary rounded text-xs">
-                              {tag.name}
-                            </Link>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* A2 Tags */}
-                    {tags.filter(t => !t.category || t.category === "A2").length > 0 && (
-                      <div>
-                        <div className="text-xs font-bold text-gray-500 mb-1">商品分類</div>
-                        <div className="flex flex-wrap gap-2">
-                          {tags.filter(t => !t.category || t.category === "A2").sort((a, b) => a.sort - b.sort).map(tag => (
-                            <Link key={tag.id} href={`/products?tag_id=${tag.id}`} onClick={() => setIsMobileMenuOpen(false)} className="px-2 py-1 bg-blue-50 text-blue-600 rounded text-xs">
-                              {tag.name}
-                            </Link>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* A3 Tags */}
-                    {tags.filter(t => t.category === "A3").length > 0 && (
-                      <div>
-                         <div className="text-xs font-bold text-gray-500 mb-1">活動分類</div>
-                         <div className="flex flex-wrap gap-2">
-                          {tags.filter(t => t.category === "A3").sort((a, b) => a.sort - b.sort).map(tag => (
-                            <Link key={tag.id} href={`/products?tag_id=${tag.id}`} onClick={() => setIsMobileMenuOpen(false)} className="px-2 py-1 bg-red-50 text-red-600 rounded text-xs">
-                              {tag.name}
-                            </Link>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
                 </div>
               </div>
 

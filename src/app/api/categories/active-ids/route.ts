@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
           status
         )
       `)
-      .eq("products.status", "active");
+      .eq("products.status", "published");
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });

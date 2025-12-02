@@ -113,7 +113,7 @@ function AdminDashboard() {
 
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto">
-        <AdminHeader />
+        <AdminHeader activeNav={activeNav} />
 
         {/* Page Content */}
         <div className="p-6 md:p-10 overflow-y-auto">
