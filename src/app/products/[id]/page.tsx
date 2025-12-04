@@ -633,6 +633,36 @@ export default function ProductDetailPage() {
                         <p className="text-xl text-gray-600">NT$ {product.retail_price_twd}</p>
                       </div>
                     )}
+                    {/* AI 文案建議提示 - 僅批發客可見 */}
+                    <div className="mt-4 p-3 bg-blue-50 border border-blue-100 rounded-lg">
+                      <div className="flex items-start gap-2">
+                        <span className="material-symbols-outlined text-blue-600 text-lg flex-shrink-0">lightbulb</span>
+                        <div className="text-sm">
+                          <p className="text-blue-800 font-medium mb-1">💡 銷售建議</p>
+                          <p className="text-blue-700">可自行到 AI 工具製作商品文案：</p>
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            <a
+                              href="https://gemini.google.com/"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-blue-200 rounded-md text-blue-700 hover:bg-blue-100 transition-colors"
+                            >
+                              <span>Gemini</span>
+                              <span className="material-symbols-outlined text-xs">open_in_new</span>
+                            </a>
+                            <a
+                              href="https://chat.openai.com/"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-blue-200 rounded-md text-blue-700 hover:bg-blue-100 transition-colors"
+                            >
+                              <span>ChatGPT</span>
+                              <span className="material-symbols-outlined text-xs">open_in_new</span>
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </>
                 )}
               </div>
