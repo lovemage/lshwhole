@@ -303,14 +303,16 @@ export default function ProductDetailPage() {
   };
 
 
-  // 處理圖片數組，如果沒有圖片則使用預設圖片
+  // 處理圖片數組 - 分為商品圖和描述圖
   const getProductImages = () => {
     if (product?.images && product.images.length > 0) {
-      // Handle both string array and object array formats
-      return product.images.map((img: any) => {
-        if (typeof img === 'string') return img;
-        return img.url;
-      });
+      // Filter product images (is_product === true or old format without flag)
+      const productImgs = product.images.filter((img: any) => {
+        if (typeof img === 'string') return true; // old format, treat as product image
+        return img.is_product !== false; // include if is_product is true or undefined
+      }).map((img: any) => typeof img === 'string' ? img : img.url);
+
+      if (productImgs.length > 0) return productImgs;
     }
     // 預設圖片
     return [
@@ -318,6 +320,16 @@ export default function ProductDetailPage() {
       "https://images.unsplash.com/photo-1620752762399-9e88d6b1d0a5?q=80&w=600&auto=format&fit=crop",
       "https://images.unsplash.com/photo-1590439471364-192aa70c0b23?q=80&w=600&auto=format&fit=crop",
     ];
+  };
+
+  // 獲取描述圖
+  const getDescriptionImages = () => {
+    if (product?.images && product.images.length > 0) {
+      return product.images
+        .filter((img: any) => typeof img !== 'string' && img.is_description === true)
+        .map((img: any) => img.url);
+    }
+    return [];
   };
 
   if (loading) {
@@ -430,6 +442,8 @@ export default function ProductDetailPage() {
 
   const productImages = getProductImages();
 
+  const descriptionImages = getDescriptionImages();
+
   const DescriptionSection = () => (
     <div>
       <h3 className="text-lg font-semibold text-gray-900 mb-2">產品描述</h3>
@@ -455,7 +469,24 @@ export default function ProductDetailPage() {
           </div>
         )}
 
-        {!product?.desc_zh && !product?.desc_original && (
+        {/* 描述圖片 */}
+        {descriptionImages.length > 0 && (
+          <div className="mt-4">
+            <h4 className="text-sm font-semibold text-gray-700 mb-3">商品詳情圖</h4>
+            <div className="space-y-3">
+              {descriptionImages.map((imgUrl: string, idx: number) => (
+                <img
+                  key={idx}
+                  src={imgUrl}
+                  alt={`商品詳情圖 ${idx + 1}`}
+                  className="w-full rounded-lg border border-gray-200"
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {!product?.desc_zh && !product?.desc_original && descriptionImages.length === 0 && (
           <p className="text-gray-500 italic">暫無產品描述</p>
         )}
       </div>
