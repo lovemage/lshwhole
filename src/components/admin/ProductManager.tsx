@@ -518,11 +518,12 @@ export default function ProductManager() {
               <th className="px-4 py-3 text-left text-sm font-medium text-text-primary-light">
                 <input type="checkbox" checked={selectedProductIds.length === products.length && products.length > 0} onChange={toggleSelectAll} />
               </th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-text-primary-light">縮圖</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-text-primary-light">商品代碼</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-text-primary-light">商品名稱</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-text-primary-light">品牌/標籤</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-text-primary-light">零售價</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-text-primary-light">批發價</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-text-primary-light">成本</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-text-primary-light">狀態</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-text-primary-light">操作</th>
             </tr>
@@ -530,39 +531,70 @@ export default function ProductManager() {
           <tbody>
             {productsLoading ? (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-text-secondary-light">
+                <td colSpan={9} className="px-4 py-8 text-center text-text-secondary-light">
                   載入中...
                 </td>
               </tr>
             ) : products.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-text-secondary-light">
+                <td colSpan={9} className="px-4 py-8 text-center text-text-secondary-light">
                   暫無商品
                 </td>
               </tr>
             ) : (
-              products.map((product) => (
-                <tr key={product.id} className="border-b border-border-light hover:bg-background-light">
-                  <td className="px-4 py-3 text-sm"><input type="checkbox" checked={selectedProductIds.includes(product.id)} onChange={() => toggleSelectOne(product.id)} /></td>
-                  <td className="px-4 py-3 text-sm text-text-primary-light">{product.sku}</td>
-                  <td className="px-4 py-3 text-sm text-text-primary-light line-clamp-2">{product.title_zh || product.title_original || '-'}</td>
-                  <td className="px-4 py-3 text-sm text-text-primary-light">NT${Number(product.retail_price_twd || 0).toLocaleString()}</td>
-                  <td className="px-4 py-3 text-sm text-text-primary-light">NT${Number(product.wholesale_price_twd || 0).toLocaleString()}</td>
-                  <td className="px-4 py-3 text-sm text-text-primary-light">NT${Number(product.cost_twd || 0).toLocaleString()}</td>
-                  <td className="px-4 py-3 text-sm">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${product.status === 'published'
-                      ? "bg-success/20 text-success"
-                      : "bg-danger/20 text-danger"
-                      }`}>
-                      {product.status === 'published' ? "上架" : "草稿"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-sm flex gap-3">
-                    <button className="text-primary hover:underline" onClick={() => openEditProduct(product)}>編輯</button>
-                    <button className="text-danger hover:underline" onClick={() => deleteProduct(product.id)}>刪除</button>
-                  </td>
-                </tr>
-              ))
+              products.map((product) => {
+                const brandTag = product.tags?.find((t: any) => t.category === 'A1');
+                const otherTags = product.tags?.filter((t: any) => t.category !== 'A1').slice(0, 2) || [];
+                return (
+                  <tr key={product.id} className="border-b border-border-light hover:bg-background-light">
+                    <td className="px-4 py-3 text-sm"><input type="checkbox" checked={selectedProductIds.includes(product.id)} onChange={() => toggleSelectOne(product.id)} /></td>
+                    <td className="px-4 py-3">
+                      <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
+                        {product.cover_image_url ? (
+                          <img src={product.cover_image_url} alt={product.sku} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">無圖</div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-text-primary-light">{product.sku}</td>
+                    <td className="px-4 py-3 text-sm text-text-primary-light max-w-[200px]">
+                      <div className="line-clamp-2">{product.title_zh || product.title_original || '-'}</div>
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      <div className="flex flex-col gap-1">
+                        {brandTag && (
+                          <span className="inline-block px-2 py-0.5 rounded-md bg-[#FFF8E1] text-[#F59E0B] text-xs font-medium border border-[#F59E0B]/20 whitespace-nowrap">
+                            {brandTag.name}
+                          </span>
+                        )}
+                        {otherTags.map((t: any) => (
+                          <span key={t.id} className="inline-block px-2 py-0.5 rounded-md bg-gray-100 text-gray-600 text-xs whitespace-nowrap">
+                            {t.name}
+                          </span>
+                        ))}
+                        {!brandTag && otherTags.length === 0 && <span className="text-gray-400 text-xs">-</span>}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-text-primary-light">NT${Number(product.retail_price_twd || 0).toLocaleString()}</td>
+                    <td className="px-4 py-3 text-sm text-text-primary-light">NT${Number(product.wholesale_price_twd || 0).toLocaleString()}</td>
+                    <td className="px-4 py-3 text-sm">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${product.status === 'published'
+                        ? "bg-success/20 text-success"
+                        : "bg-danger/20 text-danger"
+                        }`}>
+                        {product.status === 'published' ? "上架" : "草稿"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      <div className="flex gap-3">
+                        <button className="text-primary hover:underline" onClick={() => openEditProduct(product)}>編輯</button>
+                        <button className="text-danger hover:underline" onClick={() => deleteProduct(product.id)}>刪除</button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
