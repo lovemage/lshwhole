@@ -306,7 +306,11 @@ export default function ProductDetailPage() {
   // 處理圖片數組，如果沒有圖片則使用預設圖片
   const getProductImages = () => {
     if (product?.images && product.images.length > 0) {
-      return product.images;
+      // Handle both string array and object array formats
+      return product.images.map((img: any) => {
+        if (typeof img === 'string') return img;
+        return img.url;
+      });
     }
     // 預設圖片
     return [

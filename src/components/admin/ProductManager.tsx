@@ -186,13 +186,18 @@ export default function ProductManager() {
       const res = await fetch(`/api/products/${p.id}`);
       if (res.ok) {
         const productData = await res.json();
-        // Convert string URLs to image objects
-        images = (productData.images || []).map((url: string, idx: number) => ({
-          url,
-          sort: idx,
-          is_product: true,
-          is_description: false
-        }));
+        // Handle both array of strings (old) and array of objects (new)
+        images = (productData.images || []).map((img: any, idx: number) => {
+          if (typeof img === 'string') {
+            return { url: img, sort: idx, is_product: true, is_description: false };
+          }
+          return {
+            url: img.url,
+            sort: img.sort ?? idx,
+            is_product: img.is_product ?? true,
+            is_description: img.is_description ?? false,
+          };
+        });
         fetchedSpecs = productData.specs || [];
         fetchedVariants = (productData.variants || []).map((v: any) => ({
           id: v.id,

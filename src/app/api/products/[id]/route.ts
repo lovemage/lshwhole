@@ -63,10 +63,10 @@ export async function GET(
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    // 獲取商品圖片
+    // 獲取商品圖片 (包含 is_product 和 is_description)
     const { data: images, error: imgError } = await admin
       .from("product_images")
-      .select("url, sort")
+      .select("url, sort, is_product, is_description")
       .eq("product_id", id)
       .order("sort", { ascending: true });
 
@@ -80,7 +80,7 @@ export async function GET(
       .select("id, name, options, price, stock, sku")
       .eq("product_id", id);
 
-    // 將圖片 URL 數組添加到商品資料中
+    // 將圖片資料添加到商品資料中（包含完整圖片資訊）
     const productWithImages = {
       id: product.id,
       sku: product.sku,
@@ -93,7 +93,13 @@ export async function GET(
       status: product.status,
       created_at: product.created_at,
       updated_at: product.updated_at,
-      images: (images || []).map((img) => img.url),
+      // 返回完整圖片資訊（包含 is_product 和 is_description）
+      images: (images || []).map((img: any) => ({
+        url: img.url,
+        sort: img.sort,
+        is_product: img.is_product ?? true,
+        is_description: img.is_description ?? false,
+      })),
       specs: product.specs,
       variants: variants || [],
     };
@@ -189,12 +195,14 @@ export async function PUT(
         // Continue to try inserting new ones? Might duplicate if delete failed but simpler to proceed.
       }
 
-      // 2. Insert new images
+      // 2. Insert new images (包含 is_product 和 is_description)
       if (images.length > 0) {
         const imageInserts = images.map((img: any) => ({
           product_id: id,
           url: img.url,
-          sort: img.sort || 0
+          sort: img.sort || 0,
+          is_product: img.is_product ?? true,
+          is_description: img.is_description ?? false,
         }));
 
         const { error: insError } = await admin
