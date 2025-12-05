@@ -8,6 +8,7 @@ const PAGE_ANNOTATIONS: Record<string, string> = {
   announcements: "首頁公告區塊",
   categories: "商品傳統分類(關聯)",
   tags: "商品平行分類(搜尋)",
+  spec_templates: "商品規格快速套用",
   crawler: "商品爬蟲檔案入口",
   products: "已上架商品管理",
   members: "會員升級儲值管理",

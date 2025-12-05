@@ -19,6 +19,7 @@ import SubAccountManager from "@/components/admin/SubAccountManager";
 import BannerManager from "@/components/admin/BannerManager";
 import ShippingSettings from "@/components/admin/ShippingSettings";
 import EmailTemplateManager from "@/components/admin/EmailTemplateManager";
+import SpecTemplateManager from "@/components/admin/SpecTemplateManager";
 
 function AdminDashboard() {
   const [activeNav, setActiveNav] = useState("dashboard");
@@ -60,6 +61,8 @@ function AdminDashboard() {
         return <CategoryManager />;
       case "tags":
         return <TagManager />;
+      case "spec_templates":
+        return <SpecTemplateManager />;
       case "crawler":
         return <CrawlerImport />;
       case "products":
