@@ -83,6 +83,14 @@ export default function CrawlerImport() {
   const [variants, setVariants] = useState<Variant[]>([]);
   const [isUploading, setIsUploading] = useState(false);
 
+  // 規格範本
+  interface SpecTemplate {
+    id: string;
+    name: string;
+    specs: Spec[];
+  }
+  const [specTemplates, setSpecTemplates] = useState<SpecTemplate[]>([]);
+
   interface CandidateImage {
     url: string;
     isProduct: boolean;
@@ -97,6 +105,7 @@ export default function CrawlerImport() {
     fetchCategories();
     fetchTags();
     fetchCategoryRelations();
+    fetchSpecTemplates();
 
     // Load local settings
     try {
@@ -107,6 +116,18 @@ export default function CrawlerImport() {
       }
     } catch { }
   }, []);
+
+  const fetchSpecTemplates = async () => {
+    try {
+      const res = await fetch("/api/admin/spec-templates");
+      if (res.ok) {
+        const data = await res.json();
+        setSpecTemplates(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch spec templates:", err);
+    }
+  };
 
   useEffect(() => {
     // 當 L1 改變時重置 L2/L3
@@ -1220,13 +1241,34 @@ export default function CrawlerImport() {
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <label className="text-sm font-medium text-text-primary-light">規格設定</label>
-                    <button
-                      type="button"
-                      onClick={addSpec}
-                      className="text-xs text-primary hover:underline"
-                    >
-                      + 新增規格
-                    </button>
+                    <div className="flex items-center gap-3">
+                      {specTemplates.length > 0 && (
+                        <select
+                          onChange={(e) => {
+                            const template = specTemplates.find(t => t.id === e.target.value);
+                            if (template) {
+                              setSpecs(JSON.parse(JSON.stringify(template.specs)));
+                              generateVariants(template.specs);
+                            }
+                            e.target.value = "";
+                          }}
+                          className="text-xs border border-border-light rounded px-2 py-1 text-text-secondary-light"
+                          defaultValue=""
+                        >
+                          <option value="" disabled>套用範本...</option>
+                          {specTemplates.map(t => (
+                            <option key={t.id} value={t.id}>{t.name}</option>
+                          ))}
+                        </select>
+                      )}
+                      <button
+                        type="button"
+                        onClick={addSpec}
+                        className="text-xs text-primary hover:underline"
+                      >
+                        + 新增規格
+                      </button>
+                    </div>
                   </div>
                   <div className="space-y-3">
                     {specs.map((spec, idx) => (
