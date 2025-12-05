@@ -20,6 +20,7 @@ import BannerManager from "@/components/admin/BannerManager";
 import ShippingSettings from "@/components/admin/ShippingSettings";
 import EmailTemplateManager from "@/components/admin/EmailTemplateManager";
 import SpecTemplateManager from "@/components/admin/SpecTemplateManager";
+import BlogManager from "@/components/admin/BlogManager";
 
 function AdminDashboard() {
   const [activeNav, setActiveNav] = useState("dashboard");
@@ -85,6 +86,8 @@ function AdminDashboard() {
         return <ShippingSettings />;
       case "email_templates":
         return <EmailTemplateManager />;
+      case "blog":
+        return <BlogManager />;
       default:
         return null;
     }
@@ -152,7 +155,9 @@ function AdminDashboard() {
                                       ? "運費管理"
                                       : activeNav === "email_templates"
                                         ? "Email 模板"
-                                        : "儀表看板"}
+                                        : activeNav === "blog"
+                                          ? "部落格管理"
+                                          : "儀表看板"}
               </p>
               <p className="text-base text-text-secondary-light">
                 {activeNav === "announcements"
@@ -183,7 +188,9 @@ function AdminDashboard() {
                                       ? "設定運費費率"
                                       : activeNav === "email_templates"
                                         ? "編輯系統自動發送的 Email 內容"
-                                        : "歡迎回來，以下是您商店活動的摘要。"}
+                                        : activeNav === "blog"
+                                          ? "管理海外新訊文章與 SEO 設定"
+                                          : "歡迎回來，以下是您商店活動的摘要。"}
               </p>
             </div>
             {activeNav === "dashboard" && (

@@ -15,6 +15,7 @@ const CATEGORIES = [
   { id: "A1", name: "品牌分類 (Brand)" },
   { id: "A2", name: "商品屬性 (Attribute)" },
   { id: "A3", name: "活動分類 (Activity)" },
+  { id: "B1", name: "部落格標籤 (Blog)" },
 ];
 
 export default function TagManager() {

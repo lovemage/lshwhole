@@ -26,6 +26,7 @@ export default function Header() {
   const [mobileCategoryOpen, setMobileCategoryOpen] = useState<number | null>(null); // For mobile accordion L1
   const [mobileL2Open, setMobileL2Open] = useState<number | null>(null); // For mobile accordion L2
   const [headerBrandLetter, setHeaderBrandLetter] = useState<string>('All'); // For Mega Menu Brands
+  const [mobileNewsOpen, setMobileNewsOpen] = useState(false); // For "Overseas News" mobile accordion
 
   useEffect(() => {
     const fetchData = async () => {
@@ -271,7 +272,19 @@ export default function Header() {
               )}
             </div>
 
-            <Link className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors" href="/howtogo">如何運作</Link>
+            {/* Overseas News Dropdown */}
+            <div className="relative group">
+                <button className="text-gray-700 hover:text-primary text-sm font-medium leading-normal transition-colors flex items-center gap-1 py-4">
+                    海外新訊
+                    <span className="material-symbols-outlined text-sm">expand_more</span>
+                </button>
+                <div className="absolute top-full right-0 w-40 pt-0 hidden group-hover:block hover:block z-50">
+                    <div className="bg-white shadow-xl border border-gray-100 rounded-xl p-2 flex flex-col gap-1 mt-1">
+                        <Link href="/howtogo" className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-primary rounded-lg text-left">如何運作</Link>
+                        <Link href="/news" className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-primary rounded-lg text-left">海外新訊</Link>
+                    </div>
+                </div>
+            </div>
           </nav>
         </div>
 
@@ -413,7 +426,20 @@ export default function Header() {
                 </div>
               </div>
 
-              <Link onClick={() => setIsMobileMenuOpen(false)} className="text-gray-700 hover:text-primary font-medium py-2 border-b border-gray-100" href="/howtogo">如何運作</Link>
+              {/* Overseas News Accordion */}
+              <div className="border-b border-gray-100">
+                <button 
+                  className="w-full flex justify-between items-center py-2 text-gray-700 font-medium hover:text-primary"
+                  onClick={() => setMobileNewsOpen(!mobileNewsOpen)}
+                >
+                  <span>海外新訊</span>
+                  <span className="material-symbols-outlined">{mobileNewsOpen ? 'expand_less' : 'expand_more'}</span>
+                </button>
+                <div className={`pl-4 flex flex-col space-y-1 overflow-hidden transition-all duration-300 ${mobileNewsOpen ? 'max-h-[200px] pb-2' : 'max-h-0'}`}>
+                    <Link onClick={() => setIsMobileMenuOpen(false)} className="text-sm text-gray-600 py-1 block" href="/howtogo">如何運作</Link>
+                    <Link onClick={() => setIsMobileMenuOpen(false)} className="text-sm text-gray-600 py-1 block" href="/news">海外新訊</Link>
+                </div>
+              </div>
             </nav>
 
             {/* User Actions */}
