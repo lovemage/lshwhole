@@ -43,19 +43,21 @@ export default function SpecTemplateManager() {
   const openAddModal = () => {
     setEditingTemplate(null);
     setFormName("");
-    setFormSpecs([{ name: "尺寸", values: [] }]);
+    setFormSpecs([{ name: "", values: [] }]);
     setShowModal(true);
   };
 
   const openEditModal = (template: SpecTemplate) => {
     setEditingTemplate(template);
     setFormName(template.name);
-    setFormSpecs(template.specs || []);
+    // 深拷貝以避免引用問題
+    setFormSpecs(JSON.parse(JSON.stringify(template.specs || [])));
     setShowModal(true);
   };
 
   const addSpec = () => {
-    setFormSpecs([...formSpecs, { name: "", values: [] }]);
+    // 創建全新的對象，避免引用問題
+    setFormSpecs([...formSpecs, { name: "", values: [] as string[] }]);
   };
 
   const removeSpec = (idx: number) => {
@@ -63,23 +65,30 @@ export default function SpecTemplateManager() {
   };
 
   const updateSpecName = (idx: number, name: string) => {
-    const newSpecs = [...formSpecs];
-    newSpecs[idx].name = name;
+    const newSpecs = formSpecs.map((s, i) =>
+      i === idx ? { ...s, name } : s
+    );
     setFormSpecs(newSpecs);
   };
 
   const addSpecValue = (idx: number, value: string) => {
     if (!value.trim()) return;
-    const newSpecs = [...formSpecs];
-    if (!newSpecs[idx].values.includes(value.trim())) {
-      newSpecs[idx].values.push(value.trim());
-      setFormSpecs(newSpecs);
-    }
+    const newSpecs = formSpecs.map((s, i) => {
+      if (i === idx && !s.values.includes(value.trim())) {
+        return { ...s, values: [...s.values, value.trim()] };
+      }
+      return s;
+    });
+    setFormSpecs(newSpecs);
   };
 
   const removeSpecValue = (specIdx: number, valIdx: number) => {
-    const newSpecs = [...formSpecs];
-    newSpecs[specIdx].values.splice(valIdx, 1);
+    const newSpecs = formSpecs.map((s, i) => {
+      if (i === specIdx) {
+        return { ...s, values: s.values.filter((_, vi) => vi !== valIdx) };
+      }
+      return s;
+    });
     setFormSpecs(newSpecs);
   };
 
