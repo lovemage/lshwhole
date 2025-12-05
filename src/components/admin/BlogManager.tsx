@@ -50,6 +50,7 @@ export default function BlogManager() {
     tag_ids: [] as number[],
   });
   const [isUploading, setIsUploading] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
 
   useEffect(() => {
     fetchPosts();
@@ -227,13 +228,32 @@ export default function BlogManager() {
                               />
                           </div>
                           <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">內容</label>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  內容
+                                  <span className="text-xs text-gray-500 ml-2">(支援 HTML 格式)</span>
+                              </label>
                               <div className="h-96 pb-12">
-                                <ReactQuill 
-                                    theme="snow" 
-                                    value={formData.content} 
-                                    onChange={(val) => setFormData({...formData, content: val})} 
+                                <ReactQuill
+                                    theme="snow"
+                                    value={formData.content}
+                                    onChange={(val) => setFormData({...formData, content: val})}
                                     className="h-80"
+                                    modules={{
+                                        toolbar: [
+                                            [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
+                                            ['bold', 'italic', 'underline', 'strike'],
+                                            [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+                                            [{ 'script': 'sub'}, { 'script': 'super' }],
+                                            [{ 'indent': '-1'}, { 'indent': '+1' }],
+                                            [{ 'direction': 'rtl' }],
+                                            [{ 'color': [] }, { 'background': [] }],
+                                            [{ 'align': [] }],
+                                            ['link', 'image', 'video'],
+                                            ['blockquote', 'code-block'],
+                                            ['clean'],
+                                            ['code-view'] // HTML source view button
+                                        ]
+                                    }}
                                 />
                               </div>
                           </div>
@@ -401,14 +421,47 @@ export default function BlogManager() {
                           </ul>
                       </div>
 
-                      <button 
-                        onClick={handleSave}
-                        className="w-full py-3 bg-primary text-white rounded-xl font-bold hover:bg-primary/90 shadow-sm"
-                      >
-                          儲存文章
-                      </button>
+                      <div className="flex gap-2">
+                        <button 
+                            onClick={() => setShowPreview(true)}
+                            className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 shadow-sm border border-gray-300"
+                        >
+                            預覽文章
+                        </button>
+                        <button 
+                            onClick={handleSave}
+                            className="flex-1 py-3 bg-primary text-white rounded-xl font-bold hover:bg-primary/90 shadow-sm"
+                        >
+                            儲存文章
+                        </button>
+                      </div>
                   </div>
               </div>
+
+              {/* Preview Modal */}
+              {showPreview && (
+                <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto flex flex-col">
+                        <div className="flex justify-between items-center p-4 border-b border-gray-200 sticky top-0 bg-white z-10">
+                            <h3 className="text-lg font-bold text-gray-900">預覽文章</h3>
+                            <button onClick={() => setShowPreview(false)} className="text-gray-500 hover:text-gray-700">
+                                <span className="material-symbols-outlined">close</span>
+                            </button>
+                        </div>
+                        <div className="p-8">
+                            <div className="max-w-3xl mx-auto">
+                                <h1 className="text-4xl font-bold text-gray-900 mb-4">{formData.title}</h1>
+                                {formData.cover_image && (
+                                    <div className="mb-8 aspect-[21/9] rounded-2xl overflow-hidden bg-gray-100">
+                                        <img src={formData.cover_image} alt={formData.title} className="w-full h-full object-cover" />
+                                    </div>
+                                )}
+                                <div className="prose prose-lg max-w-none ql-editor" dangerouslySetInnerHTML={{ __html: formData.content }} />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+              )}
           </div>
       );
   }
