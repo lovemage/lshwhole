@@ -15,7 +15,6 @@ const CATEGORIES = [
   { id: "A1", name: "品牌分類 (Brand)" },
   { id: "A2", name: "商品屬性 (Attribute)" },
   { id: "A3", name: "活動分類 (Activity)" },
-  { id: "B1", name: "部落格標籤 (Blog)" },
 ];
 
 export default function TagManager() {
@@ -210,8 +209,8 @@ export default function TagManager() {
     const groups: { [key: string]: Tag[] } = {};
     
     sorted.forEach(tag => {
-      // Extract brand name from slug (e.g., BRAND_NIKE -> NIKE) or just use slug
-      let key = tag.slug.replace("BRAND_", "").charAt(0).toUpperCase();
+      // Group by Name's first letter
+      let key = tag.name.trim().charAt(0).toUpperCase();
       if (!/[A-Z]/.test(key)) key = "#";
       if (!groups[key]) groups[key] = [];
       groups[key].push(tag);
