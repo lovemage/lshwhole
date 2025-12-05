@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { NAV_ITEMS } from "./constants";
+import { NAV_GROUPS } from "./constants";
 
 interface AdminSidebarProps {
   activeNav: string;
@@ -14,6 +14,21 @@ export default function AdminSidebar({
   currentUserPermissions,
 }: AdminSidebarProps) {
   const [notifications, setNotifications] = useState<{ [key: string]: number }>({});
+  // Initialize expanded groups with the one containing activeNav, or first group
+  const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
+
+  useEffect(() => {
+    // Auto expand group containing active item
+    const activeGroup = NAV_GROUPS.find(g => g.items.some(i => i.id === activeNav));
+    if (activeGroup) {
+      setExpandedGroups(prev => {
+        if (!prev.includes(activeGroup.title)) {
+          return [...prev, activeGroup.title];
+        }
+        return prev;
+      });
+    }
+  }, [activeNav]);
 
   useEffect(() => {
     const fetchNotifications = async () => {
@@ -33,10 +48,11 @@ export default function AdminSidebar({
     return () => clearInterval(interval);
   }, []);
 
-  const filteredNavItems = NAV_ITEMS.filter(
-    (item) =>
-      currentUserPermissions === null || currentUserPermissions.includes(item.id)
-  );
+  const toggleGroup = (title: string) => {
+    setExpandedGroups(prev => 
+      prev.includes(title) ? prev.filter(t => t !== title) : [...prev, title]
+    );
+  };
 
   return (
     <aside className="flex w-64 flex-col bg-sidebar-dark text-text-primary-dark p-4 h-full overflow-y-auto">
@@ -54,28 +70,67 @@ export default function AdminSidebar({
 
       <div className="flex flex-1 flex-col justify-between">
         <nav className="flex flex-col gap-2 mt-6">
-          {filteredNavItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setActiveNav(item.id)}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors w-full ${
-                activeNav === item.id
-                  ? "bg-primary/20 text-primary"
-                  : "text-text-secondary-dark hover:bg-primary/10 hover:text-text-primary-dark"
-              }`}
-            >
-              <span className="material-symbols-outlined">{item.icon}</span>
-              <p className="text-sm font-medium flex-1 text-left">{item.label}</p>
-              {notifications[item.id] > 0 && (
-                <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
-                  {notifications[item.id]}
-                </span>
-              )}
-            </button>
-          ))}
+          {/* Dashboard Standalone */}
+          <button
+            onClick={() => setActiveNav("dashboard")}
+            className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors w-full ${
+              activeNav === "dashboard"
+                ? "bg-primary/20 text-primary"
+                : "text-text-secondary-dark hover:bg-primary/10 hover:text-text-primary-dark"
+            }`}
+          >
+            <span className="material-symbols-outlined">dashboard</span>
+            <p className="text-sm font-medium flex-1 text-left">儀表看板</p>
+          </button>
+
+          {NAV_GROUPS.map((group) => {
+            const visibleItems = group.items.filter(item => 
+              currentUserPermissions === null || currentUserPermissions.includes(item.id)
+            );
+            
+            if (visibleItems.length === 0) return null;
+
+            const isExpanded = expandedGroups.includes(group.title);
+
+            return (
+              <div key={group.title} className="flex flex-col">
+                <button
+                  onClick={() => toggleGroup(group.title)}
+                  className="flex items-center justify-between px-3 py-2 text-sm font-medium text-text-secondary-dark hover:text-text-primary-dark transition-colors"
+                >
+                  <span>{group.title}</span>
+                  <span className="material-symbols-outlined text-sm">{isExpanded ? 'expand_less' : 'expand_more'}</span>
+                </button>
+                
+                {isExpanded && (
+                  <div className="flex flex-col gap-1 pl-2 border-l border-border-dark ml-3 mb-2">
+                    {visibleItems.map((item) => (
+                      <button
+                        key={item.id}
+                        onClick={() => setActiveNav(item.id)}
+                        className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors w-full ${
+                          activeNav === item.id
+                            ? "bg-primary/20 text-primary"
+                            : "text-text-secondary-dark hover:bg-primary/10 hover:text-text-primary-dark"
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-lg">{item.icon}</span>
+                        <p className="text-sm font-medium flex-1 text-left">{item.label}</p>
+                        {notifications[item.id] > 0 && (
+                          <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
+                            {notifications[item.id]}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </nav>
 
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 mt-4">
           <div className="h-px bg-border-dark"></div>
           <div className="flex items-center gap-3">
             <div

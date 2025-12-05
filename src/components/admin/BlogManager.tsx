@@ -359,6 +359,38 @@ export default function BlogManager() {
                           </div>
                       </div>
                       
+                      {/* AI Helper */}
+                      <div className="bg-purple-50 p-4 rounded-xl border border-purple-100 text-sm">
+                          <div className="flex justify-between items-start mb-2">
+                              <h4 className="font-bold text-purple-800 flex items-center gap-2">
+                                  <span className="material-symbols-outlined text-lg">auto_awesome</span>
+                                  AI 文章生成助手
+                              </h4>
+                              <button 
+                                onClick={() => {
+                                    const text = `請協助製作 Blog 文章：\n\n請分別填入以下內容：\n1. 標題 (範例:大阪玩具購物行程)\n2. 內容 (豐富詳細，使用 HTML 格式)\n3. 摘要\n4. SEO標題\n5. SEO描述 (注意字數限制)\n6. 關鍵字 (逗號分開)`;
+                                    navigator.clipboard.writeText(text);
+                                    alert("已複製指令！請貼上給 AI 使用。");
+                                }}
+                                className="text-xs bg-white text-purple-600 border border-purple-200 px-2 py-1 rounded hover:bg-purple-50 flex items-center gap-1"
+                              >
+                                  <span className="material-symbols-outlined text-sm">content_copy</span>
+                                  複製指令
+                              </button>
+                          </div>
+                          <p className="text-purple-700 mb-2">複製以下指令給 AI (如 ChatGPT) 來協助撰寫：</p>
+                          <div className="bg-white/50 p-2 rounded border border-purple-100 text-purple-800 font-mono text-xs whitespace-pre-wrap">
+                              請協助製作 Blog 文章：<br/>
+                              請分別填入以下內容：<br/>
+                              1. 標題 (範例:大阪玩具購物行程)<br/>
+                              2. 內容 (豐富詳細，使用 HTML 格式)<br/>
+                              3. 摘要<br/>
+                              4. SEO標題<br/>
+                              5. SEO描述 (注意字數限制)<br/>
+                              6. 關鍵字 (逗號分開)
+                          </div>
+                      </div>
+
                       {/* Instructions */}
                       <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 text-sm text-blue-800">
                           <h4 className="font-bold mb-2">教學說明</h4>
