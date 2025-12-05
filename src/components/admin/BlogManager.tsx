@@ -51,6 +51,7 @@ export default function BlogManager() {
   });
   const [isUploading, setIsUploading] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [htmlMode, setHtmlMode] = useState(false);
 
   useEffect(() => {
     fetchPosts();
@@ -228,33 +229,49 @@ export default function BlogManager() {
                               />
                           </div>
                           <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">
-                                  內容
-                                  <span className="text-xs text-gray-500 ml-2">(支援 HTML 格式)</span>
-                              </label>
+                              <div className="flex justify-between items-end mb-1">
+                                  <label className="block text-sm font-medium text-gray-700">
+                                      內容
+                                      <span className="text-xs text-gray-500 ml-2">(支援 HTML 格式)</span>
+                                  </label>
+                                  <button
+                                    onClick={() => setHtmlMode(!htmlMode)}
+                                    className={`text-xs px-2 py-1 rounded border ${htmlMode ? 'bg-primary text-white border-primary' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}
+                                  >
+                                      {htmlMode ? '切換回編輯器' : '切換 HTML 代碼'}
+                                  </button>
+                              </div>
                               <div className="h-96 pb-12">
-                                <ReactQuill
-                                    theme="snow"
-                                    value={formData.content}
-                                    onChange={(val) => setFormData({...formData, content: val})}
-                                    className="h-80"
-                                    modules={{
-                                        toolbar: [
-                                            [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
-                                            ['bold', 'italic', 'underline', 'strike'],
-                                            [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-                                            [{ 'script': 'sub'}, { 'script': 'super' }],
-                                            [{ 'indent': '-1'}, { 'indent': '+1' }],
-                                            [{ 'direction': 'rtl' }],
-                                            [{ 'color': [] }, { 'background': [] }],
-                                            [{ 'align': [] }],
-                                            ['link', 'image', 'video'],
-                                            ['blockquote', 'code-block'],
-                                            ['clean'],
-                                            ['code-view'] // HTML source view button
-                                        ]
-                                    }}
-                                />
+                                {htmlMode ? (
+                                    <textarea
+                                        value={formData.content}
+                                        onChange={(e) => setFormData({...formData, content: e.target.value})}
+                                        className="w-full h-80 p-4 font-mono text-sm border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
+                                        placeholder="在此輸入 HTML 代碼..."
+                                    />
+                                ) : (
+                                    <ReactQuill
+                                        theme="snow"
+                                        value={formData.content}
+                                        onChange={(val) => setFormData({...formData, content: val})}
+                                        className="h-80"
+                                        modules={{
+                                            toolbar: [
+                                                [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
+                                                ['bold', 'italic', 'underline', 'strike'],
+                                                [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+                                                [{ 'script': 'sub'}, { 'script': 'super' }],
+                                                [{ 'indent': '-1'}, { 'indent': '+1' }],
+                                                [{ 'direction': 'rtl' }],
+                                                [{ 'color': [] }, { 'background': [] }],
+                                                [{ 'align': [] }],
+                                                ['link', 'image', 'video'],
+                                                ['blockquote', 'code-block'],
+                                                ['clean']
+                                            ]
+                                        }}
+                                    />
+                                )}
                               </div>
                           </div>
                           <div className="pt-8">
@@ -388,9 +405,26 @@ export default function BlogManager() {
                               </h4>
                               <button 
                                 onClick={() => {
-                                    const text = `請協助製作 Blog 文章：\n\n請分別填入以下內容：\n1. 標題 (範例:大阪玩具購物行程)\n2. 內容 (豐富詳細，使用 HTML 格式)\n3. 摘要\n4. SEO標題\n5. SEO描述 (注意字數限制)\n6. 關鍵字 (逗號分開)`;
+                                    const text = `請協助製作一篇符合 SEO 標準的 Blog 文章。
+
+請按照以下結構提供內容：
+
+1. **標題**：具吸引力，包含主要關鍵字 (範例: 大阪神戶京都5日購物旅遊趣行程安排)。
+2. **內容 (HTML 格式)**：
+   - 請直接提供 HTML 代碼 (不要包含 \`\`\`html 標籤)。
+   - 使用 <h2> 和 <h3> 標籤來組織文章結構。
+   - 重點內容請使用 <strong> 加粗。
+   - 列表請使用 <ul> 和 <li>。
+   - 段落請使用 <p>。
+   - 內容應豐富詳細，字數建議 1000 字以上。
+3. **摘要**：簡短說明文章內容，約 100-150 字，用於列表顯示。
+4. **SEO 標題**：包含關鍵字，吸引點擊，建議 30-60 字。
+5. **SEO 描述**：精簡總結文章重點，建議 130-160 字。
+6. **SEO 關鍵字**：5-10 個相關關鍵字，用逗號分隔。
+
+主題：[請在此填入您的主題]`;
                                     navigator.clipboard.writeText(text);
-                                    alert("已複製指令！請貼上給 AI 使用。");
+                                    alert("已複製優化指令！請貼上給 AI 使用並填入主題。");
                                 }}
                                 className="text-xs bg-white text-purple-600 border border-purple-200 px-2 py-1 rounded hover:bg-purple-50 flex items-center gap-1"
                               >
@@ -399,15 +433,17 @@ export default function BlogManager() {
                               </button>
                           </div>
                           <p className="text-purple-700 mb-2">複製以下指令給 AI (如 ChatGPT) 來協助撰寫：</p>
-                          <div className="bg-white/50 p-2 rounded border border-purple-100 text-purple-800 font-mono text-xs whitespace-pre-wrap">
-                              請協助製作 Blog 文章：<br/>
-                              請分別填入以下內容：<br/>
-                              1. 標題 (範例:大阪玩具購物行程)<br/>
-                              2. 內容 (豐富詳細，使用 HTML 格式)<br/>
+                          <div className="bg-white/50 p-2 rounded border border-purple-100 text-purple-800 font-mono text-xs whitespace-pre-wrap max-h-40 overflow-y-auto">
+                              請協助製作一篇符合 SEO 標準的 Blog 文章。<br/>
+                              請按照以下結構提供內容：<br/>
+                              1. 標題<br/>
+                              2. 內容 (HTML 格式，使用 h2/h3/strong/ul/li/p)<br/>
                               3. 摘要<br/>
-                              4. SEO標題<br/>
-                              5. SEO描述 (注意字數限制)<br/>
-                              6. 關鍵字 (逗號分開)
+                              4. SEO 標題<br/>
+                              5. SEO 描述<br/>
+                              6. SEO 關鍵字<br/>
+                              <br/>
+                              主題：[填入主題]
                           </div>
                       </div>
 
