@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     // 讀取會員資料
     const { data: profile, error: profileError } = await admin
       .from("profiles")
-      .select("user_id, email, display_name, phone, delivery_address, tier, account_status, login_enabled, last_purchase_date, created_at")
+      .select("user_id, email, display_name, phone, delivery_address, tier, is_admin, account_status, login_enabled, last_purchase_date, created_at")
       .eq("user_id", user.id)
       .single();
 

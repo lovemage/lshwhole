@@ -35,9 +35,36 @@ function AdminDashboard() {
   useEffect(() => {
     const checkPermissions = async () => {
       try {
-        const { data: { user } } = await import("@/lib/supabase").then(m => m.supabase.auth.getUser());
+        const { supabase } = await import("@/lib/supabase").then((m) => ({ supabase: m.supabase }));
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
         if (!user) {
           router.replace("/login?next=/admin");
+          return;
+        }
+
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData.session?.access_token;
+        if (!token) {
+          router.replace("/login?next=/admin");
+          return;
+        }
+
+        const profileRes = await fetch("/api/profile", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!profileRes.ok) {
+          router.replace("/login?next=/admin");
+          return;
+        }
+
+        const profile = await profileRes.json().catch(() => null);
+        if (!(profile as any)?.is_admin) {
+          router.replace("/");
           return;
         }
 

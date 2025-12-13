@@ -45,6 +45,67 @@ export default function BannerManager() {
     }
   };
 
+  const fileFromBlob = (blob: Blob, filename: string) => {
+    const base = filename.replace(/\.[^/.]+$/, "");
+    return new File([blob], `${base}.webp`, { type: "image/webp" });
+  };
+
+  const convertImageToWebp = async (file: File) => {
+    if (typeof window === "undefined") return file;
+    if (!file.type?.startsWith("image/")) return file;
+    if (file.type === "image/webp" && file.size < 2 * 1024 * 1024) return file;
+
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await createImageBitmap(file).catch(async () => {
+        const el = new Image();
+        el.src = url;
+        await new Promise<void>((resolve, reject) => {
+          el.onload = () => resolve();
+          el.onerror = () => reject(new Error("Image load failed"));
+        });
+        const canvas = document.createElement("canvas");
+        canvas.width = el.naturalWidth || el.width;
+        canvas.height = el.naturalHeight || el.height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("Canvas not supported");
+        ctx.drawImage(el, 0, 0);
+        const bmp = await createImageBitmap(canvas);
+        return bmp;
+      });
+
+      const maxDim = 1920;
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return file;
+      ctx.drawImage(img, 0, 0, w, h);
+
+      const encode = (quality: number) =>
+        new Promise<Blob | null>((resolve) => canvas.toBlob((b) => resolve(b), "image/webp", quality));
+
+      let quality = 0.82;
+      let blob = await encode(quality);
+      const maxBytes = 2.5 * 1024 * 1024;
+      while (blob && blob.size > maxBytes && quality > 0.5) {
+        quality = Math.max(0.5, quality - 0.08);
+        blob = await encode(quality);
+      }
+
+      if (!blob) return file;
+      return fileFromBlob(blob, file.name);
+    } catch {
+      return file;
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  };
+
   const fetchIndexInterval = async () => {
     try {
       const res = await fetch("/api/banner-settings?page_type=index");
@@ -75,7 +136,8 @@ export default function BannerManager() {
   const handleUpload = async (file: File | undefined, onSuccess: (url: string) => void) => {
     if (!file) return;
     const formData = new FormData();
-    formData.append("file", file);
+    const processedFile = await convertImageToWebp(file);
+    formData.append("file", processedFile);
     setBannerLoading(true);
     try {
       const { data: sessionData } = await supabase.auth.getSession();
