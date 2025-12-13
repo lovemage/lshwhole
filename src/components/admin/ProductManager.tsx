@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase";
 
 interface Category {
   id: number;
@@ -843,13 +844,37 @@ export default function ProductManager() {
                             const file = e.target.files[i];
                             const formData = new FormData();
                             formData.append("file", file);
-                            const res = await fetch("/api/upload", { method: "POST", body: formData });
-                            if (res.ok) {
-                              const data = await res.json();
+
+                            const { data: sessionData } = await supabase.auth.getSession();
+                            const token = sessionData.session?.access_token;
+
+                            const res = await fetch("/api/upload", {
+                              method: "POST",
+                              headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+                              body: formData
+                            });
+
+                            const rawText = await res.text();
+                            const data = (() => {
+                              try {
+                                return rawText ? JSON.parse(rawText) : {};
+                              } catch {
+                                return null;
+                              }
+                            })();
+
+                            if (!res.ok) {
+                              console.error("Upload failed:", (data as any)?.error || rawText || res.status);
+                              continue;
+                            }
+
+                            if (data && (data as any).url) {
                               setProductEditForm(prev => ({
                                 ...prev,
-                                images: [...prev.images, { url: data.url, sort: prev.images.length, is_product: true, is_description: false }]
+                                images: [...prev.images, { url: (data as any).url, sort: prev.images.length, is_product: true, is_description: false }]
                               }));
+                            } else {
+                              console.error("Upload failed:", (data as any)?.error || "Unknown error");
                             }
                           }
                         } catch (err) {

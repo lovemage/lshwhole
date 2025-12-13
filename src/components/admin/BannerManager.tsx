@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase";
 
 export default function BannerManager() {
   const [bannerTab, setBannerTab] = useState<"index" | "products">("index");
@@ -77,15 +78,33 @@ export default function BannerManager() {
     formData.append("file", file);
     setBannerLoading(true);
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+
       const res = await fetch("/api/upload", {
         method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         body: formData,
       });
-      const data = await res.json();
-      if (data.url) {
-        onSuccess(data.url);
+
+      const rawText = await res.text();
+      const payload = (() => {
+        try {
+          return rawText ? JSON.parse(rawText) : {};
+        } catch {
+          return null;
+        }
+      })();
+
+      if (!res.ok) {
+        alert((payload as any)?.error || rawText || "Upload failed");
+        return;
+      }
+
+      if (payload && (payload as any).url) {
+        onSuccess((payload as any).url);
       } else {
-        alert("Upload failed: " + (data.error || "Unknown error"));
+        alert("Upload failed: " + ((payload as any)?.error || "Unknown error"));
       }
     } catch (e) {
       console.error(e);

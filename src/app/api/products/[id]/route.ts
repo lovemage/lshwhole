@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { createClient } from "@supabase/supabase-js";
 
+ const ensureHttps = (url: string) => (url ? url.replace(/^http:/, "https:") : url);
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -95,7 +97,7 @@ export async function GET(
       updated_at: product.updated_at,
       // 返回完整圖片資訊（包含 is_product 和 is_description）
       images: (images || []).map((img: any) => ({
-        url: img.url,
+        url: ensureHttps(img.url),
         sort: img.sort,
         is_product: img.is_product ?? true,
         is_description: img.is_description ?? false,

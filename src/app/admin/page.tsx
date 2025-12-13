@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import AdminHeader from "@/components/admin/AdminHeader";
@@ -26,6 +26,7 @@ function AdminDashboard() {
   const [activeNav, setActiveNav] = useState("dashboard");
   const [currentUserPermissions, setCurrentUserPermissions] = useState<string[] | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const mainRef = useRef<HTMLElement | null>(null);
 
   // Check permissions
   useEffect(() => {
@@ -51,6 +52,12 @@ function AdminDashboard() {
     };
     checkPermissions();
   }, []);
+
+  useEffect(() => {
+    const el = mainRef.current;
+    if (!el) return;
+    el.scrollTo({ top: 0, behavior: "smooth" });
+  }, [activeNav]);
 
   const renderContent = () => {
     switch (activeNav) {
@@ -118,7 +125,7 @@ function AdminDashboard() {
       />
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto">
+      <main ref={mainRef} className="flex-1 overflow-y-auto">
         <AdminHeader activeNav={activeNav} />
 
         {/* Page Content */}

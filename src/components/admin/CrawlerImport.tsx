@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import Script from "next/script";
+import { supabase } from "@/lib/supabase";
 
 interface Category {
   id: number;
@@ -302,21 +303,36 @@ export default function CrawlerImport() {
         const formData = new FormData();
         formData.append("file", file);
 
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData.session?.access_token;
+
         const res = await fetch("/api/upload", {
           method: "POST",
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
           body: formData,
         });
 
-        if (res.ok) {
-          const data = await res.json();
-          if (data.url) {
-            setCandidateImages((prev) => [
-              ...prev,
-              { url: data.url, isProduct: true, isDescription: false },
-            ]);
+        const rawText = await res.text();
+        const data = (() => {
+          try {
+            return rawText ? JSON.parse(rawText) : {};
+          } catch {
+            return null;
           }
+        })();
+
+        if (!res.ok) {
+          console.error("Upload failed:", (data as any)?.error || rawText || res.status);
+          continue;
+        }
+
+        if (data && (data as any).url) {
+          setCandidateImages((prev) => [
+            ...prev,
+            { url: (data as any).url, isProduct: true, isDescription: false },
+          ]);
         } else {
-          console.error("Upload failed");
+          console.error("Upload failed:", (data as any)?.error || "Unknown error");
         }
       }
     } catch (err) {

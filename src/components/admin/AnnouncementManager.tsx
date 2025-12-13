@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import dynamic from "next/dynamic";
 import "react-quill-new/dist/quill.snow.css";
+import { supabase } from "@/lib/supabase";
 
 // Dynamic import for ReactQuill to avoid SSR issues
 const ReactQuill = dynamic(() => import("react-quill-new"), { ssr: false }) as any;
@@ -54,20 +55,37 @@ export default function AnnouncementManager() {
       formData.append('file', file);
 
       try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData.session?.access_token;
+
         const res = await fetch('/api/upload', {
           method: 'POST',
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
           body: formData
         });
 
-        if (res.ok) {
-          const data = await res.json();
+        const rawText = await res.text();
+        const data = (() => {
+          try {
+            return rawText ? JSON.parse(rawText) : {};
+          } catch {
+            return null;
+          }
+        })();
+
+        if (!res.ok) {
+          alert((data as any)?.error || rawText || '圖片上傳失敗');
+          return;
+        }
+
+        if (data && (data as any).url) {
           const quill = quillRef.current?.getEditor();
           const range = quill?.getSelection(true);
           if (quill && range) {
-            quill.insertEmbed(range.index, 'image', data.url);
+            quill.insertEmbed(range.index, 'image', (data as any).url);
           }
         } else {
-          alert('圖片上傳失敗');
+          alert((data as any)?.error || '圖片上傳失敗');
         }
       } catch (err) {
         console.error("Upload failed", err);

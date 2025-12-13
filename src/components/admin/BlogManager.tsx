@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { supabase } from "@/lib/supabase";
 import dynamic from "next/dynamic";
 import "react-quill-new/dist/quill.snow.css";
 
@@ -176,12 +177,34 @@ export default function BlogManager() {
       try {
           const fd = new FormData();
           fd.append("file", file);
-          const res = await fetch("/api/upload", { method: "POST", body: fd });
-          if (res.ok) {
-              const data = await res.json();
-              setFormData({...formData, cover_image: data.url});
+
+          const { data: sessionData } = await supabase.auth.getSession();
+          const token = sessionData.session?.access_token;
+
+          const res = await fetch("/api/upload", {
+            method: "POST",
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+            body: fd
+          });
+
+          const rawText = await res.text();
+          const data = (() => {
+            try {
+              return rawText ? JSON.parse(rawText) : {};
+            } catch {
+              return null;
+            }
+          })();
+
+          if (!res.ok) {
+              alert((data as any)?.error || rawText || "上傳失敗");
+              return;
+          }
+
+          if (data && (data as any).url) {
+              setFormData({...formData, cover_image: (data as any).url});
           } else {
-              alert("上傳失敗");
+              alert((data as any)?.error || "上傳失敗");
           }
       } catch (e) {
           alert("上傳失敗");

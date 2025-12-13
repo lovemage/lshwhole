@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 
+ const ensureHttps = (url: string | null | undefined) =>
+  url ? url.replace(/^http:/, "https:") : null;
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -114,7 +117,7 @@ export async function GET(
       id: p.id,
       title: p.title_zh || p.title_original || p.sku,
       retail_price_twd: p.retail_price_twd,
-      cover_image_url: coverMap.get(p.id) || null,
+      cover_image_url: ensureHttps(coverMap.get(p.id) || null),
     }));
 
     return NextResponse.json(result);
@@ -171,7 +174,7 @@ async function getRandomProducts(admin: any, excludeId: string, limit: number) {
       id: p.id,
       title: p.title_zh || p.title_original || p.sku,
       retail_price_twd: p.retail_price_twd,
-      cover_image_url: coverMap.get(p.id) || null,
+      cover_image_url: ensureHttps(coverMap.get(p.id) || null),
     }));
 
     return NextResponse.json(result);

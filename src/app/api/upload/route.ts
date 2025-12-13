@@ -3,13 +3,22 @@ import { v2 as cloudinary } from "cloudinary";
 
 // Configure Cloudinary
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_URL?.split('@')[1] || 'dtoqyhhrc',
-  api_key: process.env.CLOUDINARY_URL?.split('://')[1]?.split(':')[0] || '442777697991838',
-  api_secret: process.env.CLOUDINARY_URL?.split(':')[2]?.split('@')[0] || 'gXjLJEwHZuwlFB2_VgNvB-FOb4s',
+  cloud_name: process.env.CLOUDINARY_URL?.split('@')[1],
+  api_key: process.env.CLOUDINARY_URL?.split('://')[1]?.split(':')[0],
+  api_secret: process.env.CLOUDINARY_URL?.split(':')[2]?.split('@')[0],
 });
 
 export async function POST(request: NextRequest) {
   try {
+    const authHeader = request.headers.get("authorization") || request.headers.get("Authorization");
+    if (!authHeader) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    if (!process.env.CLOUDINARY_URL) {
+      return NextResponse.json({ error: "Upload service not configured" }, { status: 500 });
+    }
+
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
 
@@ -49,6 +58,15 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const authHeader = request.headers.get("authorization") || request.headers.get("Authorization");
+    if (!authHeader) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    if (!process.env.CLOUDINARY_URL) {
+      return NextResponse.json({ error: "Upload service not configured" }, { status: 500 });
+    }
+
     const { searchParams } = new URL(request.url);
     const public_id = searchParams.get("public_id");
 

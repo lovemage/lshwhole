@@ -99,11 +99,21 @@ export default function AdminSidebar({
                   className="flex items-center justify-between px-3 py-2 text-sm font-medium text-text-secondary-dark hover:text-text-primary-dark transition-colors"
                 >
                   <span>{group.title}</span>
-                  <span className="material-symbols-outlined text-sm">{isExpanded ? 'expand_less' : 'expand_more'}</span>
+                  <span
+                    className={`material-symbols-outlined text-sm transition-transform duration-200 ${
+                      isExpanded ? "rotate-180" : "rotate-0"
+                    }`}
+                  >
+                    expand_more
+                  </span>
                 </button>
-                
-                {isExpanded && (
-                  <div className="flex flex-col gap-1 pl-2 border-l border-border-dark ml-3 mb-2">
+
+                <div
+                  className={`ml-3 mb-2 overflow-hidden transition-all duration-200 ${
+                    isExpanded ? "max-h-[1000px] opacity-100" : "max-h-0 opacity-0"
+                  }`}
+                >
+                  <div className="flex flex-col gap-1 pl-2 border-l border-border-dark">
                     {visibleItems.map((item) => (
                       <button
                         key={item.id}
@@ -124,7 +134,7 @@ export default function AdminSidebar({
                       </button>
                     ))}
                   </div>
-                )}
+                </div>
               </div>
             );
           })}

@@ -1244,17 +1244,36 @@ export default function MemberPage() {
                                 setIsUploading(true);
                                 const formData = new FormData();
                                 formData.append('file', file);
+
+                                const { data: sessionData } = await supabase.auth.getSession();
                                 
                                 const res = await fetch('/api/upload', {
                                   method: 'POST',
+                                  headers: (() => {
+                                    const token = sessionData.session?.access_token;
+                                    return token ? { Authorization: `Bearer ${token}` } : undefined;
+                                  })(),
                                   body: formData
                                 });
-                                
-                                if (res.ok) {
-                                  const data = await res.json();
-                                  setTopUpForm({...topUpForm, proofImage: data.url});
+
+                                const rawText = await res.text();
+                                const data = (() => {
+                                  try {
+                                    return rawText ? JSON.parse(rawText) : {};
+                                  } catch {
+                                    return null;
+                                  }
+                                })();
+
+                                if (!res.ok) {
+                                  alert((data as any)?.error || rawText || '上傳失敗');
+                                  return;
+                                }
+
+                                if (data && (data as any).url) {
+                                  setTopUpForm({...topUpForm, proofImage: (data as any).url});
                                 } else {
-                                  alert('上傳失敗');
+                                  alert((data as any)?.error || '上傳失敗');
                                 }
                               } catch (err) {
                                 console.error(err);

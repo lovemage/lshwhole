@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase";
 
 export default function LimitedTimeProductManager() {
   const [products, setProducts] = useState<any[]>([]);
@@ -469,13 +470,37 @@ export default function LimitedTimeProductManager() {
                             const file = e.target.files[i];
                             const formData = new FormData();
                             formData.append("file", file);
-                            const res = await fetch("/api/upload", { method: "POST", body: formData });
-                            if (res.ok) {
-                              const data = await res.json();
-                              setManualForm(prev => ({ ...prev, image_urls: [...prev.image_urls, data.url] }));
+
+                            const { data: sessionData } = await supabase.auth.getSession();
+                            const token = sessionData.session?.access_token;
+
+                            const res = await fetch("/api/upload", {
+                              method: "POST",
+                              headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+                              body: formData
+                            });
+
+                            const rawText = await res.text();
+                            const data = (() => {
+                              try {
+                                return rawText ? JSON.parse(rawText) : {};
+                              } catch {
+                                return null;
+                              }
+                            })();
+
+                            if (!res.ok) {
+                              console.error("Upload failed:", (data as any)?.error || rawText || res.status);
+                              continue;
+                            }
+
+                            if (data && (data as any).url) {
+                              setManualForm(prev => ({ ...prev, image_urls: [...prev.image_urls, (data as any).url] }));
+                            } else {
+                              console.error("Upload failed:", (data as any)?.error || "Unknown error");
                             }
                           }
-                        } catch (err) {
+                        } catch {
                           alert("上傳失敗");
                         } finally {
                           setIsUploading(false);

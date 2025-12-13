@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { createClient } from "@supabase/supabase-js";
 
+ const ensureHttps = (url: string | null | undefined) =>
+  url ? url.replace(/^http:/, "https:") : null;
+
 // 公開商品列表（僅發佈商品），支援搜尋、分類過濾（含子分類）和標籤篩選
 export async function GET(request: NextRequest) {
   try {
@@ -210,7 +213,7 @@ export async function GET(request: NextRequest) {
       retail_price_twd: p.retail_price_twd,
       wholesale_price_twd:
         isWholesaleTier && p.wholesale_price_visible ? p.wholesale_price_twd : null,
-      cover_image_url: coverMap.get(p.id) || null,
+      cover_image_url: ensureHttps(coverMap.get(p.id) || null),
       tags: (tagsMap.get(p.id) || []).sort((a, b) => (a.sort || 0) - (b.sort || 0)),
     }));
 

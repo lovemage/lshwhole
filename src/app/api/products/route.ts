@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 
+ const ensureHttps = (url: string) => (url ? url.replace(/^http:/, "https:") : url);
+
 export async function GET(request: NextRequest) {
   try {
     const admin = supabaseAdmin();
@@ -54,7 +56,7 @@ export async function GET(request: NextRequest) {
       let coverImage = null;
       if (p.product_images && Array.isArray(p.product_images) && p.product_images.length > 0) {
         const sortedImages = p.product_images.sort((a: any, b: any) => (a.sort || 0) - (b.sort || 0));
-        coverImage = sortedImages[0].url;
+        coverImage = ensureHttps(sortedImages[0].url);
       }
 
       // Extract tags from product_tag_map

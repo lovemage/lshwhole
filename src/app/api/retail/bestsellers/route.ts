@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 
+ const ensureHttps = (url: string) => (url ? url.replace(/^http:/, "https:") : url);
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -32,7 +34,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json(data || []);
+    return NextResponse.json((data || []).map((x: any) => ({
+      ...x,
+      cover_image_url: ensureHttps(x.cover_image_url),
+    })));
   } catch (err) {
     console.error("GET /api/retail/bestsellers error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
