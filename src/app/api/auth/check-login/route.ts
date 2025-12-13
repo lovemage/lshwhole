@@ -31,12 +31,23 @@ export async function POST(request: NextRequest) {
     // 查詢會員資料
     const { data: profile, error: profileError } = await admin
       .from("profiles")
-      .select("user_id, email, display_name, tier, login_enabled, login_disabled_at, login_disabled_reason, account_status")
+      .select("user_id, email, display_name, tier, is_admin, login_enabled, login_disabled_at, login_disabled_reason, account_status")
       .eq("user_id", user.id)
       .single();
 
     if (profileError || !profile) {
       return NextResponse.json({ error: "找不到會員資料" }, { status: 404 });
+    }
+
+    // Admin 帳號：允許登入後台，不受每月訂單限制
+    if ((profile as any).is_admin) {
+      return NextResponse.json({
+        allowed: true,
+        user_id: profile.user_id,
+        email: profile.email,
+        display_name: profile.display_name,
+        tier: profile.tier,
+      });
     }
 
     // 檢查帳號狀態

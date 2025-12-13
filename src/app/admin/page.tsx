@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import AdminHeader from "@/components/admin/AdminHeader";
@@ -23,9 +24,11 @@ import SpecTemplateManager from "@/components/admin/SpecTemplateManager";
 import BlogManager from "@/components/admin/BlogManager";
 
 function AdminDashboard() {
+  const router = useRouter();
   const [activeNav, setActiveNav] = useState("dashboard");
   const [currentUserPermissions, setCurrentUserPermissions] = useState<string[] | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const mainRef = useRef<HTMLElement | null>(null);
 
   // Check permissions
@@ -33,25 +36,30 @@ function AdminDashboard() {
     const checkPermissions = async () => {
       try {
         const { data: { user } } = await import("@/lib/supabase").then(m => m.supabase.auth.getUser());
-        if (user) {
-          setCurrentUserId(user.id);
-          const res = await fetch("/api/admin/sub-accounts");
-          if (res.ok) {
-            const accounts = await res.json();
-            const myAccount = accounts.find((acc: any) => acc.user_id === user.id);
-            if (myAccount) {
-              setCurrentUserPermissions(myAccount.permissions || []);
-            } else {
-              setCurrentUserPermissions(null);
-            }
+        if (!user) {
+          router.replace("/login?next=/admin");
+          return;
+        }
+
+        setCurrentUserId(user.id);
+        const res = await fetch("/api/admin/sub-accounts");
+        if (res.ok) {
+          const accounts = await res.json();
+          const myAccount = accounts.find((acc: any) => acc.user_id === user.id);
+          if (myAccount) {
+            setCurrentUserPermissions(myAccount.permissions || []);
+          } else {
+            setCurrentUserPermissions(null);
           }
         }
       } catch (err) {
         console.error("Failed to check permissions:", err);
+      } finally {
+        setAuthChecked(true);
       }
     };
     checkPermissions();
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     const el = mainRef.current;
@@ -99,6 +107,14 @@ function AdminDashboard() {
         return null;
     }
   };
+
+  if (!authChecked) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background-light">
+        <p className="text-text-secondary-light">載入中...</p>
+      </div>
+    );
+  }
 
   // Sub-accounts List
   if (activeNav === "sub_accounts") {

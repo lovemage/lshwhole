@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
+import { createClient } from "@supabase/supabase-js";
 import fs from "fs";
 import path from "path";
 
@@ -21,8 +22,43 @@ function saveSubAccountsData(data: any[]) {
     fs.writeFileSync(DATA_FILE_PATH, JSON.stringify(data, null, 2), "utf-8");
 }
 
+async function requireAdmin(request: NextRequest) {
+    const authHeader = request.headers.get("Authorization") || request.headers.get("authorization");
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!authHeader?.startsWith("Bearer ") || !supabaseUrl || !supabaseAnonKey) {
+        return { ok: false as const, error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
+    }
+
+    const client = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader } },
+    });
+
+    const { data: { user }, error: userErr } = await client.auth.getUser();
+    if (userErr || !user) {
+        return { ok: false as const, error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
+    }
+
+    const admin = supabaseAdmin();
+    const { data: profile } = await admin
+        .from("profiles")
+        .select("is_admin")
+        .eq("user_id", user.id)
+        .single();
+
+    if (!profile || !(profile as any).is_admin) {
+        return { ok: false as const, error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
+    }
+
+    return { ok: true as const };
+}
+
 export async function GET(request: NextRequest) {
     try {
+        const guard = await requireAdmin(request);
+        if (!guard.ok) return guard.error;
+
         const admin = supabaseAdmin();
         const subAccountsData = getSubAccountsData();
 
@@ -60,6 +96,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
     try {
+        const guard = await requireAdmin(request);
+        if (!guard.ok) return guard.error;
+
         const body = await request.json();
         const { email, password, name, permissions } = body;
 
@@ -81,12 +120,10 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: createError?.message || "Failed to create user" }, { status: 400 });
         }
 
-        // 2. Update profile role to 'admin'
-        // Note: Trigger might have created the profile, so we update. If not, we insert.
-        // We'll try update first.
+        // 2. Update profile is_admin
         const { error: updateError } = await admin
             .from("profiles")
-            .update({ display_name: name, role: "admin" })
+            .update({ display_name: name, is_admin: true })
             .eq("user_id", user.id);
 
         if (updateError) {
@@ -95,7 +132,7 @@ export async function POST(request: NextRequest) {
                 user_id: user.id,
                 email: email,
                 display_name: name,
-                role: "admin"
+                is_admin: true
             });
         }
 
@@ -117,6 +154,9 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
     try {
+        const guard = await requireAdmin(request);
+        if (!guard.ok) return guard.error;
+
         const body = await request.json();
         const { user_id, permissions, password, name } = body;
 
@@ -164,6 +204,9 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
     try {
+        const guard = await requireAdmin(request);
+        if (!guard.ok) return guard.error;
+
         const { searchParams } = new URL(request.url);
         const user_id = searchParams.get("user_id");
 
