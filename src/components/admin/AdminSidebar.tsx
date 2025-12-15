@@ -6,12 +6,14 @@ interface AdminSidebarProps {
   activeNav: string;
   setActiveNav: (nav: string) => void;
   currentUserPermissions: string[] | null;
+  currentUserEmail?: string | null;
 }
 
 export default function AdminSidebar({
   activeNav,
   setActiveNav,
   currentUserPermissions,
+  currentUserEmail,
 }: AdminSidebarProps) {
   const [notifications, setNotifications] = useState<{ [key: string]: number }>({});
   // Initialize expanded groups with the one containing activeNav, or first group
@@ -151,7 +153,7 @@ export default function AdminSidebar({
               <h1 className="text-base font-medium text-text-primary-dark">
                 管理員
               </h1>
-              <p className="text-sm text-text-secondary-dark">系統管理員</p>
+              <p className="text-sm text-text-secondary-dark">{currentUserEmail || "系統管理員"}</p>
             </div>
           </div>
           <Link

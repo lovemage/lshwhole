@@ -1,11 +1,71 @@
 import { DashboardStats, CategoryStat } from "./constants";
+import { useEffect, useMemo, useState } from "react";
 
 export default function DashboardHome() {
-  const stats: DashboardStats[] = [
-    { label: "總銷售額", value: "$125,430.50", change: "+2.5% 較上月", changeType: "positive" },
-    { label: "新訂單", value: "82", change: "+5.1% 較上月", changeType: "positive" },
-    { label: "會員成長", value: "15", change: "-1.2% 較上月", changeType: "negative" },
-  ];
+  const [stats, setStats] = useState<DashboardStats[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const run = async () => {
+      try {
+        const res = await fetch("/api/admin/dashboard-stats?months=12");
+        if (!res.ok) {
+          return;
+        }
+
+        const json = await res.json();
+        const kpis = json?.kpis;
+
+        if (!kpis) {
+          return;
+        }
+
+        const nextStats: DashboardStats[] = [
+          {
+            label: "總銷售額",
+            value: `NT$ ${Number(kpis.sales_total_twd?.current || 0).toLocaleString()}`,
+            change: String(kpis.sales_total_twd?.changeLabel || "0% 較上月"),
+            changeType: (kpis.sales_total_twd?.changeType || "positive") as "positive" | "negative",
+          },
+          {
+            label: "新訂單",
+            value: String(kpis.orders_count?.current || 0),
+            change: String(kpis.orders_count?.changeLabel || "0% 較上月"),
+            changeType: (kpis.orders_count?.changeType || "positive") as "positive" | "negative",
+          },
+          {
+            label: "會員成長",
+            value: String(kpis.new_members_count?.current || 0),
+            change: String(kpis.new_members_count?.changeLabel || "0% 較上月"),
+            changeType: (kpis.new_members_count?.changeType || "positive") as "positive" | "negative",
+          },
+        ];
+
+        if (!cancelled) {
+          setStats(nextStats);
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const displayStats = useMemo<DashboardStats[]>(() => {
+    return (
+      stats || [
+        { label: "總銷售額", value: "-", change: "-", changeType: "positive" },
+        { label: "新訂單", value: "-", change: "-", changeType: "positive" },
+        { label: "會員成長", value: "-", change: "-", changeType: "positive" },
+      ]
+    );
+  }, [stats]);
 
   const categoryStats: CategoryStat[] = [
     { name: "韓國美妝", percentage: 80 },
@@ -18,7 +78,7 @@ export default function DashboardHome() {
   return (
     <>
       <div className="grid grid-cols-1 gap-6 py-6 sm:grid-cols-2 lg:grid-cols-3">
-        {stats.map((stat, idx) => (
+        {displayStats.map((stat, idx) => (
           <div key={idx} className="flex flex-col gap-2 rounded-xl border border-border-light bg-card-light p-6">
             <p className="text-base font-medium text-text-secondary-light">{stat.label}</p>
             <p className="text-3xl font-bold tracking-tight text-text-primary-light">{stat.value}</p>

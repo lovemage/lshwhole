@@ -28,6 +28,7 @@ function AdminDashboard() {
   const [activeNav, setActiveNav] = useState("dashboard");
   const [currentUserPermissions, setCurrentUserPermissions] = useState<string[] | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const mainRef = useRef<HTMLElement | null>(null);
 
@@ -69,6 +70,7 @@ function AdminDashboard() {
         }
 
         setCurrentUserId(user.id);
+        setCurrentUserEmail(user.email || null);
         const res = await fetch("/api/admin/sub-accounts");
         if (res.ok) {
           const accounts = await res.json();
@@ -151,6 +153,7 @@ function AdminDashboard() {
           activeNav={activeNav}
           setActiveNav={setActiveNav}
           currentUserPermissions={currentUserPermissions}
+          currentUserEmail={currentUserEmail}
         />
         <main className="flex-1 overflow-y-auto">
           <SubAccountManager />
@@ -165,6 +168,7 @@ function AdminDashboard() {
         activeNav={activeNav}
         setActiveNav={setActiveNav}
         currentUserPermissions={currentUserPermissions}
+        currentUserEmail={currentUserEmail}
       />
 
       {/* Main Content */}

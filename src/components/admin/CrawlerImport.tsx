@@ -224,18 +224,36 @@ export default function CrawlerImport() {
   }, [crawlerProducts, crawlerSearch, crawlerSort, priceSourceMode]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const name = file.name.toLowerCase();
-    if (name.endsWith(".json")) {
-      const text = await file.text();
-      try {
-        const data = JSON.parse(text);
-        parseJson(data);
-      } catch (err) {
-        alert("JSON 解析失敗");
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const fileList = Array.from(files);
+    const allJson = fileList.every((f) => f.name.toLowerCase().endsWith(".json"));
+
+    if (allJson) {
+      const allItems: any[] = [];
+      for (const file of fileList) {
+        const text = await file.text();
+        try {
+          const data = JSON.parse(text);
+          const arr = Array.isArray(data) ? data : [data];
+          allItems.push(...arr);
+        } catch {
+          alert(`JSON 解析失敗：${file.name}`);
+          e.target.value = "";
+          return;
+        }
       }
-    } else if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
+      parseJson(allItems);
+      e.target.value = "";
+      return;
+    }
+
+    // For Excel, keep current behavior: only use the first file.
+    const file = fileList[0];
+    const name = file.name.toLowerCase();
+
+    if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
       // 需依賴 XLSX CDN
       const w: any = window as any;
       if (!w.XLSX) {
@@ -255,6 +273,8 @@ export default function CrawlerImport() {
     } else {
       alert("僅支援 .json / .xlsx 檔案");
     }
+
+    e.target.value = "";
   };
 
   const parseJson = (input: any) => {
@@ -794,7 +814,7 @@ export default function CrawlerImport() {
     <div className="py-6 space-y-6">
       {/* Actions */}
       <div className="flex flex-wrap items-center gap-3">
-        <input id="crawler-file" type="file" accept=".json,.xlsx,.xls" className="hidden" onChange={handleFileChange} />
+        <input id="crawler-file" type="file" multiple accept=".json,.xlsx,.xls" className="hidden" onChange={handleFileChange} />
         <label htmlFor="crawler-file" className="cursor-pointer inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90">
           <span className="material-symbols-outlined text-white">upload_file</span>
           <span>選擇檔案</span>
