@@ -49,7 +49,16 @@ export default function Header() {
 
     const fetchUserStatus = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) {
+          const msg = (sessionError as any)?.message || String(sessionError);
+          if (msg.includes("Invalid Refresh Token") || msg.includes("Refresh Token Not Found")) {
+            await supabase.auth.signOut({ scope: "local" });
+            setCurrentUser(null);
+            setWalletBalance(null);
+            return;
+          }
+        }
         const user = session?.user ?? null;
         if (user) {
           setCurrentUser({ email: user.email ?? null });

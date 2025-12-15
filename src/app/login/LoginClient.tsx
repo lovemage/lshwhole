@@ -83,11 +83,6 @@ export default function LoginClient() {
       className="relative flex min-h-screen w-full flex-col items-center justify-center p-4 group/design-root overflow-x-hidden"
       style={{ backgroundColor: "#f8f8f5" }}
     >
-      <div
-        className="absolute inset-0 -z-10 bg-[url('/login_bg.jpg')] bg-cover bg-center opacity-10"
-        aria-hidden
-      />
-
       <div className="w-full max-w-md">
         <div className="mb-6 flex items-center justify-center">
           <div className="h-20 w-auto">
