@@ -153,7 +153,7 @@ export default function LoginPage() {
                 />
                 記住我
               </label>
-              <a href="#" className="text-primary hover:underline">
+              <a href="/forgot-password" className="text-primary hover:underline">
                 忘記密碼？
               </a>
             </div>
