@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { supabase } from "@/lib/supabase";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -15,15 +16,16 @@ export default function ForgotPasswordPage() {
     setSuccess(false);
 
     try {
-      const res = await fetch("/api/auth/forgot-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
+      const origin = typeof window !== "undefined" ? window.location.origin : "";
+      const redirectTo = origin ? `${origin}/reset-password` : undefined;
 
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        setError(body?.error || "送出失敗，請稍後重試");
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(
+        email,
+        redirectTo ? { redirectTo } : undefined
+      );
+
+      if (resetError) {
+        setError(resetError.message);
         return;
       }
 
@@ -56,7 +58,7 @@ export default function ForgotPasswordPage() {
             忘記密碼
           </h1>
           <p className="mb-6 text-center text-sm text-gray-600">
-            請輸入註冊的 Email，我們會寄送重設密碼連結。
+            請輸入註冊的 Email，我們會透過系統寄送重設密碼連結。
           </p>
 
           {error && (
