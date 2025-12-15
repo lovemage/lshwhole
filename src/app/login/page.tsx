@@ -1,10 +1,13 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [email, setEmail] = useState("");
@@ -153,9 +156,17 @@ export default function LoginPage() {
                 />
                 記住我
               </label>
-              <a href="/forgot-password" className="text-primary hover:underline">
+              <Link
+                href={{
+                  pathname: "/forgot-password",
+                  query: searchParams.get("next")
+                    ? { next: searchParams.get("next") as string }
+                    : undefined,
+                }}
+                className="text-primary hover:underline"
+              >
                 忘記密碼？
-              </a>
+              </Link>
             </div>
 
             {/* Submit */}
