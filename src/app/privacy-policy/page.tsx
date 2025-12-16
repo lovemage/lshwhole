@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
+import Header from '@/components/Header';
+import Footer from '@/components/Footer';
 
 export default function PrivacyPolicy() {
   const [language, setLanguage] = useState<'zh' | 'en'>('zh');
@@ -105,49 +106,36 @@ export default function PrivacyPolicy() {
 
   return (
     <div className="min-h-screen bg-background-light flex flex-col">
-      {/* Header */}
-      <header className="sticky top-0 z-10 bg-white border-b border-border-light">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="size-6 text-primary">
-              <svg fill="none" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
-                <path d="M44 11.2727C44 14.0109 39.8386 16.3957 33.69 17.6364C39.8386 18.877 44 21.2618 44 24C44 26.7382 39.8386 29.123 33.69 30.3636C39.8386 31.6043 44 33.9891 44 36.7273C44 40.7439 35.0457 44 24 44C12.9543 44 4 40.7439 4 36.7273C4 33.9891 8.16144 31.6043 14.31 30.3636C8.16144 29.123 4 26.7382 4 24C4 21.2618 8.16144 18.877 14.31 17.6364C8.16144 16.3957 4 14.0109 4 11.2727C4 7.25611 12.9543 4 24 4C35.0457 4 44 7.25611 44 11.2727Z" fill="currentColor"></path>
-              </svg>
-            </div>
-            <h1 className="text-lg font-bold text-text-primary-light">LshWholesale</h1>
-          </Link>
-
-          {/* Language Toggle */}
-          <div className="flex gap-2">
-            <button
-              onClick={() => setLanguage('zh')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                language === 'zh'
-                  ? 'bg-primary text-white'
-                  : 'bg-border-light text-text-primary-light hover:bg-gray-300'
-              }`}
-            >
-              中文
-            </button>
-            <button
-              onClick={() => setLanguage('en')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                language === 'en'
-                  ? 'bg-primary text-white'
-                  : 'bg-border-light text-text-primary-light hover:bg-gray-300'
-              }`}
-            >
-              English
-            </button>
-          </div>
-        </div>
-      </header>
+      <Header />
 
       {/* Main Content */}
       <main className="flex-1 max-w-4xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-12">
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-text-primary-light mb-2">{currentContent.title}</h1>
           <p className="text-sm text-text-secondary-light">{currentContent.lastUpdated}</p>
+        </div>
+
+        <div className="mb-8 flex gap-2">
+          <button
+            onClick={() => setLanguage('zh')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              language === 'zh'
+                ? 'bg-primary text-white'
+                : 'bg-border-light text-text-primary-light hover:bg-gray-300'
+            }`}
+          >
+            中文
+          </button>
+          <button
+            onClick={() => setLanguage('en')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              language === 'en'
+                ? 'bg-primary text-white'
+                : 'bg-border-light text-text-primary-light hover:bg-gray-300'
+            }`}
+          >
+            English
+          </button>
         </div>
 
         <div className="space-y-8">
@@ -159,38 +147,7 @@ export default function PrivacyPolicy() {
           ))}
         </div>
       </main>
-
-      {/* Footer */}
-      <footer className="bg-card-light border-t border-border-light mt-12">
-        <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-8">
-            <div>
-              <h3 className="text-sm font-semibold text-text-primary-light uppercase mb-4">公司</h3>
-              <ul className="space-y-2">
-                <li><Link href="/" className="text-text-secondary-light hover:text-primary">首頁</Link></li>
-                <li><Link href="/products" className="text-text-secondary-light hover:text-primary">商品</Link></li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-text-primary-light uppercase mb-4">客戶服務</h3>
-              <ul className="space-y-2">
-                <li><a href="mailto:support@lsxwholesale.com" className="text-text-secondary-light hover:text-primary">聯絡我們</a></li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-text-primary-light uppercase mb-4">法律</h3>
-              <ul className="space-y-2">
-                <li><Link href="/terms-of-service" className="text-text-secondary-light hover:text-primary">服務條款</Link></li>
-                <li><Link href="/privacy-policy" className="text-primary font-medium">隱私政策</Link></li>
-              </ul>
-            </div>
-          </div>
-
-          <div className="border-t border-border-light pt-8 text-center">
-            <p className="text-text-secondary-light">© {new Date().getFullYear()} LshWholesale. 版權所有。</p>
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }

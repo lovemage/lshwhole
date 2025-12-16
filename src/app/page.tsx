@@ -353,7 +353,7 @@ export default function HomePage() {
           {/* Korea Section */}
           {displayProducts.korea.length > 0 && (
             <section className="mb-16">
-              <SectionHeader title="韓國直送" icon="/icons/turtle-svgrepo-com.svg" colorClass="text-purple-500" />
+              <SectionHeader title="韓國直送" icon="/icons/dinosaur-svgrepo-com (2).svg" colorClass="text-purple-500" />
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 lg:gap-6">
                 {displayProducts.korea.map((product) => renderProductCard(product))}
               </div>
