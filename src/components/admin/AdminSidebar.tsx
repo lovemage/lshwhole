@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { NAV_GROUPS } from "./constants";
+import { supabase } from "@/lib/supabase";
 
 interface AdminSidebarProps {
   activeNav: string;
@@ -15,6 +17,7 @@ export default function AdminSidebar({
   currentUserPermissions,
   currentUserEmail,
 }: AdminSidebarProps) {
+  const router = useRouter();
   const [notifications, setNotifications] = useState<{ [key: string]: number }>({});
   // Initialize expanded groups with the one containing activeNav, or first group
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
@@ -54,6 +57,16 @@ export default function AdminSidebar({
     setExpandedGroups(prev => 
       prev.includes(title) ? prev.filter(t => t !== title) : [...prev, title]
     );
+  };
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.error("Admin logout failed:", e);
+    } finally {
+      router.push("/login?next=/admin");
+    }
   };
 
   return (
@@ -164,13 +177,14 @@ export default function AdminSidebar({
             <span className="material-symbols-outlined">public</span>
             <p className="text-sm font-medium">返回網站</p>
           </Link>
-          <Link
-            href="/"
+          <button
+            type="button"
+            onClick={handleLogout}
             className="flex items-center gap-3 rounded-lg px-3 py-2 text-text-secondary-dark hover:bg-primary/10 hover:text-text-primary-dark"
           >
             <span className="material-symbols-outlined">logout</span>
             <p className="text-sm font-medium">登出</p>
-          </Link>
+          </button>
         </div>
       </div>
     </aside>

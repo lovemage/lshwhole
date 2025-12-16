@@ -69,7 +69,21 @@ export default function LoginClient() {
         return;
       }
 
-      router.push("/");
+      const nextParam = searchParams.get("next");
+      const nextPath = (() => {
+        if (!nextParam) return "/";
+        if (nextParam.startsWith("/")) return nextParam;
+        try {
+          const nextUrl = new URL(nextParam);
+          if (nextUrl.origin === window.location.origin) {
+            return `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`;
+          }
+        } catch {
+          // ignore
+        }
+        return "/";
+      })();
+      router.push(nextPath);
     } catch (err) {
       console.error("login failed", err);
       setError("登入失敗，請稍後重試");
