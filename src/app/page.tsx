@@ -226,15 +226,23 @@ export default function HomePage() {
     );
   };
 
-  const SectionHeader = ({ title, icon, colorClass = "text-gray-900" }: { title: string, icon?: string, colorClass?: string }) => (
+  const SectionHeader = ({
+    title,
+    icon,
+    colorClass = "text-gray-900",
+  }: {
+    title: string;
+    icon?: string;
+    colorClass?: string;
+  }) => (
     <div className="flex justify-center items-center mb-8 relative">
-       <div className="absolute inset-0 flex items-center" aria-hidden="true">
-          <div className="w-full border-t border-dashed border-gray-200"></div>
-       </div>
-       <div className="relative flex items-center gap-2 bg-[#f8f8f5] px-6 py-2 rounded-full border border-gray-100 shadow-sm">
-          {icon && <span className={`material-symbols-outlined ${colorClass}`}>{icon}</span>}
-          <h2 className={`text-xl font-black tracking-tight ${colorClass}`}>{title}</h2>
-       </div>
+      <div className="absolute inset-0 flex items-center" aria-hidden="true">
+        <div className="w-full border-t border-dashed border-gray-200"></div>
+      </div>
+      <div className="relative flex items-center gap-2 bg-[#f8f8f5] px-6 py-2 rounded-full border border-gray-100 shadow-sm">
+        {icon && <img src={icon} alt="" className="w-6 h-6" />}
+        <h2 className={`text-xl font-black tracking-tight ${colorClass}`}>{title}</h2>
+      </div>
     </div>
   );
 
@@ -252,7 +260,7 @@ export default function HomePage() {
                 <div className="flex items-center justify-between mb-4 relative z-10">
                   <div className="flex items-center gap-2">
                     <span className="bg-blue-100 text-blue-600 p-2 rounded-xl">
-                      <span className="material-symbols-outlined">campaign</span>
+                      <img src="/icons/fox-svgrepo-com.svg" alt="" className="w-5 h-5" />
                     </span>
                     <h2 className="text-gray-900 text-lg font-bold">最新公告</h2>
                   </div>
@@ -294,13 +302,13 @@ export default function HomePage() {
           {/* Features */}
           <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-16 px-2">
             {[
-              { title: "批量折扣", subtitle: "最具競爭力的批發價格", icon: "percent", color: "bg-yellow-50 text-yellow-600" },
-              { title: "全球運送", subtitle: "快速可靠的物流服務", icon: "public", color: "bg-blue-50 text-blue-600" },
-              { title: "品質檢驗", subtitle: "嚴格把關優質供應商", icon: "verified", color: "bg-green-50 text-green-600" }
+              { title: "批量折扣", subtitle: "最具競爭力的批發價格", icon: "/icons/bear-svgrepo-com.svg", color: "bg-yellow-50 text-yellow-600" },
+              { title: "全球運送", subtitle: "快速可靠的物流服務", icon: "/icons/penguin-svgrepo-com.svg", color: "bg-blue-50 text-blue-600" },
+              { title: "品質檢驗", subtitle: "嚴格把關優質供應商", icon: "/icons/rabbit-svgrepo-com.svg", color: "bg-green-50 text-green-600" }
             ].map((feature, idx) => (
               <div key={idx} className="flex items-center gap-4 p-5 bg-white rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${feature.color}`}>
-                  <span className="material-symbols-outlined text-2xl">{feature.icon}</span>
+                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${feature.color}`}> 
+                  <img src={feature.icon} alt="" className="w-8 h-8" />
                 </div>
                 <div>
                   <h3 className="text-gray-900 font-bold text-lg">{feature.title}</h3>
@@ -312,7 +320,7 @@ export default function HomePage() {
 
           {/* Hot-Selling Products */}
           <section className="mb-16">
-            <SectionHeader title="本週熱銷排行" icon="local_fire_department" colorClass="text-red-500" />
+            <SectionHeader title="本週熱銷排行" icon="/icons/lion-svgrepo-com.svg" colorClass="text-red-500" />
             
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 lg:gap-6">
               {bsLoading && Array.from({ length: 5 }).map((_, idx) => (
@@ -325,7 +333,7 @@ export default function HomePage() {
           {/* Limited Time Products Section */}
           {limitedTimeProducts.length > 0 && (
             <section className="mb-16">
-              <SectionHeader title="限時搶購專區" icon="timer" colorClass="text-orange-500" />
+              <SectionHeader title="限時搶購專區" icon="/icons/jellyfish-svgrepo-com.svg" colorClass="text-orange-500" />
               
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 lg:gap-6">
                 {limitedLoading && Array.from({ length: 5 }).map((_, idx) => (
@@ -339,7 +347,7 @@ export default function HomePage() {
           {/* Popular Products */}
           {displayProducts.popular.length > 0 && (
             <section className="mb-16">
-              <SectionHeader title="人氣推薦" icon="thumb_up" colorClass="text-primary" />
+              <SectionHeader title="人氣推薦" icon="/icons/squirrel-svgrepo-com.svg" colorClass="text-primary" />
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 lg:gap-6">
                 {displayProducts.popular.map((product) => renderProductCard(product))}
               </div>
@@ -349,7 +357,7 @@ export default function HomePage() {
           {/* Korea Section */}
           {displayProducts.korea.length > 0 && (
             <section className="mb-16">
-              <SectionHeader title="韓國直送" icon="flight_takeoff" colorClass="text-purple-500" />
+              <SectionHeader title="韓國直送" icon="/icons/turtle-svgrepo-com.svg" colorClass="text-purple-500" />
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 lg:gap-6">
                 {displayProducts.korea.map((product) => renderProductCard(product))}
               </div>
@@ -359,7 +367,7 @@ export default function HomePage() {
           {/* Japan Section */}
           {displayProducts.japan.length > 0 && (
             <section className="mb-16">
-              <SectionHeader title="日本選物" icon="ramen_dining" colorClass="text-pink-500" />
+              <SectionHeader title="日本選物" icon="/icons/raccoon-svgrepo-com.svg" colorClass="text-pink-500" />
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 lg:gap-6">
                 {displayProducts.japan.map((product) => renderProductCard(product))}
               </div>
@@ -369,7 +377,7 @@ export default function HomePage() {
           {/* Thailand Section */}
           {displayProducts.thailand.length > 0 && (
             <section className="mb-16">
-              <SectionHeader title="泰國好物" icon="sunny" colorClass="text-orange-400" />
+              <SectionHeader title="泰國好物" icon="/icons/crab-svgrepo-com.svg" colorClass="text-orange-400" />
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 lg:gap-6">
                 {displayProducts.thailand.map((product) => renderProductCard(product))}
               </div>
