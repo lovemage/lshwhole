@@ -14,6 +14,7 @@ export default function Header() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<{ email: string | null } | null>(null);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Data for Mega Menu
@@ -56,12 +57,34 @@ export default function Header() {
             await supabase.auth.signOut({ scope: "local" });
             setCurrentUser(null);
             setWalletBalance(null);
+            setIsAdmin(false);
             return;
           }
         }
         const user = session?.user ?? null;
         if (user) {
           setCurrentUser({ email: user.email ?? null });
+
+          try {
+            const token = session?.access_token;
+            if (token) {
+              const profileRes = await fetch("/api/profile", {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                },
+              });
+              if (profileRes.ok) {
+                const profile = await profileRes.json().catch(() => null);
+                setIsAdmin(Boolean((profile as any)?.is_admin));
+              } else {
+                setIsAdmin(false);
+              }
+            } else {
+              setIsAdmin(false);
+            }
+          } catch {
+            setIsAdmin(false);
+          }
 
           const { data: walletData, error: walletError } = await supabase
             .from("wallets")
@@ -76,6 +99,7 @@ export default function Header() {
         } else {
           setCurrentUser(null);
           setWalletBalance(null);
+          setIsAdmin(false);
         }
       } catch (e) {
         console.error("載入登入狀態失敗", e);
@@ -90,6 +114,7 @@ export default function Header() {
       } else if (event === 'SIGNED_OUT') {
          setCurrentUser(null);
          setWalletBalance(null);
+         setIsAdmin(false);
       }
     });
 
@@ -104,6 +129,7 @@ export default function Header() {
       router.push("/");
       setCurrentUser(null);
       setWalletBalance(null);
+      setIsAdmin(false);
       setIsMobileMenuOpen(false);
     } catch (e) {
       console.error("登出失敗", e);
@@ -320,10 +346,10 @@ export default function Header() {
                   <span className="font-semibold">NT$ {walletBalance ?? 0}</span>
                 </span>
                 <Link
-                  href="/member"
+                  href={isAdmin ? "/admin" : "/member"}
                   className="flex min-w-[96px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-200 text-gray-800 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-300 transition-colors"
                 >
-                  <span className="truncate">會員中心</span>
+                  <span className="truncate">{isAdmin ? "管理員面板" : "會員中心"}</span>
                 </Link>
                 <button
                   onClick={handleLogout}
@@ -350,10 +376,6 @@ export default function Header() {
             )}
           </div>
           <div className="flex gap-2">
-            {/* Heart Icon: Hidden on Mobile */}
-            <button className="hidden lg:flex max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 bg-gray-200 text-gray-800 gap-2 text-sm font-bold leading-normal tracking-[0.015em] min-w-0 px-2.5">
-              <span className="material-symbols-outlined !text-xl">favorite</span>
-            </button>
             <CartBadge />
           </div>
         </div>
@@ -460,11 +482,11 @@ export default function Header() {
                     <span className="font-semibold">NT$ {walletBalance ?? 0}</span>
                   </div>
                   <Link
-                    href="/member"
+                    href={isAdmin ? "/admin" : "/member"}
                     onClick={() => setIsMobileMenuOpen(false)}
                     className="w-full py-2 bg-gray-200 text-gray-800 text-center rounded-lg font-bold hover:bg-gray-300"
                   >
-                    會員中心
+                    {isAdmin ? "管理員面板" : "會員中心"}
                   </Link>
                   <button
                     onClick={handleLogout}

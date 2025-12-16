@@ -113,6 +113,12 @@ export default function LoginClient() {
             會員登入
           </h1>
 
+          <div className="mb-6 flex items-center justify-center">
+            <Link href="/" className="text-sm text-gray-600 hover:underline">
+              返回網站
+            </Link>
+          </div>
+
           {error && (
             <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
               {error}
