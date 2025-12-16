@@ -30,6 +30,7 @@ export default function Footer() {
             <ul className="space-y-2">
               <li><Link className="text-base text-gray-600 hover:text-primary" href="/terms-of-service">服務條款</Link></li>
               <li><Link className="text-base text-gray-600 hover:text-primary" href="/privacy-policy">隱私政策</Link></li>
+              <li><Link className="text-base text-gray-600 hover:text-primary" href="/return-policy">退換貨政策</Link></li>
             </ul>
           </div>
           <div className="space-y-4">
