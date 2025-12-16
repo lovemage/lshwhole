@@ -240,7 +240,7 @@ export default function HomePage() {
         <div className="w-full border-t border-dashed border-gray-200"></div>
       </div>
       <div className="relative flex items-center gap-2 bg-[#f8f8f5] px-6 py-2 rounded-full border border-gray-100 shadow-sm">
-        {icon && <img src={icon} alt="" className="w-6 h-6" />}
+        {icon && <img src={icon} alt="" className="w-16 h-16" />}
         <h2 className={`text-xl font-black tracking-tight ${colorClass}`}>{title}</h2>
       </div>
     </div>
@@ -259,9 +259,7 @@ export default function HomePage() {
                 <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
                 <div className="flex items-center justify-between mb-4 relative z-10">
                   <div className="flex items-center gap-2">
-                    <span className="bg-blue-100 text-blue-600 p-2 rounded-xl">
-                      <img src="/icons/fox-svgrepo-com.svg" alt="" className="w-5 h-5" />
-                    </span>
+                    <img src="/icons/fox-svgrepo-com.svg" alt="" className="w-16 h-16" />
                     <h2 className="text-gray-900 text-lg font-bold">最新公告</h2>
                   </div>
                   <button
@@ -302,14 +300,12 @@ export default function HomePage() {
           {/* Features */}
           <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-16 px-2">
             {[
-              { title: "批量折扣", subtitle: "最具競爭力的批發價格", icon: "/icons/bear-svgrepo-com.svg", color: "bg-yellow-50 text-yellow-600" },
-              { title: "全球運送", subtitle: "快速可靠的物流服務", icon: "/icons/penguin-svgrepo-com.svg", color: "bg-blue-50 text-blue-600" },
-              { title: "品質檢驗", subtitle: "嚴格把關優質供應商", icon: "/icons/rabbit-svgrepo-com.svg", color: "bg-green-50 text-green-600" }
+              { title: "批量折扣", subtitle: "最具競爭力的批發價格", icon: "/icons/bear-svgrepo-com.svg" },
+              { title: "全球運送", subtitle: "快速可靠的物流服務", icon: "/icons/penguin-svgrepo-com.svg" },
+              { title: "品質檢驗", subtitle: "嚴格把關優質供應商", icon: "/icons/rabbit-svgrepo-com.svg" }
             ].map((feature, idx) => (
               <div key={idx} className="flex items-center gap-4 p-5 bg-white rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${feature.color}`}> 
-                  <img src={feature.icon} alt="" className="w-8 h-8" />
-                </div>
+                <img src={feature.icon} alt="" className="w-16 h-16" />
                 <div>
                   <h3 className="text-gray-900 font-bold text-lg">{feature.title}</h3>
                   <p className="text-gray-500 text-sm">{feature.subtitle}</p>
