@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
 
     // 嘗試根據 Authorization header 取得目前會員 tier（零售 / 批發 / VIP）
     let userTier: "retail" | "wholesale" | "vip" | null = null;
+    let allowedL1: number[] | null = null;
     const authHeader =
       request.headers.get("Authorization") || request.headers.get("authorization");
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -37,20 +38,34 @@ export async function GET(request: NextRequest) {
           data: { user },
         } = await supabaseUser.auth.getUser();
 
-        if (user) {
-          const { data: profile, error: profileErr } = await admin
-            .from("profiles")
-            .select("tier")
-            .eq("user_id", user.id)
-            .single();
-
-          if (!profileErr && profile?.tier) {
-            userTier = profile.tier as "retail" | "wholesale" | "vip";
-          }
+        if (!user) {
+          return NextResponse.json({ error: "未登入" }, { status: 401 });
         }
+
+        const { data: profile, error: profileErr } = await admin
+          .from("profiles")
+          .select("tier, allowed_l1_category_ids")
+          .eq("user_id", user.id)
+          .single();
+
+        if (profileErr || !profile?.tier) {
+          return NextResponse.json({ error: "會員資料不存在" }, { status: 401 });
+        }
+
+        if (profile.tier === "guest") {
+          return NextResponse.json({ error: "請註冊或登入會員後瀏覽商品" }, { status: 403 });
+        }
+
+        userTier = profile.tier as "retail" | "wholesale" | "vip";
+        allowedL1 = profile.allowed_l1_category_ids || null;
       } catch (e) {
         console.error("resolve user tier failed in /api/retail/products", e);
+        return NextResponse.json({ error: "驗證失敗" }, { status: 401 });
       }
+    }
+
+    if (!userTier) {
+      return NextResponse.json({ error: "請登入後查看商品" }, { status: 401 });
     }
 
     const isWholesaleTier = userTier === "wholesale" || userTier === "vip";
@@ -74,6 +89,44 @@ export async function GET(request: NextRequest) {
 
     // 收集需要篩選的商品 ID
     let filteredProductIds: number[] | null = null;
+    let allowedCategoryIds: number[] | null = null;
+
+    if (allowedL1 && allowedL1.length > 0) {
+      const { data: categories, error: catErr } = await admin
+        .from("categories")
+        .select("id, level");
+      if (catErr) return NextResponse.json({ error: catErr.message }, { status: 400 });
+
+      const { data: rels, error: relErr } = await admin
+        .from("category_relations")
+        .select("parent_category_id, child_category_id");
+      if (relErr) return NextResponse.json({ error: relErr.message }, { status: 400 });
+
+      const adj = new Map<number, number[]>();
+      rels?.forEach((r) => {
+        const arr = adj.get(r.parent_category_id) || [];
+        arr.push(r.child_category_id);
+        adj.set(r.parent_category_id, arr);
+      });
+
+      const allowedSet = new Set<number>();
+      const l1Existing = new Set((categories || []).filter((c: any) => c.level === 1).map((c: any) => c.id));
+      allowedL1.forEach((id) => {
+        if (!l1Existing.has(id)) return;
+        const q: number[] = [id];
+        while (q.length) {
+          const cur = q.shift()!;
+          if (allowedSet.has(cur)) continue;
+          allowedSet.add(cur);
+          (adj.get(cur) || []).forEach((child) => q.push(child));
+        }
+      });
+      allowedCategoryIds = Array.from(allowedSet);
+
+      if (allowedCategoryIds.length === 0) {
+        return NextResponse.json({ data: [], count: 0 });
+      }
+    }
 
     // 若有傳入分類，過濾商品
     if (categoryIdRaw) {
@@ -155,6 +208,22 @@ export async function GET(request: NextRequest) {
     }
 
     // 應用篩選結果
+    if (allowedCategoryIds && allowedCategoryIds.length > 0) {
+      const { data: pcmAllowed, error: pcmAllowedErr } = await admin
+        .from("product_category_map")
+        .select("product_id")
+        .in("category_id", allowedCategoryIds);
+      if (pcmAllowedErr) return NextResponse.json({ error: pcmAllowedErr.message }, { status: 400 });
+      const allowedProductIds = Array.from(new Set((pcmAllowed || []).map((x: any) => x.product_id)));
+      if (allowedProductIds.length === 0) return NextResponse.json({ data: [], count: 0 });
+
+      if (filteredProductIds !== null) {
+        filteredProductIds = filteredProductIds.filter((id) => allowedProductIds.includes(id));
+      } else {
+        filteredProductIds = allowedProductIds;
+      }
+    }
+
     if (filteredProductIds !== null) {
       if (filteredProductIds.length === 0) return NextResponse.json({ data: [], count: 0 });
       baseQuery = baseQuery.in("id", filteredProductIds);

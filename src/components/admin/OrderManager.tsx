@@ -1,7 +1,55 @@
 import { useState, useEffect, Fragment } from "react";
 
+interface OrderItemProduct {
+  id?: number;
+  title_zh?: string | null;
+  title_original?: string | null;
+  sku?: string | null;
+  original_url?: string | null;
+  images?: string[];
+}
+
+interface OrderItemRow {
+  id: number;
+  product_id: number;
+  qty: number;
+  unit_price_twd: number;
+  status: string;
+  refund_amount?: number;
+  spec_name?: string | null;
+  shipping_fee_intl?: number | null;
+  shipping_fee_domestic?: number | null;
+  box_fee?: number | null;
+  weight?: number | null;
+  box_count?: number | null;
+  shipping_method?: string | null;
+  shipping_country?: string | null;
+  product?: OrderItemProduct;
+}
+
+interface OrderRow {
+  id: number;
+  user_id: string;
+  status: string;
+  total_twd: number;
+  created_at: string;
+  updated_at: string;
+  hold_id?: number | null;
+  order_items?: OrderItemRow[];
+  user_email?: string | null;
+  user_display_name?: string | null;
+  shipping_fee_intl?: number | null;
+  box_fee?: number | null;
+  box_count?: number | null;
+  tracking_number?: string | null;
+  shipping_method?: string | null;
+  recipient_name?: string | null;
+  recipient_phone?: string | null;
+  shipping_address?: string | null;
+}
+
 export default function OrderManager() {
-  const [orders, setOrders] = useState<any[]>([]);
+  const [orders, setOrders] = useState<OrderRow[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersPage, setOrdersPage] = useState(0);
   const [ordersTotal, setOrdersTotal] = useState(0);
@@ -11,13 +59,13 @@ export default function OrderManager() {
   const pageSize = 20;
   
   // 訂單詳情狀態
-  const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  const [selectedOrder, setSelectedOrder] = useState<OrderRow | null>(null);
   const [showOrderDetail, setShowOrderDetail] = useState(false);
   const [orderDetailLoading, setOrderDetailLoading] = useState(false);
   
   // 缺貨退款 Modal
   const [showRefundModal, setShowRefundModal] = useState(false);
-  const [refundTargetItem, setRefundTargetItem] = useState<any>(null);
+  const [refundTargetItem, setRefundTargetItem] = useState<OrderItemRow | null>(null);
   const [refundQty, setRefundQty] = useState(1);
   const [refundReason, setRefundReason] = useState("");
   const [refunding, setRefunding] = useState(false);
@@ -43,7 +91,7 @@ export default function OrderManager() {
       const res = await fetch(url);
       if (res.ok) {
         const result = await res.json();
-        setOrders(result.data || []);
+        setOrders((result.data as OrderRow[]) || []);
         setOrdersTotal(result.count || 0);
         setOrdersPage(page);
       } else {
@@ -67,12 +115,12 @@ export default function OrderManager() {
     });
   };
 
-  const openOrderDetail = async (order: any) => {
+  const openOrderDetail = async (order: { id: number }) => {
     try {
       setOrderDetailLoading(true);
       const res = await fetch(`/api/admin/orders/${order.id}`);
       if (res.ok) {
-        const data = await res.json();
+        const data = (await res.json()) as OrderRow;
         console.log("Order Detail Data:", data); // Debug
         setSelectedOrder(data);
         setShowOrderDetail(true);
@@ -125,7 +173,7 @@ export default function OrderManager() {
     }
   };
 
-  const openRefundModal = (item: any) => {
+  const openRefundModal = (item: OrderItemRow) => {
     setRefundTargetItem(item);
     setRefundQty(1);
     setRefundReason("缺貨");
@@ -198,12 +246,15 @@ export default function OrderManager() {
 
       if (res.ok) {
         const { data } = await res.json();
-        setSelectedOrder((prev: any) => ({
-          ...prev,
-          items: prev.items.map((item: any) =>
-            item.id === itemId ? { ...item, ...data } : item
-          )
-        }));
+        setSelectedOrder((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            order_items: prev.order_items?.map((item) =>
+              item.id === itemId ? { ...item, ...data } : item
+            ) || [],
+          };
+        });
       } else {
         const j = await res.json().catch(() => ({}));
         alert(j?.error || "更新失敗");
@@ -360,7 +411,7 @@ export default function OrderManager() {
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-border-light text-sm">
-                                {order.order_items?.map((item: any) => (
+                                {order.order_items?.map((item) => (
                                   <tr key={item.id}>
                                     <td className="p-3">
                                       <div className="flex items-center gap-3">
@@ -550,7 +601,7 @@ export default function OrderManager() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border-light">
-                      {selectedOrder.items?.map((item: any) => (
+                      {selectedOrder?.order_items?.map((item) => (
                         <tr key={item.id}>
                           <td className="p-3">
                             <div className="flex items-center gap-3">
@@ -590,10 +641,13 @@ export default function OrderManager() {
                               value={item.weight || 0}
                               onChange={(e) => {
                                 const val = Math.max(0, Number(e.target.value));
-                                setSelectedOrder((prev: any) => ({
-                                  ...prev,
-                                  items: prev.items.map((i: any) => i.id === item.id ? { ...i, weight: val } : i)
-                                }));
+                                setSelectedOrder((prev) => {
+                                  if (!prev) return prev;
+                                  return {
+                                    ...prev,
+                                    order_items: prev.order_items?.map((i) => i.id === item.id ? { ...i, weight: val } : i) || [],
+                                  };
+                                });
                               }}
                               onBlur={(e) => updateItemShipping(item.id, Number(e.target.value), item.shipping_method, item.box_fee || 0, item.shipping_country, item.box_count || 1)}
                               disabled={item.status !== 'ARRIVED'}
@@ -605,10 +659,13 @@ export default function OrderManager() {
                               value={item.shipping_country || ""}
                               onChange={(e) => {
                                 const val = e.target.value;
-                                setSelectedOrder((prev: any) => ({
-                                  ...prev,
-                                  items: prev.items.map((i: any) => i.id === item.id ? { ...i, shipping_country: val } : i)
-                                }));
+                                setSelectedOrder((prev) => {
+                                  if (!prev) return prev;
+                                  return {
+                                    ...prev,
+                                    order_items: prev.order_items?.map((i) => i.id === item.id ? { ...i, shipping_country: val } : i) || [],
+                                  };
+                                });
                                 updateItemShipping(item.id, item.weight || 0, item.shipping_method, item.box_fee || 0, val, item.box_count || 1);
                               }}
                               disabled={item.status !== 'ARRIVED'}
@@ -625,10 +682,13 @@ export default function OrderManager() {
                               value={item.shipping_method || ""}
                               onChange={(e) => {
                                 const val = e.target.value;
-                                setSelectedOrder((prev: any) => ({
-                                  ...prev,
-                                  items: prev.items.map((i: any) => i.id === item.id ? { ...i, shipping_method: val } : i)
-                                }));
+                                setSelectedOrder((prev) => {
+                                  if (!prev) return prev;
+                                  return {
+                                    ...prev,
+                                    order_items: prev.order_items?.map((i) => i.id === item.id ? { ...i, shipping_method: val } : i) || [],
+                                  };
+                                });
                                 updateItemShipping(item.id, item.weight || 0, val, item.box_fee || 0, item.shipping_country, item.box_count || 1);
                               }}
                               disabled={item.status !== 'ARRIVED'}
@@ -650,10 +710,13 @@ export default function OrderManager() {
                                   value={item.box_count || 1}
                                   onChange={(e) => {
                                     const val = Math.max(1, Math.floor(Number(e.target.value)));
-                                    setSelectedOrder((prev: any) => ({
-                                      ...prev,
-                                      items: prev.items.map((i: any) => i.id === item.id ? { ...i, box_count: val } : i)
-                                    }));
+                                    setSelectedOrder((prev) => {
+                                      if (!prev) return prev;
+                                      return {
+                                        ...prev,
+                                        order_items: prev.order_items?.map((i) => i.id === item.id ? { ...i, box_count: val } : i) || [],
+                                      };
+                                    });
                                   }}
                                   onBlur={(e) => updateItemShipping(item.id, item.weight || 0, item.shipping_method, item.box_fee || 0, item.shipping_country, Math.max(1, Math.floor(Number(e.target.value))))}
                                   disabled={item.status !== 'ARRIVED'}
@@ -669,10 +732,13 @@ export default function OrderManager() {
                               value={item.box_fee || 0}
                               onChange={(e) => {
                                 const val = Math.max(0, Math.floor(Number(e.target.value)));
-                                setSelectedOrder((prev: any) => ({
-                                  ...prev,
-                                  items: prev.items.map((i: any) => i.id === item.id ? { ...i, box_fee: val } : i)
-                                }));
+                                setSelectedOrder((prev) => {
+                                  if (!prev) return prev;
+                                  return {
+                                    ...prev,
+                                    order_items: prev.order_items?.map((i) => i.id === item.id ? { ...i, box_fee: val } : i) || [],
+                                  };
+                                });
                               }}
                               onBlur={(e) => updateItemShipping(item.id, item.weight || 0, item.shipping_method, Number(e.target.value), item.shipping_country, item.box_count || 1)}
                               disabled={item.status !== 'ARRIVED'}
@@ -716,7 +782,7 @@ export default function OrderManager() {
                               'bg-green-100 text-green-800'
                             }`}>
                               {(() => {
-                                const map: any = {
+                                const map: Record<string, string> = {
                                   NORMAL: "國外配貨中",
                                   ALLOCATED: "國外配貨完成",
                                   IN_TRANSIT: "回台運輸中",

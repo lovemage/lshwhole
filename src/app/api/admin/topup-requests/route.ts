@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 2. Fetch Profiles separately
-    const userIds = [...new Set(requests.map((r: any) => r.user_id))];
+    const userIds = [...new Set(requests.map((r) => r.user_id))];
     const { data: profiles, error: profilesError } = await admin
       .from("profiles")
       .select("user_id, email, display_name, phone")
@@ -37,15 +37,19 @@ export async function GET(request: NextRequest) {
       // Better to return what we have, profiles might be null
     }
 
-    const profileMap = new Map();
-    (profiles || []).forEach((p: any) => {
-      profileMap.set(p.user_id, p);
+    const profileMap = new Map<string, { email: string | null; display_name: string | null; phone: string | null }>();
+    (profiles || []).forEach((p) => {
+      profileMap.set(p.user_id, {
+        email: p.email ?? null,
+        display_name: p.display_name ?? null,
+        phone: p.phone ?? null,
+      });
     });
 
     // 3. Map together
-    const mappedData = requests.map((item: any) => ({
+    const mappedData = requests.map((item) => ({
       ...item,
-      user: profileMap.get(item.user_id) || { email: "Unknown", display_name: "Unknown" }
+      user: profileMap.get(item.user_id) || { email: "Unknown", display_name: "Unknown", phone: null }
     }));
 
     return NextResponse.json({ data: mappedData });

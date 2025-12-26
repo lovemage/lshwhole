@@ -38,9 +38,29 @@ export default function MemberManager() {
   const [requestsLoading, setRequestsLoading] = useState(false);
   const [viewProofImage, setViewProofImage] = useState<string | null>(null);
 
+  // L1 顯示限制
+  const [l1Categories, setL1Categories] = useState<any[]>([]);
+  const [limitL1ByMember, setLimitL1ByMember] = useState(false);
+  const [selectedL1ForMember, setSelectedL1ForMember] = useState<number[]>([]);
+
   useEffect(() => {
     fetchMembers(0);
     fetchTopupRequests();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/categories");
+        if (res.ok) {
+          const cats = await res.json();
+          const l1 = (cats || []).filter((c: any) => c.level === 1).sort((a: any, b: any) => a.sort - b.sort);
+          setL1Categories(l1);
+        }
+      } catch (err) {
+        console.error("Failed to load categories", err);
+      }
+    })();
   }, []);
 
   const fetchTopupRequests = async () => {
@@ -133,6 +153,14 @@ export default function MemberManager() {
     }
   };
 
+  useEffect(() => {
+    if (selectedMember?.profile) {
+      const ids = selectedMember.profile.allowed_l1_category_ids || [];
+      setLimitL1ByMember(Array.isArray(ids) && ids.length > 0);
+      setSelectedL1ForMember(Array.isArray(ids) ? ids : []);
+    }
+  }, [selectedMember]);
+
   const updateMemberTier = async (userId: string, newTier: string) => {
     try {
       const res = await fetch(`/api/admin/members/${userId}`, {
@@ -177,6 +205,36 @@ export default function MemberManager() {
       }
     } catch (err) {
       console.error("Failed to toggle member login:", err);
+      alert("更新失敗");
+    }
+  };
+
+  const handleSaveAllowedL1 = async () => {
+    if (!selectedMember) return;
+    if (limitL1ByMember && selectedL1ForMember.length === 0) {
+      alert("請至少選擇一個可瀏覽的國家，或取消限制。");
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/admin/members/${selectedMember.profile.user_id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          allowed_l1_category_ids: limitL1ByMember ? selectedL1ForMember : null,
+        }),
+      });
+
+      if (res.ok) {
+        alert("已更新可瀏覽國家限制");
+        openMemberDetail({ user_id: selectedMember.profile.user_id } as Member);
+        fetchMembers(memberPage);
+      } else {
+        const j = await res.json().catch(() => ({}));
+        alert("更新失敗：" + (j?.error || "未知錯誤"));
+      }
+    } catch (err) {
+      console.error("Failed to update allowed L1", err);
       alert("更新失敗");
     }
   };
@@ -574,6 +632,76 @@ export default function MemberManager() {
                   </select>
                   <span className="text-sm text-text-secondary-light">變更會員資格</span>
                 </div>
+              </div>
+
+              {/* 可瀏覽 L1 限制 */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold">可瀏覽國家（L1 分類）</h3>
+                  <div className="flex items-center gap-2 text-sm">
+                    <label className="flex items-center gap-1 cursor-pointer">
+                      <input
+                        type="radio"
+                        checked={!limitL1ByMember}
+                        onChange={() => setLimitL1ByMember(false)}
+                      />
+                      <span>不限制</span>
+                    </label>
+                    <label className="flex items-center gap-1 cursor-pointer">
+                      <input
+                        type="radio"
+                        checked={limitL1ByMember}
+                        onChange={() => setLimitL1ByMember(true)}
+                      />
+                      <span>僅以下國家</span>
+                    </label>
+                  </div>
+                </div>
+                {limitL1ByMember && (
+                  <div className="bg-gray-50 rounded-lg p-3 border border-border-light">
+                    {l1Categories.length === 0 ? (
+                      <p className="text-sm text-text-secondary-light">尚未取得分類資料</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {l1Categories.map((c) => {
+                          const checked = selectedL1ForMember.includes(c.id);
+                          return (
+                            <label key={c.id} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer ${checked ? "border-primary bg-primary/5" : "border-border-light"}`}>
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(e) => {
+                                  setSelectedL1ForMember((prev) => {
+                                    if (e.target.checked) return Array.from(new Set([...prev, c.id]));
+                                    return prev.filter((id) => id !== c.id);
+                                  });
+                                }}
+                              />
+                              <span className="text-sm">{c.name}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleSaveAllowedL1}
+                    className="px-4 py-2 bg-primary text-white rounded-lg font-medium hover:bg-primary/90"
+                  >
+                    儲存瀏覽限制
+                  </button>
+                  {limitL1ByMember && (
+                    <button
+                      onClick={() => setSelectedL1ForMember([])}
+                      className="px-4 py-2 border border-border-light rounded-lg text-sm"
+                    >
+                      清除勾選
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-text-secondary-light">未限制時，會員可瀏覽所有國家；限制後僅能查看所勾選的 L1 分類。</p>
               </div>
 
               {/* 錢包資訊 */}

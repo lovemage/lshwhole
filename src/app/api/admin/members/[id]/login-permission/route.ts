@@ -62,7 +62,7 @@ export async function PUT(
     }
 
     // 準備更新資料
-    const updateData: any = {
+    const updateData: Record<string, unknown> = {
       login_enabled,
       updated_at: new Date().toISOString(),
     };

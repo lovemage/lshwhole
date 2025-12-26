@@ -1,0 +1,58 @@
+# robots.txt for Lsx Wholesale
+# https://www.lsxwholesale.com
+
+# Google
+User-agent: Googlebot
+Allow: /
+Disallow: /admin/
+Disallow: /member/
+Disallow: /profile/
+Disallow: /cart/
+Disallow: /checkout/
+Disallow: /login/
+Disallow: /register/
+Disallow: /forgot-password/
+Disallow: /reset-password/
+Disallow: /api/
+
+# Google Images
+User-agent: Googlebot-Image
+Allow: /
+
+# Bing
+User-agent: Bingbot
+Allow: /
+Disallow: /admin/
+Disallow: /member/
+Disallow: /profile/
+Disallow: /cart/
+Disallow: /checkout/
+Disallow: /login/
+Disallow: /register/
+Disallow: /forgot-password/
+Disallow: /reset-password/
+Disallow: /api/
+
+# Meta (Facebook)
+User-agent: facebookexternalhit
+Allow: /
+
+User-agent: Facebot
+Allow: /
+
+# All other bots
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /member/
+Disallow: /profile/
+Disallow: /cart/
+Disallow: /checkout/
+Disallow: /login/
+Disallow: /register/
+Disallow: /forgot-password/
+Disallow: /reset-password/
+Disallow: /api/
+
+# Sitemap location
+Sitemap: https://www.lsxwholesale.com/sitemap.xml

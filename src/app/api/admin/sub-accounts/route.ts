@@ -6,7 +6,7 @@ import path from "path";
 
 const DATA_FILE_PATH = path.join(process.cwd(), "src", "data", "admin_sub_accounts.json");
 
-function getSubAccountsData() {
+function getSubAccountsData(): { user_id: string; permissions: string[] }[] {
     if (!fs.existsSync(DATA_FILE_PATH)) {
         return [];
     }
@@ -18,7 +18,7 @@ function getSubAccountsData() {
     }
 }
 
-function saveSubAccountsData(data: any[]) {
+function saveSubAccountsData(data: { user_id: string; permissions: string[] }[]) {
     fs.writeFileSync(DATA_FILE_PATH, JSON.stringify(data, null, 2), "utf-8");
 }
 
@@ -47,7 +47,7 @@ async function requireAdmin(request: NextRequest) {
         .eq("user_id", user.id)
         .single();
 
-    if (!profile || !(profile as any).is_admin) {
+    if (!profile || !profile.is_admin) {
         return { ok: false as const, error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
     }
 
@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
 
         // Fetch user details for each sub-account
         const subAccountsWithDetails = await Promise.all(
-            subAccountsData.map(async (account: any) => {
+            subAccountsData.map(async (account) => {
                 const { data: { user }, error } = await admin.auth.admin.getUserById(account.user_id);
                 if (error || !user) {
                     return { ...account, email: "Unknown", name: "Unknown", active: false };
@@ -100,7 +100,12 @@ export async function POST(request: NextRequest) {
         if (!guard.ok) return guard.error;
 
         const body = await request.json();
-        const { email, password, name, permissions } = body;
+        const { email, password, name, permissions } = body as {
+            email?: string;
+            password?: string;
+            name?: string;
+            permissions?: string[];
+        };
 
         if (!email || !password) {
             return NextResponse.json({ error: "Email and password are required" }, { status: 400 });
@@ -158,7 +163,12 @@ export async function PUT(request: NextRequest) {
         if (!guard.ok) return guard.error;
 
         const body = await request.json();
-        const { user_id, permissions, password, name } = body;
+        const { user_id, permissions, password, name } = body as {
+            user_id?: string;
+            permissions?: string[];
+            password?: string;
+            name?: string;
+        };
 
         if (!user_id) {
             return NextResponse.json({ error: "User ID is required" }, { status: 400 });
@@ -184,14 +194,14 @@ export async function PUT(request: NextRequest) {
 
         // 3. Update permissions in JSON
         const subAccountsData = getSubAccountsData();
-        const index = subAccountsData.findIndex((acc: any) => acc.user_id === user_id);
+        const index = subAccountsData.findIndex((acc) => acc.user_id === user_id);
 
         if (index !== -1) {
-            subAccountsData[index].permissions = permissions;
+            subAccountsData[index].permissions = permissions || [];
             saveSubAccountsData(subAccountsData);
         } else {
             // If not in JSON but exists (maybe manually added?), add it
-            subAccountsData.push({ user_id, permissions });
+            subAccountsData.push({ user_id, permissions: permissions || [] });
             saveSubAccountsData(subAccountsData);
         }
 
@@ -224,7 +234,7 @@ export async function DELETE(request: NextRequest) {
 
         // 2. Remove from JSON
         const subAccountsData = getSubAccountsData();
-        const newData = subAccountsData.filter((acc: any) => acc.user_id !== user_id);
+        const newData = subAccountsData.filter((acc) => acc.user_id !== user_id);
         saveSubAccountsData(newData);
 
         return NextResponse.json({ success: true });

@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     const admin = supabaseAdmin();
-    const body = await req.json().catch(() => ({} as any));
+    const body = await req.json().catch(() => ({} as Record<string, unknown>));
 
     const rules_text = typeof body.rules_text === "string" ? body.rules_text : null;
     const bank_account_info =
@@ -57,7 +57,7 @@ export async function PUT(req: NextRequest) {
       agent_fee_twd = Math.floor(n);
     }
 
-    const patch: any = {
+    const patch: Record<string, unknown> = {
       bank_account_text: bank_account_info,
       wholesale_upgrade_rules: rules_text,
       wholesale_agent_fee_twd: agent_fee_twd,

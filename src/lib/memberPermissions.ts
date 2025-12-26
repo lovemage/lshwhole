@@ -20,7 +20,8 @@ export interface MemberPermissions {
     accessible_pages: string[];
     upgrade_available: boolean;
     upgrade_target: string | null;
-    upgrade_requirements: any;
+    upgrade_requirements: Record<string, unknown> | null;
+    allowed_l1_category_ids?: number[] | null;
     maintenance_requirements?: {
       days: number;
       min_amount: number;

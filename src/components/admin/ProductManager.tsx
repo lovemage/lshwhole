@@ -1,6 +1,24 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 
+interface ProductImage {
+  url: string;
+  sort: number;
+  is_product?: boolean;
+  is_description?: boolean;
+}
+
+interface Product {
+  id: number;
+  sku: string;
+  title_zh: string;
+  title_original: string;
+  retail_price_twd: number;
+  wholesale_price_twd: number | null;
+  status: string;
+  tags?: { id: number; name: string; category?: string }[];
+}
+
 interface Category {
   id: number;
   slug: string;
@@ -14,7 +32,7 @@ interface Category {
 }
 
 export default function ProductManager() {
-  const [products, setProducts] = useState<any[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedProductL1, setSelectedProductL1] = useState<number | null>(null);
   const [productsLoading, setProductsLoading] = useState(false);
@@ -24,7 +42,7 @@ export default function ProductManager() {
   const pageSize = 20;
   const [selectedProductIds, setSelectedProductIds] = useState<number[]>([]);
   const [showProductEdit, setShowProductEdit] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<any>(null);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [productEditForm, setProductEditForm] = useState({
     sku: "",
     title_zh: "",
@@ -35,7 +53,7 @@ export default function ProductManager() {
     wholesale_price_twd: 0,
     cost_twd: 0,
     status: "draft" as "draft" | "published",
-    images: [] as any[],
+    images: [] as ProductImage[],
   });
   
   // Spec & Variant Management
@@ -132,7 +150,7 @@ export default function ProductManager() {
     if (selectedProductIds.length === products.length) {
       setSelectedProductIds([]);
     } else {
-      setSelectedProductIds(products.map((p: any) => p.id));
+      setSelectedProductIds(products.map((p) => p.id));
     }
   };
 
@@ -194,13 +212,13 @@ export default function ProductManager() {
     setShowProductEdit(true);
   };
 
-  const openEditProduct = async (p: any) => {
+  const openEditProduct = async (p: Product) => {
     setEditingProduct(p);
     setSpecs([]);
     setVariants([]);
 
     // Fetch product images and details (specs, variants)
-    let images = [];
+    let images: ProductImage[] = [];
     let fetchedSpecs: Spec[] = [];
     let fetchedVariants: Variant[] = [];
 
@@ -209,7 +227,7 @@ export default function ProductManager() {
       if (res.ok) {
         const productData = await res.json();
         // Handle both array of strings (old) and array of objects (new)
-        images = (productData.images || []).map((img: any, idx: number) => {
+        images = (productData.images || []).map((img: ProductImage, idx: number) => {
           if (typeof img === 'string') {
             return { url: img, sort: idx, is_product: true, is_description: false };
           }
@@ -221,7 +239,7 @@ export default function ProductManager() {
           };
         });
         fetchedSpecs = productData.specs || [];
-        fetchedVariants = (productData.variants || []).map((v: any) => ({
+        fetchedVariants = (productData.variants || []).map((v: Variant) => ({
           id: v.id,
           options: v.options,
           price: v.price,
@@ -339,13 +357,13 @@ export default function ProductManager() {
     }
 
     // Generate Cartesian product
-    const combine = (acc: any[], specIdx: number): any[] => {
+    const combine = (acc: Record<string, string>[], specIdx: number): Record<string, string>[] => {
       if (specIdx === currentSpecs.length) return acc;
 
       const spec = currentSpecs[specIdx];
       if (spec.values.length === 0) return combine(acc, specIdx + 1); // Skip empty specs
 
-      const nextAcc: any[] = [];
+      const nextAcc: Record<string, string>[] = [];
       if (acc.length === 0) {
         spec.values.forEach(v => {
           nextAcc.push({ [spec.name]: v });
@@ -379,7 +397,7 @@ export default function ProductManager() {
     setVariants(newVariants);
   };
 
-  const updateVariant = (idx: number, field: keyof Variant, value: any) => {
+    const updateVariant = (idx: number, field: keyof Variant, value: string | number | Record<string, string>) => {
     const newVariants = [...variants];
     newVariants[idx] = { ...newVariants[idx], [field]: value };
     setVariants(newVariants);
@@ -387,7 +405,7 @@ export default function ProductManager() {
 
   const saveEditProduct = async () => {
     // 價格強制為整數
-    const toInt = (v: any) => (v === null || v === undefined || v === "" ? null : Math.floor(Number(v)));
+    const toInt = (v: string | number | null | undefined) => (v === null || v === undefined || v === "" ? null : Math.floor(Number(v)));
     
     // Prepare images payload
     const imagesPayload = productEditForm.images.map((img, idx) => ({
@@ -570,8 +588,8 @@ export default function ProductManager() {
               </tr>
             ) : (
               products.map((product) => {
-                const brandTag = product.tags?.find((t: any) => t.category === 'A1');
-                const otherTags = product.tags?.filter((t: any) => t.category !== 'A1').slice(0, 2) || [];
+                const brandTag = product.tags?.find((t) => t.category === 'A1');
+                const otherTags = product.tags?.filter((t) => t.category !== 'A1').slice(0, 2) || [];
                 return (
                   <tr key={product.id} className="border-b border-border-light hover:bg-background-light">
                     <td className="px-4 py-3 text-sm"><input type="checkbox" checked={selectedProductIds.includes(product.id)} onChange={() => toggleSelectOne(product.id)} /></td>
@@ -595,7 +613,7 @@ export default function ProductManager() {
                             {brandTag.name}
                           </span>
                         )}
-                        {otherTags.map((t: any) => (
+                        {otherTags.map((t) => (
                           <span key={t.id} className="inline-block px-2 py-0.5 rounded-md bg-gray-100 text-gray-600 text-xs whitespace-nowrap">
                             {t.name}
                           </span>
@@ -864,17 +882,17 @@ export default function ProductManager() {
                             })();
 
                             if (!res.ok) {
-                              console.error("Upload failed:", (data as any)?.error || rawText || res.status);
+                              console.error("Upload failed:", (data as { error?: string })?.error || rawText || res.status);
                               continue;
                             }
 
-                            if (data && (data as any).url) {
-                              setProductEditForm(prev => ({
+                            if (data && (data as { url?: string }).url) {
+                              setManualForm(prev => ({ ...prev, image_urls: [...prev.image_urls, data.url!] }));
                                 ...prev,
-                                images: [...prev.images, { url: (data as any).url, sort: prev.images.length, is_product: true, is_description: false }]
+                              console.error("Upload failed:", (data as { error?: string })?.error || "Unknown error");
                               }));
                             } else {
-                              console.error("Upload failed:", (data as any)?.error || "Unknown error");
+                              console.error("Upload failed:", (data as { error?: string })?.error || "Unknown error");
                             }
                           }
                         } catch (err) {
@@ -980,7 +998,7 @@ export default function ProductManager() {
 
               <div>
                 <label className="text-sm text-text-secondary-light">狀態</label>
-                <select value={productEditForm.status} onChange={(e) => setProductEditForm({ ...productEditForm, status: e.target.value as any })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm">
+                <select value={productEditForm.status} onChange={(e) => setProductEditForm({ ...productEditForm, status: e.target.value as "draft" | "published" })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm">
                   <option value="published">上架</option>
                   <option value="draft">草稿</option>
                 </select>

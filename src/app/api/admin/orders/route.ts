@@ -1,6 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 
+interface OrderItemWithProduct {
+  id: number;
+  product_id: number;
+  qty: number;
+  unit_price_twd: number;
+  spec_name: string | null;
+  products: {
+    sku: string | null;
+    title_zh: string | null;
+    title_original: string | null;
+    original_url: string | null;
+  } | { sku: string | null; title_zh: string | null; title_original: string | null; original_url: string | null; }[] | null;
+}
+
+interface OrderRow {
+  id: number;
+  user_id: string | null;
+  status: string | null;
+  total_twd: number | null;
+  created_at: string;
+  updated_at: string;
+  hold_id: number | null;
+  order_items: OrderItemWithProduct[] | null;
+}
+
 // 管理端：訂單列表
 export async function GET(request: NextRequest) {
   try {
@@ -47,9 +72,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message, details: error }, { status: 400 });
     }
 
-    const list = orders || [];
-    const userIds = list.map((o: any) => o.user_id).filter(Boolean);
-    const productIds = list.flatMap((o: any) => o.order_items?.map((item: any) => item.product_id) || []).filter(Boolean);
+    const list: OrderRow[] = orders || [];
+    const userIds = list.map((o) => o.user_id).filter(Boolean) as string[];
+    const productIds = list
+      .flatMap((o) => (o.order_items || []).map((item) => item.product_id))
+      .filter((pid): pid is number => pid !== null && pid !== undefined);
 
     let profileMap = new Map<string, { email: string | null; display_name: string | null }>();
     let imageMap = new Map<number, string[]>();
@@ -61,7 +88,7 @@ export async function GET(request: NextRequest) {
         .in("user_id", userIds);
 
       profileMap = new Map(
-        (profiles || []).map((p: any) => [p.user_id, { email: p.email, display_name: p.display_name }])
+        (profiles || []).map((p) => [p.user_id, { email: p.email, display_name: p.display_name }])
       );
     }
 
@@ -75,39 +102,37 @@ export async function GET(request: NextRequest) {
 
       if (!imgErr && imgs) {
         const byProduct = new Map<number, { url: string; sort: number }[]>();
-        imgs.forEach((img: any) => {
-          if (!byProduct.has(img.product_id)) {
-            byProduct.set(img.product_id, []);
-          }
-          byProduct.get(img.product_id)!.push({ url: img.url, sort: img.sort });
+        imgs.forEach((img) => {
+          const listArr = byProduct.get(img.product_id) || [];
+          listArr.push({ url: img.url, sort: img.sort });
+          byProduct.set(img.product_id, listArr);
         });
 
-        // Sort images by sort order and take URLs
         byProduct.forEach((images, productId) => {
           const sortedUrls = images
-            .sort((a, b) => a.sort - b.sort)
-            .map(img => img.url?.replace(/^http:\/\//i, 'https://'));
+            .sort((a, b) => (a.sort || 0) - (b.sort || 0))
+            .map((img) => img.url?.replace(/^http:\/\//i, "https://"));
           imageMap.set(productId, sortedUrls);
         });
       }
     }
 
-    const result = list.map((o: any) => {
+    const result = list.map((o) => {
       const profile = profileMap.get(o.user_id) || { email: null, display_name: null };
 
-      // Add images to order items
-      const orderItemsWithImages = o.order_items?.map((item: any) => {
-        // Handle case where products might be an array (one-to-many inference) or null
+      const orderItemsWithImages = (o.order_items || []).map((item) => {
         const productData = Array.isArray(item.products) ? item.products[0] : item.products;
-        
         return {
           ...item,
           product: {
-            ...(productData || {}),
-            images: imageMap.get(item.product_id) || []
-          }
+            sku: productData?.sku ?? null,
+            title_zh: productData?.title_zh ?? null,
+            title_original: productData?.title_original ?? null,
+            original_url: productData?.original_url ?? null,
+            images: imageMap.get(item.product_id) || [],
+          },
         };
-      }) || [];
+      });
 
       return {
         ...o,

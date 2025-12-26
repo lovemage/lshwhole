@@ -2,9 +2,25 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 
 export default function LimitedTimeProductManager() {
-  const [products, setProducts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [showAddModal, setShowAddModal] = useState(false);
+  interface LimitedProduct {
+    id: number;
+    title: string;
+    retail_price_twd: number | null;
+    wholesale_price_twd: number | null;
+    cover_image_url: string | null;
+    limited_time_end?: string | null;
+  }
+
+  interface Category {
+    id: number;
+    name: string;
+    level: number;
+    sort: number;
+  }
+
+  const [products, setProducts] = useState<LimitedProduct[]>([]);
+  const [candidates, setCandidates] = useState<LimitedProduct[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [candidates, setCandidates] = useState<any[]>([]);
   const [candidateTotal, setCandidateTotal] = useState(0);
   const [candidatePage, setCandidatePage] = useState(0);
@@ -84,7 +100,7 @@ export default function LimitedTimeProductManager() {
         const result = await res.json();
         // Filter out already added products
         const currentIds = new Set(products.map((p) => p.id));
-        const newCandidates = (result.data || []).map((p: any) => ({
+        const newCandidates = (result.data || []).map((p: LimitedProduct & { is_already_added?: boolean }) => ({
           ...p,
           is_already_added: currentIds.has(p.id)
         }));
@@ -490,14 +506,14 @@ export default function LimitedTimeProductManager() {
                             })();
 
                             if (!res.ok) {
-                              console.error("Upload failed:", (data as any)?.error || rawText || res.status);
+                              console.error("Upload failed:", (data as { error?: string })?.error || rawText || res.status);
                               continue;
                             }
 
-                            if (data && (data as any).url) {
-                              setManualForm(prev => ({ ...prev, image_urls: [...prev.image_urls, (data as any).url] }));
+                            if (data && (data as { url?: string }).url) {
+                              setManualForm(prev => ({ ...prev, image_urls: [...prev.image_urls, data.url!] }));
                             } else {
-                              console.error("Upload failed:", (data as any)?.error || "Unknown error");
+                              console.error("Upload failed:", (data as { error?: string })?.error || "Unknown error");
                             }
                           }
                         } catch {

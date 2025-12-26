@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import BannerCarousel from "@/components/BannerCarousel";
 import { supabase } from "@/lib/supabase";
@@ -23,6 +24,7 @@ interface Category { id: number; name: string; level: number; sort: number; icon
 interface Relation { parent_category_id: number; child_category_id: number; }
 
 export default function ProductsPage() {
+  const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState("newest");
 
@@ -31,10 +33,35 @@ export default function ProductsPage() {
   const [relations, setRelations] = useState<Relation[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
 
-  const [accessToken, setAccessToken] = useState<string | null>(null);
-
   // 會員權限
   const { loading: permissionsLoading, error: permissionsError, data: permissions } = useMemberPermissions();
+
+  const allowedCategorySet = useMemo(() => {
+    const allowedL1 = permissions?.permissions.allowed_l1_category_ids;
+    if (!allowedL1 || allowedL1.length === 0) return null;
+
+    const allowed = new Set<number>();
+    const adj = new Map<number, number[]>();
+    relations.forEach((r) => {
+      const arr = adj.get(r.parent_category_id) || [];
+      arr.push(r.child_category_id);
+      adj.set(r.parent_category_id, arr);
+    });
+
+    allowedL1.forEach((id) => {
+      const q: number[] = [id];
+      while (q.length) {
+        const cur = q.shift()!;
+        if (allowed.has(cur)) continue;
+        allowed.add(cur);
+        (adj.get(cur) || []).forEach((child) => q.push(child));
+      }
+    });
+
+    return allowed;
+  }, [permissions?.permissions.allowed_l1_category_ids, relations]);
+
+  const [accessToken, setAccessToken] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -48,17 +75,29 @@ export default function ProductsPage() {
   }, []);
 
   // 分類層級
+  const filteredCategories = useMemo(() => {
+    if (!allowedCategorySet) return categoriesAll;
+    return categoriesAll.filter((c) => allowedCategorySet.has(c.id));
+  }, [allowedCategorySet, categoriesAll]);
+
+  const filteredRelations = useMemo(() => {
+    if (!allowedCategorySet) return relations;
+    return relations.filter(
+      (r) => allowedCategorySet.has(r.parent_category_id) && allowedCategorySet.has(r.child_category_id)
+    );
+  }, [allowedCategorySet, relations]);
+
   const l1Categories = useMemo(() => {
-    return categoriesAll
+    return filteredCategories
       .filter((c) => c.level === 1)
       .sort((a, b) => a.sort - b.sort);
-  }, [categoriesAll]);
+  }, [filteredCategories]);
   const l2Categories = useMemo(() => {
-    return categoriesAll
+    return filteredCategories
       .filter((c) => c.level === 2)
       .sort((a, b) => a.sort - b.sort);
-  }, [categoriesAll]);
-  const l3Categories = useMemo(() => categoriesAll.filter((c) => c.level === 3).sort((a, b) => a.sort - b.sort), [categoriesAll]);
+  }, [filteredCategories]);
+  const l3Categories = useMemo(() => filteredCategories.filter((c) => c.level === 3).sort((a, b) => a.sort - b.sort), [filteredCategories]);
 
   // 選中的分類和標籤
   const [selectedL1Id, setSelectedL1Id] = useState<number | null>(null);
@@ -106,6 +145,11 @@ export default function ProductsPage() {
     tagIds?: number[];
     search?: string;
   }) => {
+    if (!permissions || permissions.tier === 'guest' || !permissions.permissions.can_view_products) {
+      setProducts([]);
+      setLoading(false);
+      return;
+    }
     const params = new URLSearchParams();
     params.set("limit", "48");
     if (opts?.search) params.set("search", opts.search);
@@ -128,8 +172,8 @@ export default function ProductsPage() {
   };
 
   const getChildren = (parentId: number, level: number) => {
-    const childIds = relations.filter(r => r.parent_category_id === parentId).map(r => r.child_category_id);
-    return categoriesAll.filter(c => c.level === level && childIds.includes(c.id)).sort((a, b) => a.sort - b.sort);
+    const childIds = filteredRelations.filter(r => r.parent_category_id === parentId).map(r => r.child_category_id);
+    return filteredCategories.filter(c => c.level === level && childIds.includes(c.id)).sort((a, b) => a.sort - b.sort);
   };
 
   // 獲取當前選中的最深層分類 ID
@@ -196,26 +240,41 @@ export default function ProductsPage() {
   };
 
   useEffect(() => {
+    if (!allowedCategorySet) return;
+    if (selectedL1Id && !allowedCategorySet.has(selectedL1Id)) setSelectedL1Id(null);
+    if (selectedL2Id && !allowedCategorySet.has(selectedL2Id)) setSelectedL2Id(null);
+    if (selectedL3Id && !allowedCategorySet.has(selectedL3Id)) setSelectedL3Id(null);
+  }, [allowedCategorySet, selectedL1Id, selectedL2Id, selectedL3Id]);
+
+  useEffect(() => {
+    if (permissionsLoading) return;
+    if (!permissions || permissions.tier === 'guest' || !permissions.permissions.can_view_products) {
+      setProducts([]);
+      setLoading(false);
+      return;
+    }
     fetchProducts({
       categoryId: getCurrentCategoryId(),
       tagIds: selectedTagIds,
       search: searchTerm.trim()
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedL1Id, selectedL2Id, selectedL3Id, selectedTagIds]);
+  }, [selectedL1Id, selectedL2Id, selectedL3Id, selectedTagIds, permissionsLoading, permissions]);
 
   // 搜尋即時
   useEffect(() => {
     const h = setTimeout(() => {
-      fetchProducts({
-        categoryId: getCurrentCategoryId(),
-        tagIds: selectedTagIds,
-        search: searchTerm.trim()
-      });
+      if (permissions && permissions.permissions.can_view_products && permissions.tier !== 'guest') {
+        fetchProducts({
+          categoryId: getCurrentCategoryId(),
+          tagIds: selectedTagIds,
+          search: searchTerm.trim()
+        });
+      }
     }, 250);
     return () => clearTimeout(h);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchTerm]);
+  }, [searchTerm, permissions]);
 
   const sortedProducts = useMemo(() => {
     const arr = [...products];
@@ -353,6 +412,34 @@ export default function ProductsPage() {
       </div>
     );
   };
+
+  const cannotViewProducts = !permissionsLoading && (!permissions || permissions.tier === 'guest' || !permissions.permissions.can_view_products);
+
+  useEffect(() => {
+    if (cannotViewProducts) {
+      router.replace(`/login?next=${encodeURIComponent('/products')}`);
+    }
+  }, [cannotViewProducts, router]);
+
+  if (cannotViewProducts) {
+    return (
+      <div style={{ backgroundColor: "#fffdf5" }} className="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden font-sans">
+        <Header />
+        <main className="flex-1 w-full max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+          <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-8 text-center space-y-4">
+            <h1 className="text-2xl font-bold text-gray-900">登入或註冊後即可瀏覽全部商品</h1>
+            <p className="text-gray-600">目前訪客僅能在首頁查看精選商品，請先加入會員以瀏覽完整商品列表。</p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <Link href="/register" className="px-6 py-3 bg-primary text-white rounded-xl font-bold hover:bg-primary/90">註冊會員</Link>
+              <Link href="/login" className="px-6 py-3 bg-gray-100 text-gray-800 rounded-xl font-bold hover:bg-gray-200">已是會員？登入</Link>
+              <Link href="/" className="px-6 py-3 text-primary font-bold">返回首頁</Link>
+            </div>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   return (
     <div style={{ backgroundColor: "#fffdf5" }} className="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden font-sans">

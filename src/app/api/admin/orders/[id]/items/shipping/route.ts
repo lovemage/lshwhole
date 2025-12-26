@@ -23,7 +23,7 @@ export async function PUT(
     }
     
     const settings: Record<string, number> = {};
-    settingsData?.forEach((s: any) => {
+    settingsData?.forEach((s) => {
       if (s.key && s.value !== undefined) {
         settings[s.key] = Number(s.value);
       }

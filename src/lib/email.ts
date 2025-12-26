@@ -1,5 +1,6 @@
 import { Resend } from 'resend';
 import { supabaseAdmin } from './supabase';
+import { EmailTemplatePayload } from '../types/email';
 
 // Lazy initialization to avoid build-time errors
 let resendInstance: Resend | null = null;
@@ -20,8 +21,8 @@ function getResendClient() {
 export async function sendEmail(
   to: string,
   templateKey: string,
-  data: Record<string, any>
-) {
+  data: Record<string, unknown>
+): Promise<{ success: boolean; error?: unknown; data?: EmailTemplatePayload }> {
   try {
     const admin = supabaseAdmin();
 
@@ -70,7 +71,7 @@ export async function sendEmail(
       return { success: false, error: emailError };
     }
 
-    return { success: true, data: emailData };
+    return { success: true, data: emailData as EmailTemplatePayload };
   } catch (err) {
     console.error('sendEmail exception:', err);
     return { success: false, error: err };

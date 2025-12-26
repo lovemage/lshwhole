@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
 
     // Convert array to object
     const settings: Record<string, number> = {};
-    data?.forEach((item: any) => {
+    data?.forEach((item) => {
       settings[item.key] = Number(item.value);
     });
 

@@ -28,7 +28,15 @@ export async function POST(
     }
 
     let totalRefundAmount = 0;
-    const processedItems: any[] = [];
+    const processedItems: {
+      id: number;
+      refund_qty: number;
+      refund_amount: number;
+      original_qty: number;
+      unit_price_twd: number;
+      current_status: string | null;
+      current_refund: number;
+    }[] = [];
 
     // 2. Validate items and calculate total
     for (const item of items) {
@@ -140,7 +148,7 @@ export async function POST(
       .select("status")
       .eq("order_id", id);
       
-    const isAllOOS = allItems?.every((i: any) => i.status === "OUT_OF_STOCK");
+    const isAllOOS = allItems?.every((i) => i.status === "OUT_OF_STOCK");
     
     if (isAllOOS) {
        await admin

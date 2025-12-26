@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 獲取每個會員的錢包餘額
-    const userIds = (profiles || []).map((p: any) => p.user_id);
+    const userIds = (profiles || []).map((p) => p.user_id);
     let walletMap = new Map<string, number>();
 
     if (userIds.length > 0) {
@@ -59,10 +59,10 @@ export async function GET(request: NextRequest) {
         .select("user_id, balance_twd")
         .in("user_id", userIds);
 
-      walletMap = new Map((wallets || []).map((w: any) => [w.user_id, w.balance_twd]));
+      walletMap = new Map((wallets || []).map((w) => [w.user_id, w.balance_twd]));
     }
 
-    const result = (profiles || []).map((p: any) => ({
+    const result = (profiles || []).map((p) => ({
       ...p,
       balance_twd: walletMap.get(p.user_id) || 0,
     }));

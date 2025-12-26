@@ -1,6 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 
+interface OrderItemRow {
+  id: number;
+  product_id: number;
+  unit_price_twd: number;
+  qty: number;
+  refund_amount: number;
+  product?: {
+    id: number;
+    title_zh: string | null;
+    title_original: string | null;
+    sku: string | null;
+    original_url: string | null;
+  } | {
+    id: number;
+    title_zh: string | null;
+    title_original: string | null;
+    sku: string | null;
+    original_url: string | null;
+  }[];
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -48,7 +69,9 @@ export async function GET(
     // Fetch product images
     let imageMap = new Map<number, string[]>();
     if (items && items.length > 0) {
-      const productIds = items.map((item: any) => item.product_id).filter(Boolean);
+      const productIds = items
+        .map((item) => item.product_id)
+        .filter((pid): pid is number => pid !== null && pid !== undefined);
       if (productIds.length > 0) {
         const { data: imgs, error: imgErr } = await admin
           .from("product_images")
@@ -58,18 +81,16 @@ export async function GET(
 
         if (!imgErr && imgs) {
           const byProduct = new Map<number, { url: string; sort: number }[]>();
-          imgs.forEach((img: any) => {
-            if (!byProduct.has(img.product_id)) {
-              byProduct.set(img.product_id, []);
-            }
-            byProduct.get(img.product_id)!.push({ url: img.url, sort: img.sort });
+          imgs.forEach((img) => {
+            const listArr = byProduct.get(img.product_id) || [];
+            listArr.push({ url: img.url, sort: img.sort });
+            byProduct.set(img.product_id, listArr);
           });
 
-          // Sort images by sort order and take URLs
           byProduct.forEach((images, productId) => {
             const sortedUrls = images
-              .sort((a, b) => a.sort - b.sort)
-              .map(img => img.url?.replace(/^http:\/\//i, 'https://'));
+              .sort((a, b) => (a.sort || 0) - (b.sort || 0))
+              .map((img) => img.url?.replace(/^http:\/\//i, "https://"));
             imageMap.set(productId, sortedUrls);
           });
         }
@@ -77,16 +98,18 @@ export async function GET(
     }
 
     // Add images to items
-    const itemsWithImages = (items || []).map((item: any) => {
-      // Handle case where product might be an array (one-to-many inference) or null
+    const itemsWithImages = (items || []).map((item: OrderItemRow) => {
       const productData = Array.isArray(item.product) ? item.product[0] : item.product;
-      
       return {
         ...item,
         product: {
-          ...(productData || {}),
-          images: imageMap.get(item.product_id) || []
-        }
+          id: productData?.id ?? null,
+          title_zh: productData?.title_zh ?? null,
+          title_original: productData?.title_original ?? null,
+          sku: productData?.sku ?? null,
+          original_url: productData?.original_url ?? null,
+          images: imageMap.get(item.product_id) || [],
+        },
       };
     });
 
@@ -201,7 +224,7 @@ export async function PUT(
       }
     }
 
-    const updateData: any = {};
+    const updateData: Record<string, unknown> = {};
     if (status !== undefined) updateData.status = status;
     if (shipping_fee_intl !== undefined) updateData.shipping_fee_intl = shipping_fee_intl;
     if (box_fee !== undefined) updateData.box_fee = box_fee;

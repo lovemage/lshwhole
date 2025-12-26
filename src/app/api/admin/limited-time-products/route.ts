@@ -34,15 +34,20 @@ export async function GET(request: NextRequest) {
     }
 
     // Format images
-    const formatted = products.map((p: any) => {
-      let coverImage = null;
-      if (p.product_images && p.product_images.length > 0) {
-        const sorted = p.product_images.sort((a: any, b: any) => (a.sort || 0) - (b.sort || 0));
-        coverImage = sorted[0].url;
-      }
+    const formatted = (products || []).map((p) => {
+      const images = Array.isArray(p.product_images) ? p.product_images : [];
+      const sorted = [...images].sort((a, b) => (a.sort || 0) - (b.sort || 0));
+      const coverImage = sorted[0]?.url ?? null;
       return {
-        ...p,
-        cover_image_url: coverImage
+        id: p.id,
+        sku: p.sku,
+        title_zh: p.title_zh,
+        title_original: p.title_original,
+        retail_price_twd: p.retail_price_twd,
+        status: p.status,
+        is_limited_time: p.is_limited_time,
+        limited_time_end: p.limited_time_end,
+        cover_image_url: coverImage,
       };
     });
 

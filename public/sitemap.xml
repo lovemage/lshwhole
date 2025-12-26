@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  <!-- 首頁 -->
+  <url>
+    <loc>https://www.lsxwholesale.com/</loc>
+    <lastmod>2025-12-16</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+
+  <!-- 產品列表 -->
+  <url>
+    <loc>https://www.lsxwholesale.com/products</loc>
+    <lastmod>2025-12-16</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- 熱門產品 -->
+  <url>
+    <loc>https://www.lsxwholesale.com/hot-products</loc>
+    <lastmod>2025-12-16</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- 最新消息 -->
+  <url>
+    <loc>https://www.lsxwholesale.com/news</loc>
+    <lastmod>2025-12-16</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- 常見問題 -->
+  <url>
+    <loc>https://www.lsxwholesale.com/faq</loc>
+    <lastmod>2025-12-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- 如何前往 -->
+  <url>
+    <loc>https://www.lsxwholesale.com/howtogo</loc>
+    <lastmod>2025-12-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+
+  <!-- 隱私政策 -->
+  <url>
+    <loc>https://www.lsxwholesale.com/privacy-policy</loc>
+    <lastmod>2025-12-16</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+
+  <!-- 退換貨政策 -->
+  <url>
+    <loc>https://www.lsxwholesale.com/return-policy</loc>
+    <lastmod>2025-12-16</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+
+  <!-- 服務條款 -->
+  <url>
+    <loc>https://www.lsxwholesale.com/terms-of-service</loc>
+    <lastmod>2025-12-16</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+</urlset>

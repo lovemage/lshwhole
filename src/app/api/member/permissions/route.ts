@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     // 查詢會員資料
     const { data: profile, error: profileError } = await admin
       .from("profiles")
-      .select("user_id, email, display_name, tier, login_enabled, login_disabled_at, login_disabled_reason, last_purchase_date")
+      .select("user_id, email, display_name, tier, login_enabled, login_disabled_at, login_disabled_reason, last_purchase_date, allowed_l1_category_ids")
       .eq("user_id", user.id)
       .single();
 
@@ -41,6 +41,9 @@ export async function GET(request: NextRequest) {
 
     // 根據會員等級定義權限
     const permissions = getPermissionsByTier(profile.tier);
+    if (profile.allowed_l1_category_ids) {
+      (permissions as any).allowed_l1_category_ids = profile.allowed_l1_category_ids;
+    }
 
     // 計算距離上次消費的天數
     let daysSinceLastPurchase = null;
@@ -86,6 +89,7 @@ function getPermissionsByTier(tier: string) {
     upgrade_available: false,
     upgrade_target: null as string | null,
     upgrade_requirements: null as any,
+    allowed_l1_category_ids: null as number[] | null,
   };
 
   switch (tier) {

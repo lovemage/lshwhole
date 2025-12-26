@@ -13,6 +13,7 @@ export async function GET(
 
     // 解析目前會員 tier，用來決定是否顯示批發價
     let userTier: "retail" | "wholesale" | "vip" | null = null;
+    let allowedL1: number[] | null = null;
     const authHeader =
       request.headers.get("Authorization") || request.headers.get("authorization");
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -32,20 +33,34 @@ export async function GET(
           data: { user },
         } = await supabaseUser.auth.getUser();
 
-        if (user) {
-          const { data: profile, error: profileErr } = await admin
-            .from("profiles")
-            .select("tier")
-            .eq("user_id", user.id)
-            .single();
-
-          if (!profileErr && profile?.tier) {
-            userTier = profile.tier as "retail" | "wholesale" | "vip";
-          }
+        if (!user) {
+          return NextResponse.json({ error: "未登入" }, { status: 401 });
         }
+
+        const { data: profile, error: profileErr } = await admin
+          .from("profiles")
+          .select("tier, allowed_l1_category_ids")
+          .eq("user_id", user.id)
+          .single();
+
+        if (profileErr || !profile?.tier) {
+          return NextResponse.json({ error: "會員資料不存在" }, { status: 401 });
+        }
+
+        if (profile.tier === "guest") {
+          return NextResponse.json({ error: "請註冊或登入會員後瀏覽商品" }, { status: 403 });
+        }
+
+        userTier = profile.tier as "retail" | "wholesale" | "vip";
+        allowedL1 = profile.allowed_l1_category_ids || null;
       } catch (e) {
         console.error("resolve user tier failed in /api/products/[id]", e);
+        return NextResponse.json({ error: "驗證失敗" }, { status: 401 });
       }
+    }
+
+    if (!userTier) {
+      return NextResponse.json({ error: "請登入後查看商品" }, { status: 401 });
     }
 
     const isWholesaleTier = userTier === "wholesale" || userTier === "vip";
@@ -63,6 +78,51 @@ export async function GET(
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
+    // 若有 L1 限制，檢查商品所屬分類是否被允許
+    if (allowedL1 && allowedL1.length > 0) {
+      const { data: rels, error: relErr } = await admin
+        .from("category_relations")
+        .select("parent_category_id, child_category_id");
+      if (relErr) return NextResponse.json({ error: relErr.message }, { status: 400 });
+
+      const { data: categories, error: catErr } = await admin
+        .from("categories")
+        .select("id, level");
+      if (catErr) return NextResponse.json({ error: catErr.message }, { status: 400 });
+
+      const { data: pcm, error: mapErr } = await admin
+        .from("product_category_map")
+        .select("category_id")
+        .eq("product_id", id);
+      if (mapErr) return NextResponse.json({ error: mapErr.message }, { status: 400 });
+
+      const adj = new Map<number, number[]>();
+      rels?.forEach((r) => {
+        const arr = adj.get(r.parent_category_id) || [];
+        arr.push(r.child_category_id);
+        adj.set(r.parent_category_id, arr);
+      });
+
+      const allowedSet = new Set<number>();
+      const l1Existing = new Set((categories || []).filter((c: any) => c.level === 1).map((c: any) => c.id));
+      allowedL1.forEach((l1) => {
+        if (!l1Existing.has(l1)) return;
+        const q: number[] = [l1];
+        while (q.length) {
+          const cur = q.shift()!;
+          if (allowedSet.has(cur)) continue;
+          allowedSet.add(cur);
+          (adj.get(cur) || []).forEach((child) => q.push(child));
+        }
+      });
+
+      const productCats = new Set((pcm || []).map((x: any) => x.category_id));
+      const intersect = Array.from(productCats).some((cid) => allowedSet.has(cid));
+      if (!intersect) {
+        return NextResponse.json({ error: "此商品不在可瀏覽的分類" }, { status: 403 });
+      }
     }
 
     // 獲取商品圖片 (包含 is_product 和 is_description)

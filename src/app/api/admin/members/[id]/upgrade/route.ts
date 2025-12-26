@@ -10,8 +10,8 @@ export async function POST(
   try {
     const admin = supabaseAdmin();
     const { id } = await params;
-    const body = await request.json().catch(() => ({} as any));
-    const action = body?.action as string;
+    const body = await request.json().catch(() => ({} as Record<string, unknown>));
+    const action = typeof body?.action === "string" ? body.action : "";
 
     if (action !== "approve" && action !== "reject") {
       return NextResponse.json(
@@ -22,7 +22,7 @@ export async function POST(
 
     const now = new Date().toISOString();
 
-    const patch: any =
+    const patch: Record<string, string> =
       action === "approve"
         ? {
             tier: "wholesale",

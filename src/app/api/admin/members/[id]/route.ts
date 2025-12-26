@@ -58,14 +58,17 @@ export async function PUT(
     const { id } = await params;
     const body = await request.json();
 
-    const { tier, account_status, display_name, phone, delivery_address, login_enabled } = body;
+    const { tier, account_status, display_name, phone, delivery_address, login_enabled, allowed_l1_category_ids } = body;
 
-    const updateData: any = {};
+    const updateData: Record<string, unknown> = {};
     if (tier !== undefined) updateData.tier = tier;
     if (account_status !== undefined) updateData.account_status = account_status;
     if (display_name !== undefined) updateData.display_name = display_name;
     if (phone !== undefined) updateData.phone = phone;
     if (delivery_address !== undefined) updateData.delivery_address = delivery_address;
+    if (allowed_l1_category_ids !== undefined) {
+      updateData.allowed_l1_category_ids = allowed_l1_category_ids === null ? null : allowed_l1_category_ids;
+    }
     
     // 處理登入權限變更
     if (login_enabled !== undefined) {
