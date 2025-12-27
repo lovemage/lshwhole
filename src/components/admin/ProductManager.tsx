@@ -13,8 +13,12 @@ interface Product {
   sku: string;
   title_zh: string;
   title_original: string;
+  desc_zh?: string;
+  desc_original?: string;
   retail_price_twd: number;
   wholesale_price_twd: number | null;
+  cost_twd?: number | null;
+  cover_image_url?: string | null;
   status: string;
   tags?: { id: number; name: string; category?: string }[];
 }
@@ -887,9 +891,17 @@ export default function ProductManager() {
                             }
 
                             if (data && (data as { url?: string }).url) {
-                              setManualForm(prev => ({ ...prev, image_urls: [...prev.image_urls, data.url!] }));
+                              setProductEditForm(prev => ({
                                 ...prev,
-                              console.error("Upload failed:", (data as { error?: string })?.error || "Unknown error");
+                                images: [
+                                  ...prev.images,
+                                  {
+                                    url: (data as { url: string }).url,
+                                    sort: prev.images.length,
+                                    is_product: true,
+                                    is_description: false,
+                                  },
+                                ],
                               }));
                             } else {
                               console.error("Upload failed:", (data as { error?: string })?.error || "Unknown error");

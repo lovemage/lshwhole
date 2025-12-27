@@ -24,6 +24,8 @@ interface OrderItemRow {
   box_count?: number | null;
   shipping_method?: string | null;
   shipping_country?: string | null;
+  member_shipping_code?: string | null;
+  shipping_paid?: boolean;
   product?: OrderItemProduct;
 }
 
@@ -46,6 +48,7 @@ interface OrderRow {
   recipient_name?: string | null;
   recipient_phone?: string | null;
   shipping_address?: string | null;
+  shipping_paid?: boolean;
 }
 
 export default function OrderManager() {
@@ -181,6 +184,7 @@ export default function OrderManager() {
   };
 
   const handleRefundItems = async () => {
+    if (!selectedOrder) return;
     if (!refundTargetItem || refundQty <= 0) return;
     try {
       setRefunding(true);
@@ -210,6 +214,7 @@ export default function OrderManager() {
   };
 
   const updateItemStatus = async (itemId: number, newStatus: string) => {
+    if (!selectedOrder) return;
     try {
       const res = await fetch(`/api/admin/orders/${selectedOrder.id}/items/status`, {
         method: "PUT",
@@ -230,6 +235,7 @@ export default function OrderManager() {
   };
 
   const updateItemShipping = async (itemId: number, weight: number, method: string, boxFee: number, country: string, boxCount: number) => {
+    if (!selectedOrder) return;
     try {
       const res = await fetch(`/api/admin/orders/${selectedOrder.id}/items/shipping`, {
         method: "PUT",
@@ -649,7 +655,16 @@ export default function OrderManager() {
                                   };
                                 });
                               }}
-                              onBlur={(e) => updateItemShipping(item.id, Number(e.target.value), item.shipping_method, item.box_fee || 0, item.shipping_country, item.box_count || 1)}
+                              onBlur={(e) =>
+                                updateItemShipping(
+                                  item.id,
+                                  Number(e.target.value),
+                                  item.shipping_method || "",
+                                  item.box_fee || 0,
+                                  item.shipping_country || "",
+                                  item.box_count || 1
+                                )
+                              }
                               disabled={item.status !== 'ARRIVED'}
                             />
                           </td>
@@ -666,7 +681,14 @@ export default function OrderManager() {
                                     order_items: prev.order_items?.map((i) => i.id === item.id ? { ...i, shipping_country: val } : i) || [],
                                   };
                                 });
-                                updateItemShipping(item.id, item.weight || 0, item.shipping_method, item.box_fee || 0, val, item.box_count || 1);
+                                updateItemShipping(
+                                  item.id,
+                                  item.weight || 0,
+                                  item.shipping_method || "",
+                                  item.box_fee || 0,
+                                  val,
+                                  item.box_count || 1
+                                );
                               }}
                               disabled={item.status !== 'ARRIVED'}
                             >
@@ -689,7 +711,14 @@ export default function OrderManager() {
                                     order_items: prev.order_items?.map((i) => i.id === item.id ? { ...i, shipping_method: val } : i) || [],
                                   };
                                 });
-                                updateItemShipping(item.id, item.weight || 0, val, item.box_fee || 0, item.shipping_country, item.box_count || 1);
+                                updateItemShipping(
+                                  item.id,
+                                  item.weight || 0,
+                                  val,
+                                  item.box_fee || 0,
+                                  item.shipping_country || "",
+                                  item.box_count || 1
+                                );
                               }}
                               disabled={item.status !== 'ARRIVED'}
                             >
@@ -718,7 +747,16 @@ export default function OrderManager() {
                                       };
                                     });
                                   }}
-                                  onBlur={(e) => updateItemShipping(item.id, item.weight || 0, item.shipping_method, item.box_fee || 0, item.shipping_country, Math.max(1, Math.floor(Number(e.target.value))))}
+                                  onBlur={(e) =>
+                                    updateItemShipping(
+                                      item.id,
+                                      item.weight || 0,
+                                      item.shipping_method || "",
+                                      item.box_fee || 0,
+                                      item.shipping_country || "",
+                                      Math.max(1, Math.floor(Number(e.target.value)))
+                                    )
+                                  }
                                   disabled={item.status !== 'ARRIVED'}
                                 />
                                 <span className="text-xs text-gray-500 whitespace-nowrap">箱</span>
@@ -740,7 +778,16 @@ export default function OrderManager() {
                                   };
                                 });
                               }}
-                              onBlur={(e) => updateItemShipping(item.id, item.weight || 0, item.shipping_method, Number(e.target.value), item.shipping_country, item.box_count || 1)}
+                              onBlur={(e) =>
+                                updateItemShipping(
+                                  item.id,
+                                  item.weight || 0,
+                                  item.shipping_method || "",
+                                  Number(e.target.value),
+                                  item.shipping_country || "",
+                                  item.box_count || 1
+                                )
+                              }
                               disabled={item.status !== 'ARRIVED'}
                             />
                           </td>
@@ -797,8 +844,8 @@ export default function OrderManager() {
                               })()}
                             </span>
                             </div>
-                            {item.refund_amount > 0 && (
-                              <div className="text-xs text-red-600 mt-1">已退 NT${item.refund_amount}</div>
+                            {(item.refund_amount ?? 0) > 0 && (
+                              <div className="text-xs text-red-600 mt-1">已退 NT${item.refund_amount ?? 0}</div>
                             )}
                           </td>
                           <td className="p-3 text-sm">

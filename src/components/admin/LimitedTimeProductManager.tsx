@@ -4,7 +4,10 @@ import { supabase } from "@/lib/supabase";
 export default function LimitedTimeProductManager() {
   interface LimitedProduct {
     id: number;
-    title: string;
+    sku?: string | null;
+    title?: string;
+    title_zh?: string | null;
+    title_original?: string | null;
     retail_price_twd: number | null;
     wholesale_price_twd: number | null;
     cover_image_url: string | null;
@@ -19,21 +22,21 @@ export default function LimitedTimeProductManager() {
   }
 
   const [products, setProducts] = useState<LimitedProduct[]>([]);
-  const [candidates, setCandidates] = useState<LimitedProduct[]>([]);
+  const [candidates, setCandidates] = useState<(LimitedProduct & { is_already_added?: boolean })[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [candidates, setCandidates] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
   const [candidateTotal, setCandidateTotal] = useState(0);
   const [candidatePage, setCandidatePage] = useState(0);
   const [search, setSearch] = useState("");
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<number[]>([]);
   const [adding, setAdding] = useState(false);
   const [selectedProductIds, setSelectedProductIds] = useState<number[]>([]);
+  const [showAddModal, setShowAddModal] = useState(false);
   
   // Date picker state
   const [endTime, setEndTime] = useState("");
 
   // Categories for filter
-  const [categories, setCategories] = useState<any[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>("");
 
   // Manual Add State

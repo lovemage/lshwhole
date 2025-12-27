@@ -22,7 +22,7 @@ export async function sendEmail(
   to: string,
   templateKey: string,
   data: Record<string, unknown>
-): Promise<{ success: boolean; error?: unknown; data?: EmailTemplatePayload }> {
+): Promise<{ success: boolean; error?: unknown; data?: unknown }> {
   try {
     const admin = supabaseAdmin();
 
@@ -71,7 +71,7 @@ export async function sendEmail(
       return { success: false, error: emailError };
     }
 
-    return { success: true, data: emailData as EmailTemplatePayload };
+    return { success: true, data: emailData as unknown };
   } catch (err) {
     console.error('sendEmail exception:', err);
     return { success: false, error: err };

@@ -736,9 +736,17 @@ export default function MemberPage() {
 
             <div className="border-t border-gray-200 pt-3 mt-3 space-y-2">
               <h3 className="text-sm font-semibold text-gray-900">升級條件</h3>
+              {(() => {
+                const minBalance =
+                  typeof permissions.permissions.upgrade_requirements?.min_wallet_balance === "number"
+                    ? permissions.permissions.upgrade_requirements.min_wallet_balance
+                    : 1500;
+                return (
               <p className="text-sm text-gray-700">
-                儲值金 ≥ {permissions.permissions.upgrade_requirements?.min_wallet_balance || 1500} 元
+                儲值金 ≥ {minBalance} 元
               </p>
+                );
+              })()}
               <p className="text-xs text-gray-600">
                 目前儲值金：NT$ {wallet?.balance_twd ?? 0}
               </p>
@@ -764,7 +772,13 @@ export default function MemberPage() {
               <button
                 type="button"
                 onClick={handleUpgradeToRetail}
-                disabled={upgradeSubmitting || (wallet?.balance_twd ?? 0) < (permissions.permissions.upgrade_requirements?.min_wallet_balance || 1500)}
+                disabled={
+                  upgradeSubmitting ||
+                  (wallet?.balance_twd ?? 0) <
+                    (typeof permissions.permissions.upgrade_requirements?.min_wallet_balance === "number"
+                      ? permissions.permissions.upgrade_requirements.min_wallet_balance
+                      : 1500)
+                }
                 className="px-4 py-2 bg-primary text-white text-sm font-bold hover:bg-primary/90 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {upgradeSubmitting ? "升級中..." : "申請升級為 Retail 會員"}

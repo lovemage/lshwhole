@@ -111,14 +111,17 @@ export async function GET(request: NextRequest) {
         byProduct.forEach((images, productId) => {
           const sortedUrls = images
             .sort((a, b) => (a.sort || 0) - (b.sort || 0))
-            .map((img) => img.url?.replace(/^http:\/\//i, "https://"));
+            .map((img) => img.url?.replace(/^http:\/\//i, "https://"))
+            .filter((u): u is string => typeof u === "string" && u.length > 0);
           imageMap.set(productId, sortedUrls);
         });
       }
     }
 
     const result = list.map((o) => {
-      const profile = profileMap.get(o.user_id) || { email: null, display_name: null };
+      const profile = o.user_id
+        ? profileMap.get(o.user_id) || { email: null, display_name: null }
+        : { email: null, display_name: null };
 
       const orderItemsWithImages = (o.order_items || []).map((item) => {
         const productData = Array.isArray(item.products) ? item.products[0] : item.products;
