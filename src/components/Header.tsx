@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import CartBadge from "@/components/CartBadge";
@@ -12,6 +12,7 @@ interface Tag { id: number; name: string; slug: string; sort: number; category?:
 
 export default function Header() {
   const router = useRouter();
+  const megaMenuCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [currentUser, setCurrentUser] = useState<{ email: string | null } | null>(null);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -180,6 +181,21 @@ export default function Header() {
     return categories.filter(c => c.level === level && childIds.includes(c.id) && visibleCategoryIds.has(c.id)).sort((a, b) => a.sort - b.sort);
   };
 
+  const cancelMegaMenuClose = () => {
+    if (megaMenuCloseTimerRef.current) {
+      clearTimeout(megaMenuCloseTimerRef.current);
+      megaMenuCloseTimerRef.current = null;
+    }
+  };
+
+  const scheduleMegaMenuClose = () => {
+    cancelMegaMenuClose();
+    megaMenuCloseTimerRef.current = setTimeout(() => {
+      setIsMegaMenuOpen(false);
+      megaMenuCloseTimerRef.current = null;
+    }, 150);
+  };
+
   return (
     <header className="sticky top-0 z-50 w-full bg-white/80 backdrop-blur-sm shadow-sm">
       <div className="flex items-center justify-between whitespace-nowrap border-b border-solid border-b-gray-200 px-4 sm:px-6 lg:px-10 py-3">
@@ -207,8 +223,13 @@ export default function Header() {
             {/* Mega Menu Trigger */}
             <div 
               className="group"
-              onMouseEnter={() => setIsMegaMenuOpen(true)}
-              onMouseLeave={() => setIsMegaMenuOpen(false)}
+              onMouseEnter={() => {
+                cancelMegaMenuClose();
+                setIsMegaMenuOpen(true);
+              }}
+              onMouseLeave={() => {
+                scheduleMegaMenuClose();
+              }}
             >
               <button 
                 className={`text-sm font-medium leading-normal transition-colors flex items-center gap-1 ${isMegaMenuOpen ? "text-primary" : "text-gray-700 hover:text-primary"}`}
@@ -220,7 +241,16 @@ export default function Header() {
 
               {/* Mega Menu Panel */}
               {isMegaMenuOpen && (
-                <div className="absolute top-full left-0 w-[800px] pt-2 z-50">
+                <div
+                  className="absolute top-full left-0 w-[800px] pt-2 z-50"
+                  onMouseEnter={() => {
+                    cancelMegaMenuClose();
+                    setIsMegaMenuOpen(true);
+                  }}
+                  onMouseLeave={() => {
+                    scheduleMegaMenuClose();
+                  }}
+                >
                   <div className="bg-white shadow-xl border border-gray-100 rounded-xl p-6 grid grid-cols-4 gap-6">
                     {/* Categories by L1 */}
                     {l1Categories.map(l1 => (
