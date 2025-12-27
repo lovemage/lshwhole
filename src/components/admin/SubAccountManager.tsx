@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { NAV_ITEMS } from "./constants";
+import { supabase } from "@/lib/supabase";
 
 interface SubAccount {
   user_id: string;
@@ -25,10 +26,20 @@ export default function SubAccountManager() {
     fetchSubAccounts();
   }, []);
 
+  const getAuthHeader = async () => {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    return headers;
+  };
+
   const fetchSubAccounts = async () => {
     try {
       setSubAccountsLoading(true);
-      const res = await fetch("/api/admin/sub-accounts");
+      const res = await fetch("/api/admin/sub-accounts", {
+        headers: await getAuthHeader(),
+      });
       if (res.ok) {
         const data = await res.json();
         setSubAccounts(data);
@@ -53,9 +64,10 @@ export default function SubAccountManager() {
         ? { ...subAccountForm, user_id: editingSubAccount.user_id }
         : subAccountForm;
 
+      const authHeader = await getAuthHeader();
       const res = await fetch("/api/admin/sub-accounts", {
         method,
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeader },
         body: JSON.stringify(body),
       });
 
@@ -80,7 +92,10 @@ export default function SubAccountManager() {
   const handleDeleteSubAccount = async (userId: string) => {
     if (!confirm("確定要刪除此子帳戶嗎？")) return;
     try {
-      const res = await fetch(`/api/admin/sub-accounts?user_id=${userId}`, { method: "DELETE" });
+      const res = await fetch(`/api/admin/sub-accounts?user_id=${userId}`, {
+        method: "DELETE",
+        headers: await getAuthHeader(),
+      });
       if (res.ok) {
         alert("子帳戶已刪除");
         fetchSubAccounts();

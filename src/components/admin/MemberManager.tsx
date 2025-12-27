@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase";
 
 interface Member {
   user_id: string;
@@ -48,6 +49,14 @@ export default function MemberManager() {
     fetchTopupRequests();
   }, []);
 
+  const getAuthHeader = async () => {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    return headers;
+  };
+
   useEffect(() => {
     (async () => {
       try {
@@ -66,7 +75,9 @@ export default function MemberManager() {
   const fetchTopupRequests = async () => {
     try {
       setRequestsLoading(true);
-      const res = await fetch("/api/admin/topup-requests?status=PENDING");
+      const res = await fetch("/api/admin/topup-requests?status=PENDING", {
+        headers: await getAuthHeader(),
+      });
       if (res.ok) {
         const json = await res.json();
         setTopupRequests(json.data || []);
@@ -82,9 +93,10 @@ export default function MemberManager() {
     if (!confirm(`確定要${action === "APPROVE" ? "核准" : "拒絕"}此申請嗎？`)) return;
     
     try {
+      const authHeader = await getAuthHeader();
       const res = await fetch("/api/admin/topup-requests", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeader },
         body: JSON.stringify({ id, action, note }),
       });
       
@@ -118,7 +130,7 @@ export default function MemberManager() {
         url += `&status_filter=${memberStatusFilter}`;
       }
 
-      const res = await fetch(url);
+      const res = await fetch(url, { headers: await getAuthHeader() });
       if (res.ok) {
         const result = await res.json();
         setMembers(result.data || []);
@@ -138,7 +150,9 @@ export default function MemberManager() {
 
   const openMemberDetail = async (member: Member) => {
     try {
-      const res = await fetch(`/api/admin/members/${member.user_id}`);
+      const res = await fetch(`/api/admin/members/${member.user_id}`, {
+        headers: await getAuthHeader(),
+      });
       if (res.ok) {
         const data = await res.json();
         setSelectedMember(data);
@@ -163,9 +177,10 @@ export default function MemberManager() {
 
   const updateMemberTier = async (userId: string, newTier: string) => {
     try {
+      const authHeader = await getAuthHeader();
       const res = await fetch(`/api/admin/members/${userId}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeader },
         body: JSON.stringify({ tier: newTier }),
       });
 
@@ -187,9 +202,10 @@ export default function MemberManager() {
 
   const toggleMemberLogin = async (userId: string, enabled: boolean) => {
     try {
+      const authHeader = await getAuthHeader();
       const res = await fetch(`/api/admin/members/${userId}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeader },
         body: JSON.stringify({ login_enabled: enabled }),
       });
 
@@ -217,9 +233,10 @@ export default function MemberManager() {
     }
 
     try {
+      const authHeader = await getAuthHeader();
       const res = await fetch(`/api/admin/members/${selectedMember.profile.user_id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeader },
         body: JSON.stringify({
           allowed_l1_category_ids: limitL1ByMember ? selectedL1ForMember : null,
         }),
@@ -247,9 +264,10 @@ export default function MemberManager() {
 
     try {
       setTopupLoading(true);
+      const authHeader = await getAuthHeader();
       const res = await fetch(`/api/admin/members/${selectedMember.profile.user_id}/topup`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeader },
         body: JSON.stringify({
           amount_twd: topupAmount,
           note: topupNote,
@@ -279,9 +297,10 @@ export default function MemberManager() {
 
   const handleApproveUpgrade = async (userId: string) => {
     try {
+      const authHeader = await getAuthHeader();
       const res = await fetch(`/api/admin/members/${userId}/upgrade`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeader },
         body: JSON.stringify({ action: "approve" }),
       });
       const j = await res.json().catch(() => ({}));
@@ -300,9 +319,10 @@ export default function MemberManager() {
 
   const handleRejectUpgrade = async (userId: string) => {
     try {
+      const authHeader = await getAuthHeader();
       const res = await fetch(`/api/admin/members/${userId}/upgrade`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeader },
         body: JSON.stringify({ action: "reject" }),
       });
       alert("已拒絕此會員的升級申請");

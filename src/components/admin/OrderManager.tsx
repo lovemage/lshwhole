@@ -1,4 +1,5 @@
 import { useState, useEffect, Fragment } from "react";
+import { supabase } from "@/lib/supabase";
 
 interface OrderItemProduct {
   id?: number;
@@ -77,6 +78,14 @@ export default function OrderManager() {
     fetchOrders(0);
   }, []);
 
+  const getAuthHeader = async () => {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    return headers;
+  };
+
   const fetchOrders = async (page: number = 0) => {
     try {
       setOrdersLoading(true);
@@ -91,7 +100,7 @@ export default function OrderManager() {
         url += `&search=${encodeURIComponent(ordersSearch)}`;
       }
 
-      const res = await fetch(url);
+      const res = await fetch(url, { headers: await getAuthHeader() });
       if (res.ok) {
         const result = await res.json();
         setOrders((result.data as OrderRow[]) || []);
@@ -121,7 +130,9 @@ export default function OrderManager() {
   const openOrderDetail = async (order: { id: number }) => {
     try {
       setOrderDetailLoading(true);
-      const res = await fetch(`/api/admin/orders/${order.id}`);
+      const res = await fetch(`/api/admin/orders/${order.id}`, {
+        headers: await getAuthHeader(),
+      });
       if (res.ok) {
         const data = (await res.json()) as OrderRow;
         console.log("Order Detail Data:", data); // Debug
@@ -154,9 +165,10 @@ export default function OrderManager() {
         shipping_address: selectedOrder.shipping_address
       };
 
+      const authHeader = await getAuthHeader();
       const res = await fetch(`/api/admin/orders/${selectedOrder.id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeader },
         body: JSON.stringify(payload),
       });
 
@@ -188,9 +200,10 @@ export default function OrderManager() {
     if (!refundTargetItem || refundQty <= 0) return;
     try {
       setRefunding(true);
+      const authHeader = await getAuthHeader();
       const res = await fetch(`/api/admin/orders/${selectedOrder.id}/refund-items`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeader },
         body: JSON.stringify({
           items: [{ item_id: refundTargetItem.id, refund_qty: refundQty }],
           reason: refundReason
@@ -216,9 +229,10 @@ export default function OrderManager() {
   const updateItemStatus = async (itemId: number, newStatus: string) => {
     if (!selectedOrder) return;
     try {
+      const authHeader = await getAuthHeader();
       const res = await fetch(`/api/admin/orders/${selectedOrder.id}/items/status`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeader },
         body: JSON.stringify({ item_id: itemId, status: newStatus }),
       });
 
@@ -237,9 +251,10 @@ export default function OrderManager() {
   const updateItemShipping = async (itemId: number, weight: number, method: string, boxFee: number, country: string, boxCount: number) => {
     if (!selectedOrder) return;
     try {
+      const authHeader = await getAuthHeader();
       const res = await fetch(`/api/admin/orders/${selectedOrder.id}/items/shipping`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeader },
         body: JSON.stringify({
           item_id: itemId,
           weight: weight,

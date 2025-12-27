@@ -71,7 +71,11 @@ function AdminDashboard() {
 
         setCurrentUserId(user.id);
         setCurrentUserEmail(user.email || null);
-        const res = await fetch("/api/admin/sub-accounts");
+        const res = await fetch("/api/admin/sub-accounts", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
         if (res.ok) {
           const accounts = await res.json();
           const myAccount = accounts.find((acc: any) => acc.user_id === user.id);
