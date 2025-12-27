@@ -39,6 +39,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "找不到會員資料" }, { status: 404 });
     }
 
+    if ((profile as any).account_status === "LOCKED") {
+      return NextResponse.json({ error: "帳號已被鎖定，請聯繫管理員" }, { status: 403 });
+    }
+
+    if (!(profile as any).login_enabled) {
+      return NextResponse.json({ error: "系統無偵測到每月訂單，請聯繫管理員" }, { status: 403 });
+    }
+
     // 根據會員等級定義權限
     const permissions = getPermissionsByTier(profile.tier);
     if (profile.allowed_l1_category_ids) {

@@ -24,6 +24,28 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "未登入" }, { status: 401 });
     }
 
+    const { data: profile, error: profileError } = await admin
+      .from("profiles")
+      .select("tier, login_enabled, account_status")
+      .eq("user_id", user.id)
+      .single();
+
+    if (profileError || !profile) {
+      return NextResponse.json({ error: "找不到會員資料" }, { status: 404 });
+    }
+
+    if ((profile as any).account_status === "LOCKED") {
+      return NextResponse.json({ error: "帳號已被鎖定，請聯繫管理員" }, { status: 403 });
+    }
+
+    if (!(profile as any).login_enabled) {
+      return NextResponse.json({ error: "系統無偵測到每月訂單，請聯繫管理員" }, { status: 403 });
+    }
+
+    if ((profile as any).tier === "guest") {
+      return NextResponse.json({ error: "請升級會員後使用訂單功能" }, { status: 403 });
+    }
+
     // 查詢該會員的訂單
     const { data: orders, error } = await admin
       .from("orders")
@@ -116,6 +138,28 @@ export async function POST(request: NextRequest) {
 
     if (userError || !user) {
       return NextResponse.json({ error: "未登入" }, { status: 401 });
+    }
+
+    const { data: profile, error: profileError } = await admin
+      .from("profiles")
+      .select("tier, login_enabled, account_status")
+      .eq("user_id", user.id)
+      .single();
+
+    if (profileError || !profile) {
+      return NextResponse.json({ error: "找不到會員資料" }, { status: 404 });
+    }
+
+    if ((profile as any).account_status === "LOCKED") {
+      return NextResponse.json({ error: "帳號已被鎖定，請聯繫管理員" }, { status: 403 });
+    }
+
+    if (!(profile as any).login_enabled) {
+      return NextResponse.json({ error: "系統無偵測到每月訂單，請聯繫管理員" }, { status: 403 });
+    }
+
+    if ((profile as any).tier === "guest") {
+      return NextResponse.json({ error: "請升級會員後才可下單" }, { status: 403 });
     }
 
     const body = await request.json();

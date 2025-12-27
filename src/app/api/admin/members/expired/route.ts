@@ -30,11 +30,11 @@ export async function GET(request: NextRequest) {
     // 驗證管理員權限
     const { data: adminProfile } = await admin
       .from("profiles")
-      .select("tier")
+      .select("is_admin")
       .eq("user_id", user.id)
       .single();
 
-    if (!adminProfile || adminProfile.tier !== 'vip') {
+    if (!adminProfile || !(adminProfile as any).is_admin) {
       return NextResponse.json({ error: "無權限執行此操作" }, { status: 403 });
     }
 
@@ -125,11 +125,11 @@ export async function POST(request: NextRequest) {
     // 驗證管理員權限
     const { data: adminProfile } = await admin
       .from("profiles")
-      .select("tier")
+      .select("is_admin")
       .eq("user_id", user.id)
       .single();
 
-    if (!adminProfile || adminProfile.tier !== 'vip') {
+    if (!adminProfile || !(adminProfile as any).is_admin) {
       return NextResponse.json({ error: "無權限執行此操作" }, { status: 403 });
     }
 

@@ -1,5 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
+import { createClient } from "@supabase/supabase-js";
+
+ async function requireAdmin(request: NextRequest) {
+   const authHeader = request.headers.get("Authorization") || request.headers.get("authorization");
+   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+   if (!authHeader?.startsWith("Bearer ") || !supabaseUrl || !supabaseAnonKey) {
+     return { ok: false as const, error: NextResponse.json({ error: "未登入或憑證無效" }, { status: 401 }) };
+   }
+
+   const client = createClient(supabaseUrl, supabaseAnonKey, {
+     global: { headers: { Authorization: authHeader } },
+   });
+
+   const { data: { user }, error: userError } = await client.auth.getUser();
+   if (userError || !user) {
+     return { ok: false as const, error: NextResponse.json({ error: "未登入" }, { status: 401 }) };
+   }
+
+   const admin = supabaseAdmin();
+   const { data: adminProfile } = await admin
+     .from("profiles")
+     .select("is_admin")
+     .eq("user_id", user.id)
+     .single();
+
+   if (!adminProfile || !(adminProfile as any).is_admin) {
+     return { ok: false as const, error: NextResponse.json({ error: "無權限執行此操作" }, { status: 403 }) };
+   }
+
+   return { ok: true as const, admin };
+ }
 
 // 獲取單一會員詳情
 export async function GET(
@@ -7,7 +40,10 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const admin = supabaseAdmin();
+    const auth = await requireAdmin(request);
+    if (!auth.ok) return auth.error;
+
+    const admin = auth.admin;
     const { id } = await params;
 
     // 獲取會員資料
@@ -54,7 +90,10 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const admin = supabaseAdmin();
+    const auth = await requireAdmin(request);
+    if (!auth.ok) return auth.error;
+
+    const admin = auth.admin;
     const { id } = await params;
     const body = await request.json();
 

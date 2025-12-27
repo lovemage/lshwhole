@@ -1,10 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
+import { createClient } from "@supabase/supabase-js";
 
 // 獲取會員列表
 export async function GET(request: NextRequest) {
   try {
+    const authHeader = request.headers.get("Authorization") || request.headers.get("authorization");
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!authHeader?.startsWith("Bearer ") || !supabaseUrl || !supabaseAnonKey) {
+      return NextResponse.json({ error: "未登入或憑證無效" }, { status: 401 });
+    }
+
+    const client = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    const { data: { user }, error: userError } = await client.auth.getUser();
+    if (userError || !user) {
+      return NextResponse.json({ error: "未登入" }, { status: 401 });
+    }
+
     const admin = supabaseAdmin();
+    const { data: adminProfile } = await admin
+      .from("profiles")
+      .select("is_admin")
+      .eq("user_id", user.id)
+      .single();
+
+    if (!adminProfile || !(adminProfile as any).is_admin) {
+      return NextResponse.json({ error: "無權限執行此操作" }, { status: 403 });
+    }
+
     const { searchParams } = new URL(request.url);
     const limit = Number(searchParams.get("limit") || "50");
     const offset = Number(searchParams.get("offset") || "0");

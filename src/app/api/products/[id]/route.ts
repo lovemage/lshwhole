@@ -39,12 +39,20 @@ export async function GET(
 
         const { data: profile, error: profileErr } = await admin
           .from("profiles")
-          .select("tier, allowed_l1_category_ids")
+          .select("tier, allowed_l1_category_ids, login_enabled, account_status")
           .eq("user_id", user.id)
           .single();
 
         if (profileErr || !profile?.tier) {
           return NextResponse.json({ error: "會員資料不存在" }, { status: 401 });
+        }
+
+        if ((profile as any).account_status === "LOCKED") {
+          return NextResponse.json({ error: "帳號已被鎖定，請聯繫管理員" }, { status: 403 });
+        }
+
+        if (!(profile as any).login_enabled) {
+          return NextResponse.json({ error: "系統無偵測到每月訂單，請聯繫管理員" }, { status: 403 });
         }
 
         if (profile.tier === "guest") {
