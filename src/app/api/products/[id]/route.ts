@@ -191,10 +191,11 @@ export async function PUT(
   try {
     const admin = supabaseAdmin();
     const { id } = await params;
+    const productId = Number(id);
     const body = await request.json();
 
     // Extract images, specs, variants if present
-    const { images, specs, variants, ...productData } = body;
+    const { images, specs, variants, tag_ids, category_ids, ...productData } = body;
 
     const { data, error } = await admin
       .from("products")
@@ -285,13 +286,61 @@ export async function PUT(
       }
     }
 
+    // Handle tag relations update if provided
+    if (Array.isArray(tag_ids)) {
+      const { error: tagDelError } = await admin
+        .from("product_tag_map")
+        .delete()
+        .eq("product_id", id);
+
+      if (tagDelError) {
+        console.error("Error deleting old tag map:", tagDelError);
+      }
+
+      const rows = tag_ids
+        .map((tid: any) => Number(tid))
+        .filter((n: number) => !Number.isNaN(n) && n > 0)
+        .map((tid: number) => ({ product_id: Number.isNaN(productId) ? id : productId, tag_id: tid }));
+
+      if (rows.length > 0) {
+        const { error: tagInsError } = await admin.from("product_tag_map").insert(rows);
+        if (tagInsError) {
+          console.error("Error inserting new tag map:", tagInsError);
+        }
+      }
+    }
+
+    // Handle category relations update if provided
+    if (Array.isArray(category_ids)) {
+      const { error: catDelError } = await admin
+        .from("product_category_map")
+        .delete()
+        .eq("product_id", id);
+
+      if (catDelError) {
+        console.error("Error deleting old category map:", catDelError);
+      }
+
+      const rows = category_ids
+        .map((cid: any) => Number(cid))
+        .filter((n: number) => !Number.isNaN(n) && n > 0)
+        .map((cid: number) => ({ product_id: Number.isNaN(productId) ? id : productId, category_id: cid }));
+
+      if (rows.length > 0) {
+        const { error: catInsError } = await admin.from("product_category_map").insert(rows);
+        if (catInsError) {
+          console.error("Error inserting new category map:", catInsError);
+        }
+      }
+    }
+
     return NextResponse.json(data);
   } catch (err) {
     console.error("PUT /api/products/[id] error:", err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
-    );
+      );
   }
 }
 

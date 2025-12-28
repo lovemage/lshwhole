@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     
     // Extract images from body if present
-    const { images, ...productData } = body;
+    const { images, tag_ids, category_ids, ...productData } = body;
 
     const { data, error } = await admin
       .from("products")
@@ -118,6 +118,36 @@ export async function POST(request: NextRequest) {
       if (imgError) {
         console.error("Error inserting images:", imgError);
         // Continue anyway, product is created
+      }
+    }
+
+    // Insert tag relations if provided
+    if (Array.isArray(tag_ids)) {
+      const rows = tag_ids
+        .map((tid: any) => Number(tid))
+        .filter((n: number) => !Number.isNaN(n) && n > 0)
+        .map((tid: number) => ({ product_id: newProduct.id, tag_id: tid }));
+
+      if (rows.length > 0) {
+        const { error: tErr } = await admin.from("product_tag_map").insert(rows);
+        if (tErr) {
+          console.error("Error inserting tag map:", tErr);
+        }
+      }
+    }
+
+    // Insert category relations if provided
+    if (Array.isArray(category_ids)) {
+      const rows = category_ids
+        .map((cid: any) => Number(cid))
+        .filter((n: number) => !Number.isNaN(n) && n > 0)
+        .map((cid: number) => ({ product_id: newProduct.id, category_id: cid }));
+
+      if (rows.length > 0) {
+        const { error: cErr } = await admin.from("product_category_map").insert(rows);
+        if (cErr) {
+          console.error("Error inserting category map:", cErr);
+        }
       }
     }
 

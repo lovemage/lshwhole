@@ -38,6 +38,8 @@ interface Category {
 export default function ProductManager() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [categoryRelations, setCategoryRelations] = useState<any[]>([]);
+  const [tags, setTags] = useState<any[]>([]);
   const [selectedProductL1, setSelectedProductL1] = useState<number | null>(null);
   const [productsLoading, setProductsLoading] = useState(false);
   const [productSearch, setProductSearch] = useState("");
@@ -47,6 +49,8 @@ export default function ProductManager() {
   const [selectedProductIds, setSelectedProductIds] = useState<number[]>([]);
   const [showProductEdit, setShowProductEdit] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
+  const [tagSearchTerm, setTagSearchTerm] = useState("");
   const [productEditForm, setProductEditForm] = useState({
     sku: "",
     title_zh: "",
@@ -58,6 +62,9 @@ export default function ProductManager() {
     cost_twd: 0,
     status: "draft" as "draft" | "published",
     images: [] as ProductImage[],
+    l1Id: null as number | null,
+    l2Id: null as number | null,
+    l3Id: null as number | null,
   });
   
   // Spec & Variant Management
@@ -90,7 +97,19 @@ export default function ProductManager() {
     fetchCategories();
     fetchProducts(0, null);
     fetchSpecTemplates();
+    fetchTags();
+    fetchCategoryRelations();
   }, []);
+
+  useEffect(() => {
+    // 當 L1 改變時重置 L2/L3（對齊 CrawlerImport）
+    setProductEditForm((prev) => ({ ...prev, l2Id: null, l3Id: null }));
+  }, [productEditForm.l1Id]);
+
+  useEffect(() => {
+    // 當 L2 改變時重置 L3（對齊 CrawlerImport）
+    setProductEditForm((prev) => ({ ...prev, l3Id: null }));
+  }, [productEditForm.l2Id]);
 
   const fetchSpecTemplates = async () => {
     try {
@@ -119,6 +138,30 @@ export default function ProductManager() {
       }
     } catch (err) {
       console.error("Failed to fetch categories:", err);
+    }
+  };
+
+  const fetchTags = async () => {
+    try {
+      const res = await fetch("/api/tags");
+      if (res.ok) {
+        const data = await res.json();
+        setTags(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch tags:", err);
+    }
+  };
+
+  const fetchCategoryRelations = async () => {
+    try {
+      const res = await fetch("/api/category-relations");
+      if (res.ok) {
+        const data = await res.json();
+        setCategoryRelations(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch category relations:", err);
     }
   };
 
@@ -210,9 +253,13 @@ export default function ProductManager() {
       cost_twd: 0,
       status: "draft",
       images: [],
+      l1Id: null,
+      l2Id: null,
+      l3Id: null,
     });
     setSpecs([]);
     setVariants([]);
+    setSelectedTagIds([]);
     setShowProductEdit(true);
   };
 
@@ -220,14 +267,19 @@ export default function ProductManager() {
     setEditingProduct(p);
     setSpecs([]);
     setVariants([]);
+    setSelectedTagIds([]);
 
     // Fetch product images and details (specs, variants)
     let images: ProductImage[] = [];
     let fetchedSpecs: Spec[] = [];
     let fetchedVariants: Variant[] = [];
+    let fetchedL1Id: number | null = null;
+    let fetchedL2Id: number | null = null;
+    let fetchedL3Id: number | null = null;
+    let fetchedTagIds: number[] = [];
 
     try {
-      const res = await fetch(`/api/products/${p.id}`);
+      const res = await fetch(`/api/admin/products/${p.id}`);
       if (res.ok) {
         const productData = await res.json();
         // Handle both array of strings (old) and array of objects (new)
@@ -250,11 +302,20 @@ export default function ProductManager() {
           stock: v.stock,
           sku: v.sku
         }));
+
+        // Init category + tags (align with CrawlerImport)
+        fetchedTagIds = (productData.tag_ids || [])
+          .map((x: any) => Number(x))
+          .filter((n: number) => !Number.isNaN(n));
+        fetchedL1Id = productData.l1Id ?? null;
+        fetchedL2Id = productData.l2Id ?? null;
+        fetchedL3Id = productData.l3Id ?? null;
       }
     } catch (err) {
       console.error("Failed to fetch product details:", err);
     }
 
+    setSelectedTagIds(fetchedTagIds);
     setProductEditForm({
       sku: p.sku || "",
       title_zh: p.title_zh || "",
@@ -266,6 +327,9 @@ export default function ProductManager() {
       cost_twd: Number(p.cost_twd || 0),
       status: (p.status === "published" ? "published" : "draft") as "draft" | "published",
       images: images,
+      l1Id: fetchedL1Id,
+      l2Id: fetchedL2Id,
+      l3Id: fetchedL3Id,
     });
     setSpecs(fetchedSpecs);
     setVariants(fetchedVariants);
@@ -431,6 +495,8 @@ export default function ProductManager() {
       status: productEditForm.status,
       images: imagesPayload,
       specs: specs,
+      category_ids: [productEditForm.l1Id, productEditForm.l2Id, productEditForm.l3Id].filter(Boolean),
+      tag_ids: selectedTagIds,
       variants: variants.map(v => ({
         name: Object.values(v.options).join(" / "),
         options: v.options,
@@ -846,6 +912,216 @@ export default function ProductManager() {
                     ))}
                   </div>
                 )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="text-sm text-text-secondary-light">L1</label>
+                  <select
+                    value={productEditForm.l1Id ?? ""}
+                    onChange={(e) =>
+                      setProductEditForm({
+                        ...productEditForm,
+                        l1Id: e.target.value ? Number(e.target.value) : null,
+                        l2Id: null,
+                        l3Id: null,
+                      })
+                    }
+                    className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                  >
+                    <option value="">未選擇</option>
+                    {categories
+                      .filter((c) => c.level === 1)
+                      .sort((a, b) => a.sort - b.sort)
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm text-text-secondary-light">L2</label>
+                  <select
+                    value={productEditForm.l2Id ?? ""}
+                    onChange={(e) =>
+                      setProductEditForm({
+                        ...productEditForm,
+                        l2Id: e.target.value ? Number(e.target.value) : null,
+                        l3Id: null,
+                      })
+                    }
+                    className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                  >
+                    <option value="">未選擇</option>
+                    {categories
+                      .filter((c) => c.level === 2)
+                      .filter(
+                        (l2) =>
+                          !productEditForm.l1Id ||
+                          categoryRelations.some(
+                            (r: any) =>
+                              r.parent_category_id === productEditForm.l1Id &&
+                              r.child_category_id === l2.id
+                          )
+                      )
+                      .sort((a, b) => a.sort - b.sort)
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm text-text-secondary-light">L3</label>
+                  <select
+                    value={productEditForm.l3Id ?? ""}
+                    onChange={(e) =>
+                      setProductEditForm({
+                        ...productEditForm,
+                        l3Id: e.target.value ? Number(e.target.value) : null,
+                      })
+                    }
+                    className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                  >
+                    <option value="">未選擇</option>
+                    {categories
+                      .filter((c) => c.level === 3)
+                      .filter(
+                        (l3) =>
+                          !productEditForm.l2Id ||
+                          categoryRelations.some(
+                            (r: any) =>
+                              r.parent_category_id === productEditForm.l2Id &&
+                              r.child_category_id === l3.id
+                          )
+                      )
+                      .sort((a, b) => a.sort - b.sort)
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-medium text-text-primary-light">標籤（可多選）</label>
+                  <input
+                    type="text"
+                    placeholder="搜尋標籤..."
+                    value={tagSearchTerm}
+                    onChange={(e) => setTagSearchTerm(e.target.value)}
+                    className="text-xs px-2 py-1 rounded border border-border-light bg-background-light"
+                  />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-h-60 overflow-y-auto border border-border-light rounded-lg p-2 bg-background-light">
+                  <div>
+                    <div className="text-xs font-bold text-text-secondary-light mb-2 sticky top-0 bg-background-light py-1 z-10 border-b border-border-light">品牌分類 (A1)</div>
+                    <div className="space-y-1">
+                      {tags
+                        .filter(
+                          (t: any) =>
+                            t.category === "A1" &&
+                            (String(t.name || "")
+                              .toLowerCase()
+                              .includes(tagSearchTerm.toLowerCase()) ||
+                              String(t.slug || "")
+                                .toLowerCase()
+                                .includes(tagSearchTerm.toLowerCase()))
+                        )
+                        .sort((a: any, b: any) => (a.sort || 0) - (b.sort || 0))
+                        .map((tag: any) => (
+                          <label key={tag.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-card-light cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selectedTagIds.includes(tag.id)}
+                              onChange={(e) => {
+                                setSelectedTagIds((prev) =>
+                                  e.target.checked
+                                    ? [...prev, tag.id]
+                                    : prev.filter((id) => id !== tag.id)
+                                );
+                              }}
+                              className="rounded border-gray-300 text-primary focus:ring-primary"
+                            />
+                            <span className="text-sm text-text-primary-light">{tag.name}</span>
+                          </label>
+                        ))}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-text-secondary-light mb-2 sticky top-0 bg-background-light py-1 z-10 border-b border-border-light">商品屬性 (A2)</div>
+                    <div className="space-y-1">
+                      {tags
+                        .filter(
+                          (t: any) =>
+                            (!t.category || t.category === "A2") &&
+                            (String(t.name || "")
+                              .toLowerCase()
+                              .includes(tagSearchTerm.toLowerCase()) ||
+                              String(t.slug || "")
+                                .toLowerCase()
+                                .includes(tagSearchTerm.toLowerCase()))
+                        )
+                        .sort((a: any, b: any) => (a.sort || 0) - (b.sort || 0))
+                        .map((tag: any) => (
+                          <label key={tag.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-card-light cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selectedTagIds.includes(tag.id)}
+                              onChange={(e) => {
+                                setSelectedTagIds((prev) =>
+                                  e.target.checked
+                                    ? [...prev, tag.id]
+                                    : prev.filter((id) => id !== tag.id)
+                                );
+                              }}
+                              className="rounded border-gray-300 text-primary focus:ring-primary"
+                            />
+                            <span className="text-sm text-text-primary-light">{tag.name}</span>
+                          </label>
+                        ))}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-text-secondary-light mb-2 sticky top-0 bg-background-light py-1 z-10 border-b border-border-light">活動分類 (A3)</div>
+                    <div className="space-y-1">
+                      {tags
+                        .filter(
+                          (t: any) =>
+                            t.category === "A3" &&
+                            (String(t.name || "")
+                              .toLowerCase()
+                              .includes(tagSearchTerm.toLowerCase()) ||
+                              String(t.slug || "")
+                                .toLowerCase()
+                                .includes(tagSearchTerm.toLowerCase()))
+                        )
+                        .sort((a: any, b: any) => (a.sort || 0) - (b.sort || 0))
+                        .map((tag: any) => (
+                          <label key={tag.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-card-light cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selectedTagIds.includes(tag.id)}
+                              onChange={(e) => {
+                                setSelectedTagIds((prev) =>
+                                  e.target.checked
+                                    ? [...prev, tag.id]
+                                    : prev.filter((id) => id !== tag.id)
+                                );
+                              }}
+                              className="rounded border-gray-300 text-primary focus:ring-primary"
+                            />
+                            <span className="text-sm text-text-primary-light">{tag.name}</span>
+                          </label>
+                        ))}
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* 圖片管理 */}
