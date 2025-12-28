@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 
 interface ProductImage {
@@ -92,6 +92,9 @@ export default function ProductManager() {
 
   const [isTranslating, setIsTranslating] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [showImageUrlInput, setShowImageUrlInput] = useState(false);
+  const [imageUrlText, setImageUrlText] = useState("");
+  const imageJsonInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     fetchCategories();
@@ -127,6 +130,115 @@ export default function ProductManager() {
   const ensureHttps = (url: string) => {
     if (!url) return url;
     return url.replace(/^http:/, 'https:');
+  };
+
+  const appendImages = (urls: string[]) => {
+    if (urls.length === 0) return;
+    setProductEditForm(prev => {
+      const start = prev.images.length;
+      const normalized = urls.map((url, idx) => ({
+        url: ensureHttps(url),
+        sort: start + idx,
+        is_product: true,
+        is_description: false,
+      }));
+      return { ...prev, images: [...prev.images, ...normalized] };
+    });
+  };
+
+  const extractUrlsFromText = (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return [];
+    let urls: string[] = [];
+
+    const tryJson = (raw: string) => {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          if (parsed.every(item => typeof item === "string")) {
+            return parsed as string[];
+          }
+          const firstWithImages = parsed.find((item) => Array.isArray(item?.images));
+          if (firstWithImages?.images) {
+            return firstWithImages.images as string[];
+          }
+        } else if (Array.isArray(parsed?.images)) {
+          return parsed.images as string[];
+        }
+      } catch (_) {
+        return null;
+      }
+      return null;
+    };
+
+    if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+      const jsonUrls = tryJson(trimmed);
+      if (jsonUrls && jsonUrls.length > 0) {
+        urls = jsonUrls;
+      }
+    }
+
+    if (urls.length === 0) {
+      urls = trimmed
+        .split(/[\n,]/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+    }
+
+    return Array.from(new Set(urls));
+  };
+
+  const handleAddImageUrls = () => {
+    const urls = extractUrlsFromText(imageUrlText);
+    if (urls.length === 0) {
+      alert("請輸入至少一個有效的圖片連結");
+      return;
+    }
+    appendImages(urls);
+    setImageUrlText("");
+    setShowImageUrlInput(false);
+  };
+
+  const handleImageJsonFile = async (file: File | null) => {
+    if (!file) return;
+    try {
+      const text = await file.text();
+      let urls: string[] | null = null;
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed)) {
+        if (parsed.every((item) => typeof item === "string")) {
+          urls = parsed as string[];
+        } else {
+          const targetCode = productEditForm.sku?.trim();
+          const matched = targetCode
+            ? parsed.find((item: any) => String(item?.productCode) === targetCode)
+            : null;
+          if (matched?.images && Array.isArray(matched.images)) {
+            urls = matched.images as string[];
+          } else {
+            const firstWithImages = parsed.find((item: any) => Array.isArray(item?.images));
+            if (firstWithImages?.images) {
+              urls = firstWithImages.images as string[];
+            }
+          }
+        }
+      } else if (parsed?.images && Array.isArray(parsed.images)) {
+        urls = parsed.images as string[];
+      }
+
+      if (!urls || urls.length === 0) {
+        alert("在 JSON 檔案中找不到 images 陣列");
+        return;
+      }
+      appendImages(urls);
+    } catch (err) {
+      console.error("Failed to import image JSON:", err);
+      alert("解析 JSON 檔案失敗，請確認格式");
+    } finally {
+      if (imageJsonInputRef.current) {
+        imageJsonInputRef.current.value = "";
+      }
+    }
   };
 
   const fetchCategories = async () => {
@@ -1126,15 +1238,16 @@ export default function ProductManager() {
 
               {/* 圖片管理 */}
               <div>
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
                   <label className="text-sm font-medium text-text-primary-light">商品圖片管理</label>
-                  <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-1 rounded-lg border-2 border-dashed border-border-light hover:bg-background-light transition-colors">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      className="hidden"
-                      onChange={async (e) => {
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-1 rounded-lg border-2 border-dashed border-border-light hover:bg-background-light transition-colors">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={async (e) => {
                         if (!e.target.files?.length) return;
                         setIsUploading(true);
                         try {
@@ -1194,7 +1307,49 @@ export default function ProductManager() {
                     <span className="material-symbols-outlined text-text-secondary-light text-sm">add_photo_alternate</span>
                     <span className="text-xs text-text-secondary-light">{isUploading ? "上傳中..." : "新增圖片"}</span>
                   </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowImageUrlInput((prev) => !prev)}
+                      className="px-3 py-1 rounded-lg border border-border-light text-xs text-text-primary-light hover:bg-background-light"
+                    >
+                      貼上圖片連結
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => imageJsonInputRef.current?.click()}
+                      className="px-3 py-1 rounded-lg border border-border-light text-xs text-text-primary-light hover:bg-background-light"
+                    >
+                      匯入 JSON
+                    </button>
+                    <input
+                      ref={imageJsonInputRef}
+                      type="file"
+                      accept=".json,application/json"
+                      className="hidden"
+                      onChange={(e) => handleImageJsonFile(e.target.files?.[0] || null)}
+                    />
+                  </div>
                 </div>
+                {showImageUrlInput && (
+                  <div className="mb-3 space-y-2">
+                    <textarea
+                      value={imageUrlText}
+                      onChange={(e) => setImageUrlText(e.target.value)}
+                      placeholder="可貼上多行圖片 URL，或整段含有 images 陣列的 JSON 內容 (例：kidsvillage_tab_10_20251130.json)"
+                      className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm min-h-28"
+                    />
+                    <div className="flex items-center justify-between text-xs text-text-secondary-light">
+                      <span>系統會自動去除重複並轉為 HTTPS。</span>
+                      <button
+                        type="button"
+                        onClick={handleAddImageUrls}
+                        className="px-3 py-1 rounded-lg bg-primary text-white"
+                      >
+                        加入圖片
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-3 max-h-60 overflow-y-auto">
                   {productEditForm.images.map((img, idx) => (

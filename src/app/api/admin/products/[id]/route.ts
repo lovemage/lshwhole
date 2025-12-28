@@ -23,7 +23,16 @@ export async function GET(
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    const imagesRaw = (data as any)?.product_images || [];
+    const { data: imagesRaw, error: imgError } = await admin
+      .from("product_images")
+      .select("url, sort, is_product, is_description")
+      .eq("product_id", id)
+      .order("sort", { ascending: true });
+
+    if (imgError) {
+      console.error("Error fetching product images for admin detail:", imgError);
+    }
+
     const variantsRaw = (data as any)?.product_variants || [];
     const tagMapRaw = (data as any)?.product_tag_map || [];
     const catMapRaw = (data as any)?.product_category_map || [];
