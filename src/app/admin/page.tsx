@@ -149,23 +149,6 @@ function AdminDashboard() {
     );
   }
 
-  // Sub-accounts List
-  if (activeNav === "sub_accounts") {
-    return (
-      <div className="flex h-screen bg-background-light">
-        <AdminSidebar
-          activeNav={activeNav}
-          setActiveNav={setActiveNav}
-          currentUserPermissions={currentUserPermissions}
-          currentUserEmail={currentUserEmail}
-        />
-        <main className="flex-1 overflow-y-auto">
-          <SubAccountManager />
-        </main>
-      </div>
-    );
-  }
-
   return (
     <div className="flex h-screen bg-background-light">
       <AdminSidebar
@@ -181,83 +164,14 @@ function AdminDashboard() {
 
         {/* Page Content */}
         <div className="p-6 md:p-10 overflow-y-auto">
-          {/* Page Heading */}
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-            <div className="flex flex-col gap-1">
-              <p className="text-3xl font-bold text-text-primary-light">
-                {activeNav === "announcements"
-                  ? "公告管理"
-                  : activeNav === "categories"
-                    ? "分類管理"
-                    : activeNav === "tags"
-                      ? "標籤管理"
-                      : activeNav === "crawler"
-                        ? "爬蟲導入"
-                      : activeNav === "members"
-                        ? "會員管理"
-                        : activeNav === "orders"
-                          ? "訂單管理"
-                          : activeNav === "upgrade_settings"
-                            ? "批發升級申請資格設定"
-                            : activeNav === "sub_accounts"
-                              ? "子帳戶管理"
-                              : activeNav === "products"
-                                ? "商品管理"
-                                : activeNav === "hot_products"
-                                  ? "熱銷商品"
-                                  : activeNav === "limited_time_products"
-                                    ? "限時商品"
-                                    : activeNav === "banners"
-                                    ? "橫幅管理"
-                                    : activeNav === "shipping_settings"
-                                      ? "運費管理"
-                                      : activeNav === "email_templates"
-                                        ? "Email 模板"
-                                        : activeNav === "blog"
-                                          ? "部落格管理"
-                                          : "儀表看板"}
-              </p>
-              <p className="text-base text-text-secondary-light">
-                {activeNav === "announcements"
-                  ? "管理和編輯公告內容"
-                  : activeNav === "categories"
-                    ? "管理商品分類（L1/L2/L3）"
-                    : activeNav === "tags"
-                      ? "管理商品標籤（品牌、屬性、活動）"
-                      : activeNav === "crawler"
-                        ? "上架前資料檢視與轉換（JSON / Excel 匯入、匯率換算、利潤率）"
-                      : activeNav === "members"
-                        ? "管理會員資料、會員資格與錢包儲值"
-                        : activeNav === "orders"
-                          ? "查看與管理會員訂單"
-                          : activeNav === "hot_products"
-                            ? "管理首頁與專區顯示的熱銷商品"
-                            : activeNav === "limited_time_products"
-                              ? "管理限定時間商品及其販售時間"
-                              : activeNav === "upgrade_settings"
-                              ? "管理會員升級為批發會員的申請資格、銀行帳號與代理費金額"
-                              : activeNav === "sub_accounts"
-                                ? "新增與管理後台子帳戶及其權限"
-                                : activeNav === "products"
-                                  ? "查看與編輯商品資訊"
-                                  : activeNav === "banners"
-                                    ? "管理首頁與商品頁橫幅"
-                                    : activeNav === "shipping_settings"
-                                      ? "設定運費費率"
-                                      : activeNav === "email_templates"
-                                        ? "編輯系統自動發送的 Email 內容"
-                                        : activeNav === "blog"
-                                          ? "管理海外新訊文章與 SEO 設定"
-                                          : "歡迎回來，以下是您商店活動的摘要。"}
-              </p>
-            </div>
-            {activeNav === "dashboard" && (
+          {activeNav === "dashboard" && (
+            <div className="flex justify-end mb-6">
               <button className="flex h-10 cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-lg bg-primary px-5 text-sm font-bold text-white">
                 <span className="material-symbols-outlined">add</span>
                 <span>建立報告</span>
               </button>
-            )}
-          </div>
+            </div>
+          )}
 
           {renderContent()}
         </div>

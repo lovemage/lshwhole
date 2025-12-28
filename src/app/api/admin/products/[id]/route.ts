@@ -28,7 +28,7 @@ export async function GET(
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    const { data: imagesRaw, error: imgError } = await admin
+    let { data: imagesRaw, error: imgError } = await admin
       .from("product_images")
       .select("url, sort, is_product, is_description")
       .eq("product_id", productId)
@@ -36,6 +36,18 @@ export async function GET(
 
     if (imgError) {
       console.error("Error fetching product images for admin detail:", imgError);
+    }
+
+    // Fallback: some environments may have `product_id` stored/returned in a string-compatible format
+    if ((!imagesRaw || imagesRaw.length === 0) && !imgError) {
+      const retry = await admin
+        .from("product_images")
+        .select("url, sort, is_product, is_description")
+        .eq("product_id", String(productId))
+        .order("sort", { ascending: true });
+      if (!retry.error && retry.data && retry.data.length > 0) {
+        imagesRaw = retry.data;
+      }
     }
 
     const variantsRaw = (data as any)?.product_variants || [];

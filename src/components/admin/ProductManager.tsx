@@ -427,6 +427,11 @@ export default function ProductManager() {
       console.error("Failed to fetch product details:", err);
     }
 
+    // Fallback: if detail API returns no images but list had a cover image, at least show that
+    if (images.length === 0 && p.cover_image_url) {
+      images = [{ url: ensureHttps(p.cover_image_url), sort: 0, is_product: true, is_description: false }];
+    }
+
     setSelectedTagIds(fetchedTagIds);
     setProductEditForm({
       sku: p.sku || "",
