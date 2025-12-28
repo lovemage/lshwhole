@@ -74,6 +74,11 @@ export async function GET(
     const isWholesaleTier = userTier === "wholesale" || userTier === "vip";
 
     const { id } = await params;
+    const productId = Number(id);
+
+    if (Number.isNaN(productId)) {
+      return NextResponse.json({ error: "Invalid product id" }, { status: 400 });
+    }
 
     // 獲取商品基本資料（不包含成本價）
     const { data: product, error } = await admin
@@ -81,7 +86,7 @@ export async function GET(
       .select(
         "id, sku, title_zh, title_original, desc_zh, desc_original, retail_price_twd, wholesale_price_twd, status, created_at, updated_at, specs"
       )
-      .eq("id", id)
+      .eq("id", productId)
       .single();
 
     if (error) {
@@ -103,7 +108,7 @@ export async function GET(
       const { data: pcm, error: mapErr } = await admin
         .from("product_category_map")
         .select("category_id")
-        .eq("product_id", id);
+      .eq("product_id", productId);
       if (mapErr) return NextResponse.json({ error: mapErr.message }, { status: 400 });
 
       const adj = new Map<number, number[]>();
@@ -137,7 +142,7 @@ export async function GET(
     const { data: images, error: imgError } = await admin
       .from("product_images")
       .select("url, sort, is_product, is_description")
-      .eq("product_id", id)
+      .eq("product_id", productId)
       .order("sort", { ascending: true });
 
     if (imgError) {
@@ -148,7 +153,7 @@ export async function GET(
     const { data: variants, error: vError } = await admin
       .from("product_variants")
       .select("id, name, options, price, stock, sku")
-      .eq("product_id", id);
+      .eq("product_id", productId);
 
     // 將圖片資料添加到商品資料中（包含完整圖片資訊）
     const productWithImages = {
@@ -192,6 +197,10 @@ export async function PUT(
     const admin = supabaseAdmin();
     const { id } = await params;
     const productId = Number(id);
+
+    if (Number.isNaN(productId)) {
+      return NextResponse.json({ error: "Invalid product id" }, { status: 400 });
+    }
     const body = await request.json();
 
     // Extract images, specs, variants if present
@@ -203,7 +212,7 @@ export async function PUT(
         ...productData,
         specs: specs ? specs : undefined
       })
-      .eq("id", id)
+      .eq("id", productId)
       .select()
       .single();
 
@@ -227,7 +236,7 @@ export async function PUT(
       const { error: vDelError } = await admin
         .from("product_variants")
         .delete()
-        .eq("product_id", id);
+        .eq("product_id", productId);
       
       if (vDelError) {
         console.error("Error deleting old variants:", vDelError);
@@ -235,7 +244,7 @@ export async function PUT(
 
       if (variants.length > 0) {
         const variantInserts = variants.map((v: any) => ({
-          product_id: id,
+          product_id: productId,
           name: v.name,
           options: v.options,
           price: v.price,
@@ -259,7 +268,7 @@ export async function PUT(
       const { error: delError } = await admin
         .from("product_images")
         .delete()
-        .eq("product_id", id);
+        .eq("product_id", productId);
       
       if (delError) {
         console.error("Error deleting old images:", delError);
@@ -269,7 +278,7 @@ export async function PUT(
       // 2. Insert new images (包含 is_product 和 is_description)
       if (images.length > 0) {
         const imageInserts = images.map((img: any) => ({
-          product_id: id,
+          product_id: productId,
           url: img.url,
           sort: img.sort || 0,
           is_product: img.is_product ?? true,
@@ -291,7 +300,7 @@ export async function PUT(
       const { error: tagDelError } = await admin
         .from("product_tag_map")
         .delete()
-        .eq("product_id", id);
+        .eq("product_id", productId);
 
       if (tagDelError) {
         console.error("Error deleting old tag map:", tagDelError);
@@ -300,7 +309,7 @@ export async function PUT(
       const rows = tag_ids
         .map((tid: any) => Number(tid))
         .filter((n: number) => !Number.isNaN(n) && n > 0)
-        .map((tid: number) => ({ product_id: Number.isNaN(productId) ? id : productId, tag_id: tid }));
+        .map((tid: number) => ({ product_id: productId, tag_id: tid }));
 
       if (rows.length > 0) {
         const { error: tagInsError } = await admin.from("product_tag_map").insert(rows);
@@ -315,7 +324,7 @@ export async function PUT(
       const { error: catDelError } = await admin
         .from("product_category_map")
         .delete()
-        .eq("product_id", id);
+        .eq("product_id", productId);
 
       if (catDelError) {
         console.error("Error deleting old category map:", catDelError);
@@ -324,7 +333,7 @@ export async function PUT(
       const rows = category_ids
         .map((cid: any) => Number(cid))
         .filter((n: number) => !Number.isNaN(n) && n > 0)
-        .map((cid: number) => ({ product_id: Number.isNaN(productId) ? id : productId, category_id: cid }));
+        .map((cid: number) => ({ product_id: productId, category_id: cid }));
 
       if (rows.length > 0) {
         const { error: catInsError } = await admin.from("product_category_map").insert(rows);

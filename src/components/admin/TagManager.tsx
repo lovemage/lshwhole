@@ -237,8 +237,7 @@ export default function TagManager() {
 
   return (
     <div className="py-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-text-primary-light">標籤管理</h2>
+      <div className="flex items-center justify-end">
         <div className="flex gap-2">
            <button
             onClick={generateExampleTags}

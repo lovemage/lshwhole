@@ -527,8 +527,7 @@ export default function BlogManager() {
 
   return (
     <div className="py-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-gray-800">部落格文章管理 (Overseas News)</h2>
+      <div className="flex items-center justify-end">
         <button
           onClick={handleCreate}
           className="px-4 py-2 rounded-lg bg-primary text-white font-medium hover:bg-primary/90"

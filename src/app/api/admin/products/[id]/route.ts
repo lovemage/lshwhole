@@ -10,13 +10,18 @@ export async function GET(
   try {
     const admin = supabaseAdmin();
     const { id } = await params;
+    const productId = Number(id);
+
+    if (Number.isNaN(productId)) {
+      return NextResponse.json({ error: "Invalid product id" }, { status: 400 });
+    }
 
     const { data, error } = await admin
       .from("products")
       .select(
         "id, sku, title_zh, title_original, desc_zh, desc_original, retail_price_twd, wholesale_price_twd, cost_twd, status, created_at, updated_at, specs, original_url, product_images(url, sort, is_product, is_description), product_variants(id, name, options, price, stock, sku), product_tag_map(tag_id, tags(id, name, slug, category, sort)), product_category_map(category_id, categories(id, slug, name, level, sort))"
       )
-      .eq("id", id)
+      .eq("id", productId)
       .single();
 
     if (error) {
@@ -26,7 +31,7 @@ export async function GET(
     const { data: imagesRaw, error: imgError } = await admin
       .from("product_images")
       .select("url, sort, is_product, is_description")
-      .eq("product_id", id)
+      .eq("product_id", productId)
       .order("sort", { ascending: true });
 
     if (imgError) {
@@ -37,7 +42,11 @@ export async function GET(
     const tagMapRaw = (data as any)?.product_tag_map || [];
     const catMapRaw = (data as any)?.product_category_map || [];
 
-    const images = (imagesRaw || [])
+    const imagesSource = (imagesRaw && imagesRaw.length > 0)
+      ? imagesRaw
+      : ((data as any)?.product_images || []);
+
+    const images = (imagesSource || [])
       .map((img: any, idx: number) => ({
         url: ensureHttps(img.url),
         sort: img.sort ?? idx,

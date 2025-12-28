@@ -197,7 +197,6 @@ export default function SubAccountManager() {
     <div className="p-6 md:p-10">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-text-primary-light">子帳管理</h1>
           <p className="text-text-secondary-light">新增與管理後台子帳戶及其權限</p>
         </div>
         <button

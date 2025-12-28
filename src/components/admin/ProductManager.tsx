@@ -657,9 +657,6 @@ export default function ProductManager() {
 
   return (
     <div className="py-6 space-y-6">
-      {/* 標題 */}
-      <h2 className="text-2xl font-bold text-text-primary-light">商品管理</h2>
-
       {/* L1 分類分頁標籤 */}
       <div className="flex gap-2 border-b border-border-light overflow-x-auto pb-2">
         <button

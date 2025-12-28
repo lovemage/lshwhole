@@ -314,8 +314,6 @@ export default function BannerManager() {
 
   return (
     <div className="py-6 space-y-6">
-      <h2 className="text-2xl font-bold text-text-primary-light">橫幅管理</h2>
-
       {/* 內分頁：首頁/商品頁 */}
       <div className="flex gap-2 border-b border-border-light overflow-x-auto pb-2">
         <button

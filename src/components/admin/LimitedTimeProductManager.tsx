@@ -202,7 +202,6 @@ export default function LimitedTimeProductManager() {
     <div className="py-6 space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold text-text-primary-light">限時商品管理</h2>
           <p className="text-sm text-text-secondary-light mt-1">設定首頁與限時專區顯示的商品，並設定結束時間</p>
         </div>
         <div className="flex gap-3">

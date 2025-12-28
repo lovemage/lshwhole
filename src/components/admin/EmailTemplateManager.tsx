@@ -292,8 +292,6 @@ export default function EmailTemplateManager() {
 
   return (
     <div className="py-6 space-y-6">
-      <h2 className="text-2xl font-bold text-text-primary-light">Email 通知模板管理</h2>
-
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Template List */}
         <div className="md:col-span-1 space-y-4">

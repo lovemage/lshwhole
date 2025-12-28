@@ -160,8 +160,7 @@ export default function CategoryManager() {
 
   return (
     <div className="py-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-text-primary-light">分類管理</h2>
+      <div className="flex items-center justify-end">
         <button
           onClick={() => setShowCategoryHelp(true)}
           className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border-light bg-background-light hover:bg-primary/10 transition-colors"

@@ -148,8 +148,7 @@ export default function SpecTemplateManager() {
 
   return (
     <div className="p-6 bg-white rounded-lg shadow">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-bold text-gray-800">規格範本管理</h2>
+      <div className="flex items-center justify-end mb-6">
         <button
           onClick={openAddModal}
           className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90"
