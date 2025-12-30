@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import BannerCarousel from "@/components/BannerCarousel";
 import { supabase } from "@/lib/supabase";
@@ -25,6 +25,7 @@ interface Relation { parent_category_id: number; child_category_id: number; }
 
 export default function ProductsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState("newest");
 
@@ -108,6 +109,11 @@ export default function ProductsPage() {
 
   // Category Accordion Expanded State
   const [expandedCategoryIds, setExpandedCategoryIds] = useState<Set<number>>(new Set());
+
+  const urlSyncRef = useRef<{ lastCategoryId: number | null; ready: boolean }>({
+    lastCategoryId: null,
+    ready: false,
+  });
 
   // Tag Sections Expanded State (Default: A1 expanded, others collapsed)
   const [expandedTagSections, setExpandedTagSections] = useState<Set<string>>(new Set(['A1']));
@@ -240,6 +246,78 @@ export default function ProductsPage() {
   };
 
   useEffect(() => {
+    const raw = searchParams.get("category_id");
+    const categoryId = raw ? Number(raw) : null;
+    if (categoryId !== null && Number.isNaN(categoryId)) {
+      urlSyncRef.current.ready = true;
+      return;
+    }
+
+    if (urlSyncRef.current.lastCategoryId === categoryId && urlSyncRef.current.ready) {
+      return;
+    }
+
+    // If no category_id provided, allow normal behavior.
+    if (categoryId === null) {
+      urlSyncRef.current.lastCategoryId = null;
+      urlSyncRef.current.ready = true;
+      return;
+    }
+
+    // Wait until we have enough data to resolve hierarchy.
+    if (categoriesAll.length === 0 || relations.length === 0) {
+      urlSyncRef.current.ready = false;
+      return;
+    }
+
+    const cat = categoriesAll.find((c) => c.id === categoryId);
+    if (!cat) {
+      urlSyncRef.current.lastCategoryId = categoryId;
+      urlSyncRef.current.ready = true;
+      return;
+    }
+
+    const parentByChild = new Map<number, number[]>();
+    relations.forEach((r) => {
+      const arr = parentByChild.get(r.child_category_id) || [];
+      arr.push(r.parent_category_id);
+      parentByChild.set(r.child_category_id, arr);
+    });
+
+    const findParentOfLevel = (childId: number, targetLevel: number): number | null => {
+      const q: number[] = [...(parentByChild.get(childId) || [])];
+      const visited = new Set<number>();
+      while (q.length) {
+        const cur = q.shift()!;
+        if (visited.has(cur)) continue;
+        visited.add(cur);
+        const curCat = categoriesAll.find((c) => c.id === cur);
+        if (curCat?.level === targetLevel) return cur;
+        (parentByChild.get(cur) || []).forEach((p) => q.push(p));
+      }
+      return null;
+    };
+
+    const l1 = cat.level === 1 ? categoryId : cat.level === 2 ? findParentOfLevel(categoryId, 1) : findParentOfLevel(categoryId, 1);
+    const l2 = cat.level === 2 ? categoryId : cat.level === 3 ? findParentOfLevel(categoryId, 2) : null;
+    const l3 = cat.level === 3 ? categoryId : null;
+
+    setSelectedL1Id(l1);
+    setSelectedL2Id(l2);
+    setSelectedL3Id(l3);
+
+    setExpandedCategoryIds((prev) => {
+      const next = new Set(prev);
+      if (l1) next.add(l1);
+      if (l2) next.add(l2);
+      return next;
+    });
+
+    urlSyncRef.current.lastCategoryId = categoryId;
+    urlSyncRef.current.ready = true;
+  }, [searchParams, categoriesAll, relations]);
+
+  useEffect(() => {
     if (!allowedCategorySet) return;
     if (selectedL1Id && !allowedCategorySet.has(selectedL1Id)) setSelectedL1Id(null);
     if (selectedL2Id && !allowedCategorySet.has(selectedL2Id)) setSelectedL2Id(null);
@@ -248,6 +326,7 @@ export default function ProductsPage() {
 
   useEffect(() => {
     if (permissionsLoading) return;
+    if (!urlSyncRef.current.ready) return;
     if (!permissions || permissions.tier === 'guest' || !permissions.permissions.can_view_products) {
       setProducts([]);
       setLoading(false);
