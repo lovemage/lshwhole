@@ -8,7 +8,6 @@ import CartBadge from "@/components/CartBadge";
 
 interface Category { id: number; name: string; level: number; sort: number; icon?: string; retail_visible?: boolean; slug: string; }
 interface Relation { parent_category_id: number; child_category_id: number; }
-interface Tag { id: number; name: string; slug: string; sort: number; category?: string; }
 
 export default function Header() {
   const router = useRouter();
@@ -21,27 +20,23 @@ export default function Header() {
   // Data for Mega Menu
   const [categories, setCategories] = useState<Category[]>([]);
   const [relations, setRelations] = useState<Relation[]>([]);
-  const [tags, setTags] = useState<Tag[]>([]);
   const [activeCategoryIds, setActiveCategoryIds] = useState<number[]>([]);
   const [isMegaMenuOpen, setIsMegaMenuOpen] = useState(false);
   const [mobileStartShoppingOpen, setMobileStartShoppingOpen] = useState(false); // For "Start Shopping" main accordion
   const [mobileCategoryOpen, setMobileCategoryOpen] = useState<number | null>(null); // For mobile accordion L1
   const [mobileL2Open, setMobileL2Open] = useState<number | null>(null); // For mobile accordion L2
-  const [headerBrandLetter, setHeaderBrandLetter] = useState<string>('All'); // For Mega Menu Brands
   const [mobileNewsOpen, setMobileNewsOpen] = useState(false); // For "Overseas News" mobile accordion
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [cRes, rRes, tRes, acRes] = await Promise.all([
+        const [cRes, rRes, acRes] = await Promise.all([
           fetch("/api/categories"),
           fetch("/api/category-relations"),
-          fetch("/api/tags"),
           fetch("/api/categories/active-ids"),
         ]);
         if (cRes.ok) setCategories(await cRes.json());
         if (rRes.ok) setRelations(await rRes.json());
-        if (tRes.ok) setTags(await tRes.json());
         if (acRes.ok) setActiveCategoryIds(await acRes.json());
       } catch (e) {
         console.error("Failed to fetch menu data", e);
@@ -251,7 +246,7 @@ export default function Header() {
                     scheduleMegaMenuClose();
                   }}
                 >
-                  <div className="bg-white shadow-xl border border-gray-100 rounded-xl p-6 grid grid-cols-4 gap-6">
+                  <div className="bg-white shadow-xl border border-gray-100 rounded-xl p-6 grid grid-cols-3 gap-6">
                     {/* Categories by L1 */}
                     {l1Categories.map(l1 => (
                     <div key={l1.id} className="flex flex-col gap-2">
@@ -279,59 +274,6 @@ export default function Header() {
                       </div>
                     </div>
                   ))}
-                    {/* Tags Column - Now Brands with A-Z */}
-                    <div className="flex flex-col gap-2 col-span-1">
-                      <div className="font-bold text-gray-900 mb-2">品牌瀏覽</div>
-                      
-                      {/* Alphabet Filter */}
-                      <div className="flex flex-wrap gap-1 mb-2">
-                         <button 
-                            onMouseEnter={() => setHeaderBrandLetter('All')}
-                            className={`text-[10px] px-1 py-0.5 rounded ${headerBrandLetter === 'All' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-500'}`}
-                         >ALL</button>
-                         {Array.from(new Set(tags.filter(t => t.category === 'A1').map(t => {
-                             const first = t.name.charAt(0).toUpperCase();
-                             return /[A-Z]/.test(first) ? first : '#';
-                         }))).sort().map(letter => (
-                             <button
-                                key={letter}
-                                onMouseEnter={() => setHeaderBrandLetter(letter)}
-                                className={`text-[10px] w-4 h-4 flex items-center justify-center rounded ${headerBrandLetter === letter ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500'}`}
-                             >
-                                {letter}
-                             </button>
-                         ))}
-                      </div>
-
-                      <div className="flex flex-wrap gap-2 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar content-start">
-                        {tags
-                            .filter(t => t.category === 'A1') // Only Brands
-                            .filter(t => {
-                                if (headerBrandLetter === 'All') return true;
-                                const first = t.name.charAt(0).toUpperCase();
-                                if (headerBrandLetter === '#') return !/[A-Z]/.test(first);
-                                return first === headerBrandLetter;
-                            })
-                            .sort((a,b) => a.sort - b.sort)
-                            .map(tag => (
-                          <Link key={tag.id} href={`/products?tag_ids=${tag.id}`} className="px-2 py-1 bg-gray-100 rounded text-xs text-gray-700 hover:bg-primary hover:text-white transition-colors">
-                            {tag.name}
-                          </Link>
-                        ))}
-                      </div>
-                      
-                      {/* Other Tags (A2/A3) - Optional, maybe below or separate */}
-                      <div className="mt-4 pt-4 border-t border-gray-100">
-                         <div className="font-bold text-gray-900 mb-2 text-xs">熱門關鍵字</div>
-                         <div className="flex flex-wrap gap-1">
-                            {tags.filter(t => t.category !== 'A1').slice(0, 10).map(tag => (
-                                <Link key={tag.id} href={`/products?tag_ids=${tag.id}`} className="px-2 py-0.5 bg-gray-50 rounded text-[10px] text-gray-500 hover:text-primary transition-colors">
-                                    {tag.name}
-                                </Link>
-                            ))}
-                         </div>
-                      </div>
-                    </div>
                   </div>
                 </div>
               )}
