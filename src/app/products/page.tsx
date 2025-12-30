@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import BannerCarousel from "@/components/BannerCarousel";
@@ -24,6 +24,14 @@ interface Category { id: number; name: string; level: number; sort: number; icon
 interface Relation { parent_category_id: number; child_category_id: number; }
 
 export default function ProductsPage() {
+  return (
+    <Suspense fallback={<div style={{ backgroundColor: "#fffdf5" }} className="min-h-screen" />}>
+      <ProductsPageInner />
+    </Suspense>
+  );
+}
+
+function ProductsPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [searchTerm, setSearchTerm] = useState("");
