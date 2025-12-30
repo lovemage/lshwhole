@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
     // Fetch product images for items
     const list = orders || [];
     const productIds = list.flatMap((o: any) => o.order_items?.map((item: any) => item.product_id) || []).filter(Boolean);
-    let imageMap = new Map<number, string[]>();
+    const imageMap = new Map<number, string[]>();
 
     if (productIds.length > 0) {
       const { data: imgs } = await admin

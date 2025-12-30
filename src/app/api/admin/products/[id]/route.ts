@@ -28,11 +28,13 @@ export async function GET(
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    let { data: imagesRaw, error: imgError } = await admin
+    const { data: imagesRawRaw, error: imgError } = await admin
       .from("product_images")
       .select("url, sort, is_product, is_description")
       .eq("product_id", productId)
       .order("sort", { ascending: true });
+
+    let imagesRaw = imagesRawRaw;
 
     if (imgError) {
       console.error("Error fetching product images for admin detail:", imgError);

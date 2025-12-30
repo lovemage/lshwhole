@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     const tagIds = [];
     for (const tagName of EXAMPLE_BLOG_POST.tags) {
         // Check if exists
-        let { data: existingTag } = await admin
+        const { data: existingTag } = await admin
             .from("tags")
             .select("id")
             .eq("name", tagName)

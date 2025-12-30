@@ -243,7 +243,7 @@ export async function GET(request: NextRequest) {
 
     const ids = (products || []).map((p: any) => p.id);
     let coverMap = new Map<number, string>();
-    let tagsMap = new Map<number, any[]>();
+    const tagsMap = new Map<number, any[]>();
 
     if (ids.length > 0) {
       // Fetch Images

@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Clean up the translated text
-    let translatedText = data.responseData?.translatedText || text;
+    const translatedText = data.responseData?.translatedText || text;
 
     // If the API returns the same text or empty, return original
     if (!translatedText || translatedText.trim() === truncatedText.trim()) {

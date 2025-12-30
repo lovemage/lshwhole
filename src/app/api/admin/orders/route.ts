@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
       .filter((pid): pid is number => pid !== null && pid !== undefined);
 
     let profileMap = new Map<string, { email: string | null; display_name: string | null }>();
-    let imageMap = new Map<number, string[]>();
+    const imageMap = new Map<number, string[]>();
 
     if (userIds.length > 0) {
       const { data: profiles } = await admin

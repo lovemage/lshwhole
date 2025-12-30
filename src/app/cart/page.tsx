@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -39,12 +39,7 @@ const saveCartToStorage = (items: CartItem[]) => {
 };
 
 export default function CartPage() {
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
-
-  useEffect(() => {
-    const initialItems = loadCartFromStorage();
-    setCartItems(initialItems);
-  }, []);
+  const [cartItems, setCartItems] = useState<CartItem[]>(() => loadCartFromStorage());
 
   const updateQuantity = (id: string, newQuantity: number) => {
     if (newQuantity <= 0) return;

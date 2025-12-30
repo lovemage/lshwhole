@@ -12,10 +12,11 @@ export async function GET(request: NextRequest) {
     const admin = supabaseAdmin();
 
     // 1) 優先取近 30 天熱銷
-    let { data, error } = await admin
+    const { data: data0, error } = await admin
       .from("retail_bestsellers_30d")
       .select("id,title,retail_price_twd,cover_image_url")
       .limit(limit);
+    let data = data0;
 
     // 2) 若空或錯誤 → 退回首頁精選
     if (error || !data || data.length === 0) {

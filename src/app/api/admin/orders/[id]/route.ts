@@ -67,7 +67,7 @@ export async function GET(
     }
 
     // Fetch product images
-    let imageMap = new Map<number, string[]>();
+    const imageMap = new Map<number, string[]>();
     if (items && items.length > 0) {
       const productIds = items
         .map((item) => item.product_id)
