@@ -20,6 +20,7 @@ export default function Header() {
   // Data for Mega Menu
   const [categories, setCategories] = useState<Category[]>([]);
   const [relations, setRelations] = useState<Relation[]>([]);
+  const [visibleByL1, setVisibleByL1] = useState<Record<string, number[]>>({});
   const [isMegaMenuOpen, setIsMegaMenuOpen] = useState(false);
   const [mobileStartShoppingOpen, setMobileStartShoppingOpen] = useState(false); // For "Start Shopping" main accordion
   const [mobileCategoryOpen, setMobileCategoryOpen] = useState<number | null>(null); // For mobile accordion L1
@@ -29,9 +30,10 @@ export default function Header() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [cRes, rRes] = await Promise.all([
+        const [cRes, rRes, vRes] = await Promise.all([
           fetch("/api/categories"),
           fetch("/api/category-relations"),
+          fetch("/api/categories/visible-by-l1"),
         ]);
         if (cRes.ok) {
           const raw = await cRes.json();
@@ -54,6 +56,19 @@ export default function Header() {
               (r) => !Number.isNaN(r.parent_category_id) && !Number.isNaN(r.child_category_id)
             )
           );
+        }
+        if (vRes.ok) {
+          const raw = await vRes.json();
+          const normalized: Record<string, number[]> = {};
+          if (raw && typeof raw === "object") {
+            Object.entries(raw as Record<string, unknown>).forEach(([k, v]) => {
+              const arr = Array.isArray(v) ? v : [];
+              normalized[String(k)] = arr
+                .map((id: any) => Number(id))
+                .filter((id: number) => !Number.isNaN(id));
+            });
+          }
+          setVisibleByL1(normalized);
         }
       } catch (e) {
         console.error("Failed to fetch menu data", e);
@@ -153,12 +168,34 @@ export default function Header() {
     setIsMobileMenuOpen(!isMobileMenuOpen);
   };
 
-  // Hierarchy Logic - 顯示所有 admin 建立的分類（透過 relations 建立層級關係）
-  const l1Categories = useMemo(() => categories.filter(c => c.level === 1).sort((a, b) => a.sort - b.sort), [categories]);
-  
-  const getChildren = (parentId: number, level: number) => {
-    const childIds = relations.filter(r => r.parent_category_id === parentId).map(r => r.child_category_id);
-    return categories.filter(c => c.level === level && childIds.includes(c.id)).sort((a, b) => a.sort - b.sort);
+  const visibleByL1Set = useMemo(() => {
+    const m = new Map<number, Set<number>>();
+    Object.entries(visibleByL1 || {}).forEach(([k, ids]) => {
+      const l1Id = Number(k);
+      if (Number.isNaN(l1Id)) return;
+      m.set(l1Id, new Set((ids || []).map((x) => Number(x)).filter((n) => !Number.isNaN(n))));
+    });
+    return m;
+  }, [visibleByL1]);
+
+  // Hierarchy Logic - 依 L1 的商品歸屬過濾，避免跨 L1 混入
+  const l1Categories = useMemo(() => {
+    return categories
+      .filter((c) => c.level === 1)
+      .filter((c) => (visibleByL1Set.get(c.id)?.size || 0) > 0)
+      .sort((a, b) => a.sort - b.sort);
+  }, [categories, visibleByL1Set]);
+
+  const getChildren = (rootL1Id: number, parentId: number, level: number) => {
+    const allowed = visibleByL1Set.get(rootL1Id);
+    if (!allowed || allowed.size === 0) return [];
+
+    const childIds = relations
+      .filter((r) => r.parent_category_id === parentId)
+      .map((r) => r.child_category_id);
+    return categories
+      .filter((c) => c.level === level && childIds.includes(c.id) && allowed.has(c.id))
+      .sort((a, b) => a.sort - b.sort);
   };
 
   const cancelMegaMenuClose = () => {
@@ -240,7 +277,7 @@ export default function Header() {
                         {l1.name}
                       </Link>
                       <div className="flex flex-col gap-1 pl-2 border-l border-gray-100">
-                        {getChildren(l1.id, 2).map(l2 => (
+                        {getChildren(l1.id, l1.id, 2).map(l2 => (
                           <div key={l2.id} className="group/l2">
                             <Link href={`/products?category_id=${l2.id}`} className="text-sm text-gray-600 hover:text-primary block py-0.5">
                               {l2.name}
@@ -248,7 +285,7 @@ export default function Header() {
                             {/* L3 inside L2? Maybe just show top items or skip for clean look if too many */}
                             {/* Let's list L3 inline or small */}
                             <div className="pl-2 hidden group-hover/l2:block">
-                               {getChildren(l2.id, 3).map(l3 => (
+                               {getChildren(l1.id, l2.id, 3).map(l3 => (
                                  <Link key={l3.id} href={`/products?category_id=${l3.id}`} className="text-xs text-gray-500 hover:text-primary block py-0.5">
                                    - {l3.name}
                                  </Link>
@@ -383,7 +420,7 @@ export default function Header() {
                       {/* L2 List */}
                       <div className={`transition-all duration-300 overflow-hidden ${mobileCategoryOpen === l1.id ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}>
                         <div className="pl-4 flex flex-col space-y-1 border-l-2 border-gray-100 my-1">
-                          {getChildren(l1.id, 2).map(l2 => (
+                          {getChildren(l1.id, l1.id, 2).map(l2 => (
                             <div key={l2.id}>
                               <div className="flex justify-between items-center py-1">
                                 <Link href={`/products?category_id=${l2.id}`} onClick={() => setIsMobileMenuOpen(false)} className="text-xs text-gray-600">
@@ -397,7 +434,7 @@ export default function Header() {
                               {/* L3 List */}
                               <div className={`transition-all duration-300 overflow-hidden ${mobileL2Open === l2.id ? 'max-h-[300px] opacity-100' : 'max-h-0 opacity-0'}`}>
                                 <div className="pl-3 flex flex-col space-y-1 pb-1">
-                                  {getChildren(l2.id, 3).map(l3 => (
+                                  {getChildren(l1.id, l2.id, 3).map(l3 => (
                                     <Link key={l3.id} href={`/products?category_id=${l3.id}`} onClick={() => setIsMobileMenuOpen(false)} className="text-xs text-gray-500 block py-0.5">
                                       - {l3.name}
                                     </Link>
