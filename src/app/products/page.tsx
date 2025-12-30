@@ -264,8 +264,8 @@ export default function ProductsPage() {
       return;
     }
 
-    // Wait until we have enough data to resolve hierarchy.
-    if (categoriesAll.length === 0 || relations.length === 0) {
+    // Wait until we have enough data to resolve hierarchy AND allowedCategorySet is ready.
+    if (categoriesAll.length === 0 || relations.length === 0 || !allowedCategorySet) {
       urlSyncRef.current.ready = false;
       return;
     }
@@ -315,14 +315,17 @@ export default function ProductsPage() {
 
     urlSyncRef.current.lastCategoryId = categoryId;
     urlSyncRef.current.ready = true;
-  }, [searchParams, categoriesAll, relations]);
+  }, [searchParams, categoriesAll, relations, allowedCategorySet]);
 
   useEffect(() => {
     if (!allowedCategorySet) return;
+    if (!urlSyncRef.current.ready) return;
+    const urlCategoryId = searchParams.get("category_id");
+    if (urlCategoryId) return;
     if (selectedL1Id && !allowedCategorySet.has(selectedL1Id)) setSelectedL1Id(null);
     if (selectedL2Id && !allowedCategorySet.has(selectedL2Id)) setSelectedL2Id(null);
     if (selectedL3Id && !allowedCategorySet.has(selectedL3Id)) setSelectedL3Id(null);
-  }, [allowedCategorySet, selectedL1Id, selectedL2Id, selectedL3Id]);
+  }, [allowedCategorySet, selectedL1Id, selectedL2Id, selectedL3Id, searchParams]);
 
   useEffect(() => {
     if (permissionsLoading) return;
@@ -338,7 +341,7 @@ export default function ProductsPage() {
       search: searchTerm.trim()
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedL1Id, selectedL2Id, selectedL3Id, selectedTagIds, permissionsLoading, permissions]);
+  }, [selectedL1Id, selectedL2Id, selectedL3Id, selectedTagIds, permissionsLoading, permissions, searchTerm]);
 
   // 搜尋即時
   useEffect(() => {
