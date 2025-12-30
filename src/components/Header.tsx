@@ -20,7 +20,6 @@ export default function Header() {
   // Data for Mega Menu
   const [categories, setCategories] = useState<Category[]>([]);
   const [relations, setRelations] = useState<Relation[]>([]);
-  const [activeCategoryIds, setActiveCategoryIds] = useState<number[]>([]);
   const [isMegaMenuOpen, setIsMegaMenuOpen] = useState(false);
   const [mobileStartShoppingOpen, setMobileStartShoppingOpen] = useState(false); // For "Start Shopping" main accordion
   const [mobileCategoryOpen, setMobileCategoryOpen] = useState<number | null>(null); // For mobile accordion L1
@@ -30,10 +29,9 @@ export default function Header() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [cRes, rRes, acRes] = await Promise.all([
+        const [cRes, rRes] = await Promise.all([
           fetch("/api/categories"),
           fetch("/api/category-relations"),
-          fetch("/api/categories/active-ids"),
         ]);
         if (cRes.ok) {
           const raw = await cRes.json();
@@ -56,13 +54,6 @@ export default function Header() {
               (r) => !Number.isNaN(r.parent_category_id) && !Number.isNaN(r.child_category_id)
             )
           );
-        }
-        if (acRes.ok) {
-          const raw = await acRes.json();
-          const normalized = (Array.isArray(raw) ? raw : [])
-            .map((id: any) => Number(id))
-            .filter((id: number) => !Number.isNaN(id));
-          setActiveCategoryIds(normalized);
         }
       } catch (e) {
         console.error("Failed to fetch menu data", e);
@@ -162,44 +153,12 @@ export default function Header() {
     setIsMobileMenuOpen(!isMobileMenuOpen);
   };
 
-  // Hierarchy Logic
-  // 計算哪些分類應該顯示（自己有商品，或者子分類有顯示）
-  const visibleCategoryIds = useMemo(() => {
-    const visible = new Set<number>();
-    const processing = new Set<number>(); // 避免循環依賴
-
-    const check = (id: number): boolean => {
-      if (processing.has(id)) return false; // 循環檢測
-      if (visible.has(id)) return true;
-
-      // 1. 自己有商品
-      if (activeCategoryIds.includes(id)) {
-        visible.add(id);
-        return true;
-      }
-
-      // 2. 子分類有顯示
-      processing.add(id);
-      const childIds = relations.filter(r => r.parent_category_id === id).map(r => r.child_category_id);
-      const hasVisibleChild = childIds.some(childId => check(childId));
-      processing.delete(id);
-
-      if (hasVisibleChild) {
-        visible.add(id);
-        return true;
-      }
-      return false;
-    };
-
-    categories.forEach(c => check(c.id));
-    return visible;
-  }, [categories, relations, activeCategoryIds]);
-
-  const l1Categories = useMemo(() => categories.filter(c => c.level === 1 && visibleCategoryIds.has(c.id)).sort((a, b) => a.sort - b.sort), [categories, visibleCategoryIds]);
+  // Hierarchy Logic - 顯示所有 admin 建立的分類（透過 relations 建立層級關係）
+  const l1Categories = useMemo(() => categories.filter(c => c.level === 1).sort((a, b) => a.sort - b.sort), [categories]);
   
   const getChildren = (parentId: number, level: number) => {
     const childIds = relations.filter(r => r.parent_category_id === parentId).map(r => r.child_category_id);
-    return categories.filter(c => c.level === level && childIds.includes(c.id) && visibleCategoryIds.has(c.id)).sort((a, b) => a.sort - b.sort);
+    return categories.filter(c => c.level === level && childIds.includes(c.id)).sort((a, b) => a.sort - b.sort);
   };
 
   const cancelMegaMenuClose = () => {
