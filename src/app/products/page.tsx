@@ -272,8 +272,9 @@ function ProductsPageInner() {
       return;
     }
 
-    // Wait until we have enough data to resolve hierarchy AND allowedCategorySet is ready.
-    if (categoriesAll.length === 0 || relations.length === 0 || !allowedCategorySet) {
+    // Wait until we have enough data to resolve hierarchy.
+    // Note: allowedCategorySet can be null for unrestricted users; do not block URL sync in that case.
+    if (categoriesAll.length === 0 || relations.length === 0) {
       urlSyncRef.current.ready = false;
       return;
     }
@@ -323,7 +324,7 @@ function ProductsPageInner() {
 
     urlSyncRef.current.lastCategoryId = categoryId;
     urlSyncRef.current.ready = true;
-  }, [searchParams, categoriesAll, relations, allowedCategorySet]);
+  }, [searchParams, categoriesAll, relations]);
 
   useEffect(() => {
     if (!allowedCategorySet) return;
