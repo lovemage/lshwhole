@@ -35,9 +35,35 @@ export default function Header() {
           fetch("/api/category-relations"),
           fetch("/api/categories/active-ids"),
         ]);
-        if (cRes.ok) setCategories(await cRes.json());
-        if (rRes.ok) setRelations(await rRes.json());
-        if (acRes.ok) setActiveCategoryIds(await acRes.json());
+        if (cRes.ok) {
+          const raw = await cRes.json();
+          const normalized: Category[] = (Array.isArray(raw) ? raw : []).map((c: any) => ({
+            ...c,
+            id: Number(c.id),
+            level: Number(c.level),
+            sort: Number(c.sort ?? 0),
+          }));
+          setCategories(normalized.filter((c) => !Number.isNaN(c.id)));
+        }
+        if (rRes.ok) {
+          const raw = await rRes.json();
+          const normalized: Relation[] = (Array.isArray(raw) ? raw : []).map((r: any) => ({
+            parent_category_id: Number(r.parent_category_id),
+            child_category_id: Number(r.child_category_id),
+          }));
+          setRelations(
+            normalized.filter(
+              (r) => !Number.isNaN(r.parent_category_id) && !Number.isNaN(r.child_category_id)
+            )
+          );
+        }
+        if (acRes.ok) {
+          const raw = await acRes.json();
+          const normalized = (Array.isArray(raw) ? raw : [])
+            .map((id: any) => Number(id))
+            .filter((id: number) => !Number.isNaN(id));
+          setActiveCategoryIds(normalized);
+        }
       } catch (e) {
         console.error("Failed to fetch menu data", e);
       }

@@ -21,7 +21,13 @@ export async function GET(request: NextRequest) {
     }
 
     // 提取唯一的 category_id
-    const categoryIds = Array.from(new Set(data.map((item: any) => item.category_id)));
+    const categoryIds = Array.from(
+      new Set(
+        (data || [])
+          .map((item: any) => Number(item.category_id))
+          .filter((id: number) => !Number.isNaN(id))
+      )
+    );
 
     return NextResponse.json(categoryIds);
   } catch (err) {
