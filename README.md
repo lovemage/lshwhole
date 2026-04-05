@@ -62,3 +62,15 @@ pm run type-check\ | TypeScript 類型檢查 |
 ## 完整文檔
 
 請查看根目錄的 \README.md\ 獲取完整的項目文檔。
+
+## Railway 部署（方案 A：保留 Supabase + Resend）
+
+此方案僅將 Next.js 應用部署到 Railway，資料庫/認證仍使用 Supabase，Email 仍使用 Resend。
+
+1. 在 Railway 建立新專案並連接此 GitHub repo。
+2. Railway 會使用 `railway.json` + Nixpacks 建置，啟動指令為 `npm run start`。
+3. 在 Railway Variables 填入 `railway.env.example` 內的環境變數。
+4. 將 `NEXT_PUBLIC_APP_URL` 與 `APP_URL` 設為 Railway 的公開網域（例如 `https://xxx.up.railway.app`）。
+5. 重新部署後，檢查 `/`、`/login`、`/api/test-db`。
+
+注意：本方案不會搬移資料，也不改寫 Supabase 程式碼。

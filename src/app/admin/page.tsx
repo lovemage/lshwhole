@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import AdminHeader from "@/components/admin/AdminHeader";
+import AdminBottomNav from "@/components/admin/AdminBottomNav";
 import DashboardHome from "@/components/admin/DashboardHome";
 import AnnouncementManager from "@/components/admin/AnnouncementManager";
 import CategoryManager from "@/components/admin/CategoryManager";
@@ -163,7 +164,7 @@ function AdminDashboard() {
         <AdminHeader activeNav={activeNav} />
 
         {/* Page Content */}
-        <div className="p-6 md:p-10 overflow-y-auto">
+        <div className="p-4 pb-32 md:p-10 md:pb-10 overflow-y-auto">
           {activeNav === "dashboard" && (
             <div className="flex justify-end mb-6">
               <button className="flex h-10 cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-lg bg-primary px-5 text-sm font-bold text-white">
@@ -176,6 +177,12 @@ function AdminDashboard() {
           {renderContent()}
         </div>
       </main>
+
+      <AdminBottomNav
+        activeNav={activeNav}
+        setActiveNav={setActiveNav}
+        currentUserPermissions={currentUserPermissions}
+      />
     </div>
   );
 }

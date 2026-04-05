@@ -1,4 +1,15 @@
-export const NAV_GROUPS = [
+export interface AdminNavItem {
+  id: string;
+  label: string;
+  icon: string;
+}
+
+export interface AdminNavGroup {
+  title: string;
+  items: AdminNavItem[];
+}
+
+export const NAV_GROUPS: AdminNavGroup[] = [
   {
     title: "首頁管理",
     items: [
@@ -43,6 +54,14 @@ export const NAV_ITEMS = [
   { id: "dashboard", label: "儀表看板", icon: "dashboard" },
   ...NAV_GROUPS.flatMap(g => g.items)
 ];
+
+export const MOBILE_MAIN_NAV = [
+  { id: "dashboard", label: "看板", icon: "dashboard", groupTitle: null },
+  { id: "home", label: "首頁", icon: "home", groupTitle: "首頁管理" },
+  { id: "products", label: "商品", icon: "inventory_2", groupTitle: "商品相關" },
+  { id: "trades", label: "交易", icon: "shopping_cart", groupTitle: "訂單及會員" },
+  { id: "system", label: "系統", icon: "settings", groupTitle: "系統設置" },
+] as const;
 
 export interface DashboardStats {
   label: string;
