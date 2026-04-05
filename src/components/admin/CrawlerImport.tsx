@@ -836,9 +836,28 @@ export default function CrawlerImport() {
   };
 
   const handleResetImportSession = async () => {
+    const clearAllLocalSessionBindings = () => {
+      try {
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i += 1) {
+          const key = localStorage.key(i);
+          if (!key) continue;
+          if (/^dosoImport:.*:sessionId$/.test(key)) {
+            keysToRemove.push(key);
+          }
+        }
+        for (const key of keysToRemove) {
+          localStorage.removeItem(key);
+        }
+      } catch {
+        // noop
+      }
+    };
+
     const hasSession = Boolean(importSession);
     if (!hasSession) {
       localStorage.removeItem(`${importStorageKey}:sessionId`);
+      clearAllLocalSessionBindings();
       alert("已清除本機導入 session 記錄");
       return;
     }
@@ -850,7 +869,12 @@ export default function CrawlerImport() {
     setProbeError(null);
 
     try {
-      if (importSession && importSession.status === "running") {
+      if (
+        importSession &&
+        importSession.status !== "completed" &&
+        importSession.status !== "failed" &&
+        importSession.status !== "paused"
+      ) {
         const accessToken = await getAdminAccessToken();
         if (accessToken) {
           await fetch(`/api/admin/sync/doso/import/${importSession.session_id}/pause`, {
@@ -865,7 +889,9 @@ export default function CrawlerImport() {
     } finally {
       setImportSession(null);
       localStorage.removeItem(`${importStorageKey}:sessionId`);
+      clearAllLocalSessionBindings();
       setImportLoading(false);
+      alert("已重置 Session，請按「同步商品」建立新 Session。");
     }
   };
 
