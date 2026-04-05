@@ -31,14 +31,15 @@ const hasAny = (obj: any, keys: string[]) => keys.some((k) => obj?.[k] !== undef
 const isLikelyProductRow = (row: any): boolean => {
   if (!row || typeof row !== "object") return false;
 
-  const hasId = hasAny(row, ["id", "goods_id", "product_id", "site_id", "code", "sku", "item_id"]);
-  const hasTitle = hasAny(row, ["title", "goods_name", "product_name", "name"]);
+  const hasId = hasAny(row, ["id", "goods_id", "product_id", "site_id", "code", "sku", "item_id", "spu_id"]);
+  const hasTitle = hasAny(row, ["title", "goods_name", "product_name", "name", "name_tw", "name_cn", "name_jp", "item_name"]);
   const hasPrice = hasAny(row, [
     "price",
     "price_jpy",
     "price_twd",
     "jpy_price",
     "twd_price",
+    "wholesale_price",
     "wholesale_price_jpy",
     "wholesale_price_twd",
   ]);
@@ -147,8 +148,36 @@ const pickTotalCount = (payload: any, fallbackRows: any[] = []): number => {
     payload?.result?.total,
     payload?.result?.totalCount,
     payload?.result?.count,
+    payload?.result?.pagination?.total,
+    payload?.result?.pagination?.count,
+    payload?.result?.pager?.total,
+    payload?.result?.pager?.count,
+    payload?.result?.pageInfo?.total,
+    payload?.result?.pageInfo?.count,
+    payload?.result?.data?.total,
+    payload?.result?.data?.count,
+    payload?.result?.data?.total_num,
+    payload?.result?.data?.totalNum,
+    payload?.result?.data?.page?.total,
+    payload?.result?.data?.page?.count,
+    payload?.result?.data?.pageData?.total,
+    payload?.result?.data?.pageData?.count,
     payload?.data?.total,
     payload?.data?.count,
+    payload?.data?.pagination?.total,
+    payload?.data?.pagination?.count,
+    payload?.data?.pager?.total,
+    payload?.data?.pager?.count,
+    payload?.data?.pageInfo?.total,
+    payload?.data?.pageInfo?.count,
+    payload?.data?.data?.total,
+    payload?.data?.data?.count,
+    payload?.data?.data?.total_num,
+    payload?.data?.data?.totalNum,
+    payload?.data?.data?.page?.total,
+    payload?.data?.data?.page?.count,
+    payload?.data?.data?.pageData?.total,
+    payload?.data?.data?.pageData?.count,
     payload?.result?.total_num,
     payload?.result?.totalNum,
     payload?.result?.page?.total,
@@ -173,6 +202,19 @@ const pickTotalCount = (payload: any, fallbackRows: any[] = []): number => {
   }
 
   return fallbackRows.length;
+};
+
+const scoreListCaptureUrl = (url: string) => {
+  const u = url.toLowerCase();
+
+  let score = 0;
+  if (/goods|product|item|sku|spu/.test(u)) score += 2000;
+  if (/search|get.*list|query/.test(u)) score += 200;
+
+  if (/category|cate|classify|taxonomy/.test(u)) score -= 3000;
+  if (/brand|banner|notice|announcement|history/.test(u)) score -= 500;
+
+  return score;
 };
 
 const inferDetailUrl = (targetUrl: string, id: string) => {
@@ -626,8 +668,10 @@ const pickListPayload = (targetUrl: string, captures: CapturedResponse[]) => {
       const payload = safeJson(cap.body);
       if (!payload) continue;
       const scored = scorePayloadByProductLikelihood(payload);
-      if (!best || scored.score > best.score) {
-        best = { payload, score: scored.score };
+      const urlScore = scoreListCaptureUrl(cap.url);
+      const finalScore = scored.score + urlScore;
+      if (!best || finalScore > best.score) {
+        best = { payload, score: finalScore };
       }
     }
     if (best) return best.payload;
@@ -655,8 +699,9 @@ const pickListPayload = (targetUrl: string, captures: CapturedResponse[]) => {
       const rows = pickRows(payload);
       if (rows.length > 0 || pickTotalCount(payload, rows) > 0) {
         const scored = scorePayloadByProductLikelihood(payload);
-        if (!best || scored.score > best.score) {
-          best = { payload, score: scored.score };
+        const finalScore = scored.score + scoreListCaptureUrl(cap.url);
+        if (!best || finalScore > best.score) {
+          best = { payload, score: finalScore };
         }
       }
     }
@@ -671,8 +716,9 @@ const pickListPayload = (targetUrl: string, captures: CapturedResponse[]) => {
     const rows = pickRows(payload);
     if (rows.length > 0 || pickTotalCount(payload, rows) > 0) {
       const scored = scorePayloadByProductLikelihood(payload);
-      if (!bestGlobal || scored.score > bestGlobal.score) {
-        bestGlobal = { payload, score: scored.score };
+      const finalScore = scored.score + scoreListCaptureUrl(cap.url);
+      if (!bestGlobal || finalScore > bestGlobal.score) {
+        bestGlobal = { payload, score: finalScore };
       }
     }
   }
