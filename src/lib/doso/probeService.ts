@@ -503,8 +503,8 @@ const pickListPayload = (targetUrl: string, captures: CapturedResponse[]) => {
   const byPath: Record<string, RegExp> = {
     "/onlineMall/selfOperatedMall": /online_mall\.selfOperatedMall\/getList/i,
     "/onlineMall/PreSelfOperatedMall": /online_mall\.selfOperatedMall\/getList/i,
-    "/onlineMall/etonet": /etonet\.etonetGoods\/getList/i,
-    "/onlineMall/etonetRanking": /etonet\.etonetGoods\/getEtonetRankingList/i,
+    "/onlineMall/etonet": /etonet\.[^/]+\/get(?:EtonetRanking)?List|etonet\.[^/]+\/get.*List/i,
+    "/onlineMall/etonetRanking": /etonet\.[^/]+\/get(?:EtonetRanking)?List|etonet\.[^/]+\/get.*List/i,
     "/onlineMall/tanbaya": /tanbaya\.TanbayaGoods\/getList/i,
     "/onlineMall/dabandaxi": /dabandaxi\.DabandaxiGoods\/getList/i,
     "/onlineMall/dabansinei": /dabansinei\.DabansineiGoods\/getList/i,
@@ -514,7 +514,23 @@ const pickListPayload = (targetUrl: string, captures: CapturedResponse[]) => {
 
   const pattern = byPath[targetPath] || /getList|getEtonetRankingList/i;
   const hit = [...captures].reverse().find((x) => pattern.test(x.url));
-  return hit ? safeJson(hit.body) : null;
+  if (hit) {
+    return safeJson(hit.body);
+  }
+
+  if (targetPath === "/onlineMall/etonet" || targetPath === "/onlineMall/etonetRanking") {
+    for (const cap of [...captures].reverse()) {
+      if (!/\/mydoso\/etonet\./i.test(cap.url)) continue;
+      const payload = safeJson(cap.body);
+      if (!payload) continue;
+      const rows = pickRows(payload);
+      if (rows.length > 0 || pickTotalCount(payload, rows) > 0) {
+        return payload;
+      }
+    }
+  }
+
+  return null;
 };
 
 const getRowIdentity = (row: any) =>
@@ -687,9 +703,8 @@ export async function runDosoProbe(input: {
     try {
       const url = resp.url();
       if (!url.includes("/mydoso/")) return;
-      const ct = resp.headers()["content-type"] || "";
-      if (!ct.includes("application/json")) return;
       const body = await resp.text();
+      if (!safeJson(body)) return;
       captures.push({ url, body });
     } catch {
       // noop
@@ -751,9 +766,8 @@ export async function runDosoImportPreview(input: {
     try {
       const url = resp.url();
       if (!url.includes("/mydoso/")) return;
-      const ct = resp.headers()["content-type"] || "";
-      if (!ct.includes("application/json")) return;
       const body = await resp.text();
+      if (!safeJson(body)) return;
       captures.push({ url, body });
     } catch {
       // noop
