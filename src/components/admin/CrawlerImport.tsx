@@ -3,6 +3,7 @@ import Script from "next/script";
 import { supabase } from "@/lib/supabase";
 import { DEFAULT_DOSO_TARGETS, DOSO_TARGET_OPTIONS } from "@/lib/doso/targets";
 import type {
+  DosoCredentialsApiResponse,
   DosoImportProduct,
   DosoImportProgressApiResponse,
   DosoImportRunApiResponse,
@@ -62,6 +63,7 @@ export default function CrawlerImport() {
   const [batchPriceAdjustWholesale, setBatchPriceAdjustWholesale] = useState(0);
   const [batchPriceAdjustRetail, setBatchPriceAdjustRetail] = useState(0);
   const [batchPublishing, setBatchPublishing] = useState(false);
+  const [autoClearPublished, setAutoClearPublished] = useState(true);
   const [isTranslating, setIsTranslating] = useState(false);
   const [publishForm, setPublishForm] = useState({
     sku: "",
@@ -113,6 +115,9 @@ export default function CrawlerImport() {
 
   const [dosoUsername, setDosoUsername] = useState("");
   const [dosoPassword, setDosoPassword] = useState("");
+  const [dosoHasSavedPassword, setDosoHasSavedPassword] = useState(false);
+  const [dosoCredentialSaving, setDosoCredentialSaving] = useState(false);
+  const [showDosoGuide, setShowDosoGuide] = useState(false);
   const [dosoTargetUrl, setDosoTargetUrl] = useState(DEFAULT_DOSO_TARGETS[0] || "");
   const [probeLoading, setProbeLoading] = useState(false);
   const [probeError, setProbeError] = useState<string | null>(null);
@@ -174,6 +179,26 @@ export default function CrawlerImport() {
     };
 
     restoreImportSession();
+  }, []);
+
+  useEffect(() => {
+    const fetchSavedCredentials = async () => {
+      try {
+        const accessToken = await getAdminAccessToken();
+        if (!accessToken) return;
+        const res = await fetch("/api/admin/sync/doso/credentials", {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        const data = (await res.json().catch(() => null)) as DosoCredentialsApiResponse | null;
+        if (!res.ok || !data || !data.ok) return;
+        setDosoUsername(data.username || "");
+        setDosoHasSavedPassword(Boolean(data.has_password));
+      } catch {
+        // noop
+      }
+    };
+
+    fetchSavedCredentials();
   }, []);
 
   useEffect(() => {
@@ -412,15 +437,86 @@ export default function CrawlerImport() {
     return session?.access_token || null;
   };
 
-  const handleDosoProbe = async () => {
+  const isValidDosoTargetUrl = (value: string) => {
+    try {
+      const u = new URL(value);
+      return u.protocol === "https:" && u.hostname === "www.doso.net";
+    } catch {
+      return false;
+    }
+  };
+
+  const mapDosoError = (codeOrMessage: string | null | undefined, fallback: string) => {
+    const code = (codeOrMessage || "").trim();
+    if (!code) return fallback;
+    const map: Record<string, string> = {
+      missing_encryption_key: "伺服器缺少加密金鑰，請通知管理員設定環境變數",
+      invalid_encryption_key: "加密金鑰格式錯誤，請通知管理員檢查設定",
+      credential_read_failed: "讀取已儲存帳密失敗，請稍後再試",
+      credential_save_failed: "儲存帳密失敗，請稍後再試",
+      probe_api_failed: "探測服務暫時不可用，請稍後再試",
+    };
+    return map[code] || code;
+  };
+
+  const handleSaveDosoCredentials = async () => {
     const username = dosoUsername.trim();
-    if (!username || !dosoPassword) {
-      alert("請輸入 DOSO 帳號與密碼");
+    if (!username) {
+      alert("請先輸入 DOSO 帳號");
       return;
     }
 
+    setDosoCredentialSaving(true);
+    setProbeError(null);
+
+    try {
+      const accessToken = await getAdminAccessToken();
+      if (!accessToken) {
+        setProbeError("尚未登入管理員，請重新登入後再試");
+        return;
+      }
+
+      const payload: { username: string; password?: string } = { username };
+      if (dosoPassword) {
+        payload.password = dosoPassword;
+      }
+
+      const res = await fetch("/api/admin/sync/doso/credentials", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = (await res.json().catch(() => null)) as DosoCredentialsApiResponse | null;
+      if (!res.ok || !data) {
+        setProbeError(mapDosoError((data as any)?.error, `儲存帳密失敗 (${res.status})`));
+        return;
+      }
+
+      if (!data.ok) {
+        setProbeError(mapDosoError(data.error, "儲存帳密失敗"));
+        return;
+      }
+
+      setDosoUsername(data.username || username);
+      setDosoHasSavedPassword(Boolean(data.has_password));
+      setDosoPassword("");
+      alert("DOSO 帳密已儲存");
+    } catch (err) {
+      setProbeError(err instanceof Error ? err.message : "儲存帳密時發生錯誤");
+    } finally {
+      setDosoCredentialSaving(false);
+    }
+  };
+
+  const handleDosoProbe = async () => {
+    const username = dosoUsername.trim();
+
     const targetUrl = dosoTargetUrl.trim();
-    if (!targetUrl || !targetUrl.startsWith("https://www.doso.net/")) {
+    if (!targetUrl || !isValidDosoTargetUrl(targetUrl)) {
       alert("請輸入單一 DOSO 目錄網址");
       return;
     }
@@ -446,15 +542,15 @@ export default function CrawlerImport() {
           Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
-          username,
-          password: dosoPassword,
+          username: username || undefined,
+          password: dosoPassword || undefined,
           targets: [targetUrl],
         }),
       });
 
       const data = await res.json().catch(() => null);
       if (!res.ok) {
-        setProbeError(data?.error || `探測失敗 (${res.status})`);
+        setProbeError(mapDosoError(data?.error, `探測失敗 (${res.status})`));
         return;
       }
 
@@ -472,13 +568,9 @@ export default function CrawlerImport() {
 
   const handleDosoImport = async () => {
     const username = dosoUsername.trim();
-    if (!username || !dosoPassword) {
-      alert("請輸入 DOSO 帳號與密碼");
-      return;
-    }
 
     const targetUrl = dosoTargetUrl.trim();
-    if (!targetUrl || !targetUrl.startsWith("https://www.doso.net/")) {
+    if (!targetUrl || !isValidDosoTargetUrl(targetUrl)) {
       alert("請輸入單一 DOSO 目錄網址");
       return;
     }
@@ -506,20 +598,20 @@ export default function CrawlerImport() {
           Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
-          username,
-          password: dosoPassword,
+          username: username || undefined,
+          password: dosoPassword || undefined,
           target_url: targetUrl,
         }),
       });
 
       const data = (await res.json().catch(() => null)) as DosoImportStartApiResponse | null;
       if (!res.ok || !data) {
-        setProbeError((data as any)?.error || `導入失敗 (${res.status})`);
+        setProbeError(mapDosoError((data as any)?.error, `導入失敗 (${res.status})`));
         return;
       }
 
       if (!data.ok) {
-        setProbeError(("error" in data ? data.error : null) || "建立導入 session 失敗");
+        setProbeError(mapDosoError("error" in data ? data.error : null, "建立導入 session 失敗"));
         return;
       }
 
@@ -537,6 +629,7 @@ export default function CrawlerImport() {
       setProbeError(err instanceof Error ? err.message : "導入時發生錯誤");
     } finally {
       setImportLoading(false);
+      setDosoPassword("");
     }
   };
 
@@ -567,12 +660,12 @@ export default function CrawlerImport() {
 
       const data = (await res.json().catch(() => null)) as DosoImportRunApiResponse | null;
       if (!res.ok || !data) {
-        setProbeError((data as any)?.error || `續傳失敗 (${res.status})`);
+        setProbeError(mapDosoError((data as any)?.error, `續傳失敗 (${res.status})`));
         return;
       }
 
       if (!data.ok) {
-        setProbeError(("error" in data ? data.error : null) || "續傳失敗");
+        setProbeError(mapDosoError("error" in data ? data.error : null, "續傳失敗"));
         return;
       }
 
@@ -608,7 +701,7 @@ export default function CrawlerImport() {
 
       const data = (await res.json().catch(() => null)) as any;
       if (!res.ok || !data?.ok) {
-        setProbeError(data?.error || `暫停失敗 (${res.status})`);
+        setProbeError(mapDosoError(data?.error, `暫停失敗 (${res.status})`));
         return;
       }
 
@@ -1031,6 +1124,7 @@ export default function CrawlerImport() {
     setBatchPublishing(true);
     let successCount = 0;
     let failCount = 0;
+    const publishedCodes = new Set<string>();
 
     const toInt = (v: any) =>
       v === null || v === undefined || v === "" ? null : Math.floor(Number(v));
@@ -1093,7 +1187,10 @@ export default function CrawlerImport() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-        if (res.ok) successCount++;
+        if (res.ok) {
+          successCount++;
+          publishedCodes.add(String(p.productCode || ""));
+        }
         else failCount++;
       } catch (err) {
         failCount++;
@@ -1102,7 +1199,27 @@ export default function CrawlerImport() {
 
     setBatchPublishing(false);
     alert(`批量上架完成\n成功：${successCount}\n失敗：${failCount}`);
-    // Clear selection
+
+    if (autoClearPublished && publishedCodes.size > 0) {
+      const updated = crawlerProducts.filter((p) => !publishedCodes.has(String(p.productCode || "")));
+      setCrawlerProducts(updated);
+      setCrawlerFiltered(applyFilterSort(updated));
+    }
+
+    setSelectedCrawlerProducts(new Set());
+  };
+
+  const removeCrawlerItem = (filteredIdx: number) => {
+    const target = crawlerFiltered[filteredIdx];
+    if (!target) return;
+
+    const updated = [...crawlerProducts];
+    const sourceIndex = updated.findIndex((x) => String(x.productCode || "") === String(target.productCode || ""));
+    if (sourceIndex < 0) return;
+
+    updated.splice(sourceIndex, 1);
+    setCrawlerProducts(updated);
+    setCrawlerFiltered(applyFilterSort(updated));
     setSelectedCrawlerProducts(new Set());
   };
 
@@ -1185,9 +1302,18 @@ export default function CrawlerImport() {
       )}
 
       <div className="rounded-xl border border-border-light bg-card-light p-4 space-y-4">
-        <div>
-          <h3 className="text-lg font-bold text-text-primary-light">DOSO 目錄探測（一次性帳密）</h3>
-          <p className="text-xs text-text-secondary-light mt-1">輸入 DOSO 帳密後只做本次探測，不儲存帳密。</p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-bold text-text-primary-light">DOSO 目錄導入</h3>
+            <p className="text-xs text-text-secondary-light mt-1">可儲存帳密（密碼加密儲存），導入時可直接使用已儲存帳密。</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowDosoGuide(true)}
+            className="text-xs text-primary hover:underline"
+          >
+            使用方式
+          </button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1208,9 +1334,24 @@ export default function CrawlerImport() {
               value={dosoPassword}
               onChange={(e) => setDosoPassword(e.target.value)}
               className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-              placeholder="輸入本次探測密碼"
+              placeholder={dosoHasSavedPassword ? "已儲存密碼（留空不更新）" : "輸入密碼"}
             />
+            <p className="mt-1 text-xs text-text-secondary-light">
+              {dosoHasSavedPassword ? "目前已有已儲存密碼" : "目前尚未儲存密碼"}
+            </p>
           </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleSaveDosoCredentials}
+            disabled={dosoCredentialSaving}
+            className="inline-flex items-center gap-2 rounded-lg border border-border-light bg-card-light px-4 py-2 text-sm font-bold text-text-primary-light hover:bg-primary/10 disabled:opacity-50"
+          >
+            <span className="material-symbols-outlined text-base">save</span>
+            {dosoCredentialSaving ? "儲存中..." : "儲存帳密"}
+          </button>
+          <span className="text-xs text-text-secondary-light">密碼僅在後端加密儲存，前端不保留明文。</span>
         </div>
 
         <div>
@@ -1357,6 +1498,30 @@ export default function CrawlerImport() {
           </div>
         )}
       </div>
+
+      {showDosoGuide && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-xl rounded-xl bg-card-light border border-border-light p-5 space-y-4">
+            <h4 className="text-base font-bold text-text-primary-light">DOSO 導入使用方式</h4>
+            <ol className="list-decimal pl-5 space-y-1 text-sm text-text-secondary-light">
+              <li>先輸入 DOSO 帳號，密碼可填入後按「儲存帳密」。</li>
+              <li>從下拉選單選擇一個目錄。</li>
+              <li>按「開始導入」建立導入 session。</li>
+              <li>按「繼續導入下一批」持續導入。</li>
+              <li>查看進度區塊的總商品數與目前進度。</li>
+              <li>中斷後可回到頁面繼續導入。</li>
+            </ol>
+            <div className="flex justify-end">
+              <button
+                onClick={() => setShowDosoGuide(false)}
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90"
+              >
+                我知道了
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 上架前：預設分類與標籤 */}
       <div className="rounded-xl border border-border-light bg-card-light p-4">
@@ -1574,6 +1739,15 @@ export default function CrawlerImport() {
                 <span className="material-symbols-outlined text-base">cloud_upload</span>
                 批量上架 ({selectedCrawlerProducts.size})
               </button>
+              <label className="ml-2 inline-flex items-center gap-2 text-sm text-text-secondary-light">
+                <input
+                  type="checkbox"
+                  checked={autoClearPublished}
+                  onChange={(e) => setAutoClearPublished(e.target.checked)}
+                  className="w-4 h-4"
+                />
+                上架後自動清除
+              </label>
             </>
           )}
         </div>
@@ -1599,6 +1773,14 @@ export default function CrawlerImport() {
                   className="w-4 h-4 cursor-pointer"
                 />
               </label>
+              <button
+                type="button"
+                onClick={() => removeCrawlerItem(idx)}
+                className="absolute top-2 right-2 inline-flex items-center justify-center w-7 h-7 rounded-md bg-white/95 border border-border-light text-red-600 hover:bg-red-50"
+                title="刪除商品"
+              >
+                <span className="material-symbols-outlined text-base">delete</span>
+              </button>
             </div>
             <div className="p-3">
               <div className="text-xs text-text-secondary-light">#{String(p.productCode)}</div>
@@ -1958,6 +2140,17 @@ export default function CrawlerImport() {
             <div className="mt-6 flex justify-end gap-3">
               <button disabled={publishing} onClick={() => setShowPublish(false)} className="px-4 py-2 rounded-lg border border-border-light text-sm disabled:opacity-50">取消</button>
               <button disabled={publishing} onClick={publishNow} className="px-4 py-2 rounded-lg bg-primary text-white text-sm disabled:opacity-50">確認上架</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {(importLoading || batchPublishing || publishing) && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 p-4">
+          <div className="w-full max-w-md rounded-xl border border-border-light bg-card-light p-5 text-center space-y-3">
+            <div className="text-lg font-bold text-text-primary-light">處理中，請勿關閉視窗</div>
+            <div className="text-sm text-text-secondary-light">
+              {importLoading ? "正在導入商品，請稍候..." : batchPublishing || publishing ? "正在上架商品，請稍候..." : "正在處理中..."}
             </div>
           </div>
         </div>

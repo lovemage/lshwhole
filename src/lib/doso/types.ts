@@ -22,8 +22,8 @@ export interface DosoProbeTargetResult {
 }
 
 export interface DosoProbeRequestBody {
-  username: string;
-  password: string;
+  username?: string;
+  password?: string;
   targets?: string[];
 }
 
@@ -77,8 +77,8 @@ export interface DosoImportSessionProgress {
 }
 
 export interface DosoImportStartRequest {
-  username: string;
-  password: string;
+  username?: string;
+  password?: string;
   target_url: string;
   targetUrl?: string;
 }
@@ -154,3 +154,18 @@ export type DosoImportProgressApiResponse =
 export type DosoImportPauseApiResponse =
   | DosoImportPauseResponse
   | DosoImportPauseErrorResponse;
+
+export interface DosoCredentialsResponse {
+  ok: true;
+  username: string;
+  has_password: boolean;
+}
+
+export interface DosoCredentialsErrorResponse {
+  ok: false;
+  error: string;
+}
+
+export type DosoCredentialsApiResponse =
+  | DosoCredentialsResponse
+  | DosoCredentialsErrorResponse;

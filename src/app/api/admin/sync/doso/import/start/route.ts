@@ -7,6 +7,7 @@ import {
   markSessionStatus,
   updateSessionCounters,
 } from "@/lib/doso/importSessionService";
+import { getSavedDosoCredentialsForLogin } from "@/lib/doso/credentialStore";
 import type {
   DosoImportStartApiResponse,
   DosoImportStartRequest,
@@ -50,15 +51,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const username = typeof body?.username === "string" ? body.username.trim() : "";
-    const password = typeof body?.password === "string" ? body.password : "";
+    const requestUsername = typeof body?.username === "string" ? body.username.trim() : "";
+    const requestPassword = typeof body?.password === "string" ? body.password : "";
     const parsedTargetFromSnake = parseSingleDosoTarget(body?.target_url);
     const parsedTargetFromCamel = parseSingleDosoTarget(body?.targetUrl);
     const targetUrl = parsedTargetFromSnake || parsedTargetFromCamel;
 
-    if (!username || !password) {
+    if ((requestUsername && !requestPassword) || (!requestUsername && requestPassword)) {
       return NextResponse.json(
-        { ok: false, error: "缺少 DOSO 帳號或密碼" } satisfies DosoImportStartApiResponse,
+        {
+          ok: false,
+          error: "請同時輸入帳號與密碼，或兩者皆留空使用已儲存帳密",
+        } satisfies DosoImportStartApiResponse,
+        { status: 400 }
+      );
+    }
+
+    const credentials = requestUsername && requestPassword
+      ? { username: requestUsername, password: requestPassword }
+      : await getSavedDosoCredentialsForLogin();
+
+    if (!credentials?.username || !credentials?.password) {
+      return NextResponse.json(
+        { ok: false, error: "缺少 DOSO 帳號或密碼，請先輸入或儲存帳密" } satisfies DosoImportStartApiResponse,
         { status: 400 }
       );
     }
@@ -71,8 +86,8 @@ export async function POST(request: NextRequest) {
     }
 
     const preview = await runDosoImportPreview({
-      username,
-      password,
+      username: credentials.username,
+      password: credentials.password,
       targets: [targetUrl],
     });
 

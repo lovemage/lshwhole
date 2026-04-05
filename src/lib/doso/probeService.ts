@@ -678,7 +678,7 @@ export async function runDosoImportPreview(input: {
         const rows = pickRows(listPayload);
 
         const mapped = rows
-          .slice(0, 40)
+          .slice(0, 200)
           .map((row: any) => mapRowToImportProduct(target, row))
           .filter((x: DosoImportProduct | null): x is DosoImportProduct => Boolean(x));
 
