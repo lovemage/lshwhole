@@ -1,10 +1,16 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const getSupabase = () => {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error("Missing Supabase environment variables");
+  }
+
+  return createClient(supabaseUrl, supabaseServiceKey);
+};
 
 // GET: 獲取單個公告
 export async function GET(
@@ -12,6 +18,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const supabase = getSupabase();
     const { id } = await params;
     const { data, error } = await supabase
       .from("announcements")
@@ -39,6 +46,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const supabase = getSupabase();
     const { id } = await params;
     const body = await request.json();
     const { title, content, is_active } = body;
@@ -74,6 +82,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const supabase = getSupabase();
     const { id } = await params;
     const { error } = await supabase
       .from("announcements")
@@ -93,4 +102,3 @@ export async function DELETE(
     );
   }
 }
-

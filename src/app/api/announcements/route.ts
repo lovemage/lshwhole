@@ -1,14 +1,21 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const getSupabase = () => {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error("Missing Supabase environment variables");
+  }
+
+  return createClient(supabaseUrl, supabaseServiceKey);
+};
 
 // GET: 獲取所有活躍的公告
 export async function GET(request: NextRequest) {
   try {
+    const supabase = getSupabase();
     const { data, error } = await supabase
       .from("announcements")
       .select("*")
@@ -32,6 +39,7 @@ export async function GET(request: NextRequest) {
 // POST: 建立新公告（需要管理員權限）
 export async function POST(request: NextRequest) {
   try {
+    const supabase = getSupabase();
     const body = await request.json();
     const { title, content } = body;
 
@@ -67,4 +75,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
