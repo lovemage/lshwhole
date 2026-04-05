@@ -12,7 +12,6 @@ import type {
   DosoImportSessionProgress,
   DosoSourceCategoryMappingConfig,
   DosoSourceCategoryNode,
-  DosoProbeResponse,
 } from "@/lib/doso/types";
 
 interface Category {
@@ -121,9 +120,7 @@ export default function CrawlerImport() {
   const [dosoHasSavedPassword, setDosoHasSavedPassword] = useState(false);
   const [showDosoGuide, setShowDosoGuide] = useState(false);
   const [dosoTargetUrl, setDosoTargetUrl] = useState(DEFAULT_DOSO_TARGETS[0] || "");
-  const [probeLoading, setProbeLoading] = useState(false);
   const [probeError, setProbeError] = useState<string | null>(null);
-  const [probeResult, setProbeResult] = useState<DosoProbeResponse | null>(null);
   const [importLoading, setImportLoading] = useState(false);
   const [importSession, setImportSession] = useState<DosoImportSessionProgress | null>(null);
   const [importStorageKey, setImportStorageKey] = useState("dosoImport:anon");
@@ -135,6 +132,7 @@ export default function CrawlerImport() {
   });
   const [mappingLoading, setMappingLoading] = useState(false);
   const [mappingSaving, setMappingSaving] = useState(false);
+  const [showSourceCategoryMapping, setShowSourceCategoryMapping] = useState(false);
 
   useEffect(() => {
     fetchCategories();
@@ -617,59 +615,6 @@ export default function CrawlerImport() {
     return map[code] || code;
   };
 
-  const handleDosoProbe = async () => {
-    const username = dosoUsername.trim();
-
-    const targetUrl = dosoTargetUrl.trim();
-    if (!targetUrl || !isValidDosoTargetUrl(targetUrl)) {
-      alert("請輸入單一 DOSO 目錄網址");
-      return;
-    }
-
-    setProbeLoading(true);
-    setProbeError(null);
-    setProbeResult(null);
-
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!session?.access_token) {
-        setProbeError("尚未登入管理員，請重新登入後再試");
-        return;
-      }
-
-      const res = await fetch("/api/admin/sync/doso/probe", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          username: username || undefined,
-          password: dosoPassword || undefined,
-          targets: [targetUrl],
-        }),
-      });
-
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        setProbeError(mapDosoError(data?.error, `探測失敗 (${res.status})`));
-        return;
-      }
-
-      setProbeResult(data as DosoProbeResponse);
-      if (!(data as DosoProbeResponse).login_ok) {
-        setProbeError((data as DosoProbeResponse).error || "登入失敗");
-      }
-    } catch (err) {
-      setProbeError(err instanceof Error ? err.message : "探測時發生錯誤");
-    } finally {
-      setProbeLoading(false);
-    }
-  };
-
   const handleDosoImport = async () => {
     const username = dosoUsername.trim();
 
@@ -776,41 +721,6 @@ export default function CrawlerImport() {
       appendImportedProducts(data.products || []);
     } catch (err) {
       setProbeError(err instanceof Error ? err.message : "續傳時發生錯誤");
-    } finally {
-      setImportLoading(false);
-    }
-  };
-
-  const handleDosoPause = async () => {
-    if (!importSession) return;
-
-    setImportLoading(true);
-    setProbeError(null);
-
-    try {
-      const accessToken = await getAdminAccessToken();
-      if (!accessToken) {
-        setProbeError("尚未登入管理員，請重新登入後再試");
-        return;
-      }
-
-      const res = await fetch(`/api/admin/sync/doso/import/${importSession.session_id}/pause`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
-
-      const data = (await res.json().catch(() => null)) as any;
-      if (!res.ok || !data?.ok) {
-        setProbeError(mapDosoError(data?.error, `暫停失敗 (${res.status})`));
-        return;
-      }
-
-      setImportSession(data.session as DosoImportSessionProgress);
-    } catch (err) {
-      setProbeError(err instanceof Error ? err.message : "暫停時發生錯誤");
     } finally {
       setImportLoading(false);
     }
@@ -1583,14 +1493,6 @@ export default function CrawlerImport() {
 
         <div className="flex items-center gap-3">
           <button
-            onClick={handleDosoProbe}
-            disabled={probeLoading}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50"
-          >
-            <span className="material-symbols-outlined text-base">travel_explore</span>
-            {probeLoading ? "探測中..." : "探測目錄"}
-          </button>
-          <button
             onClick={handleDosoImport}
             disabled={importLoading}
             className="inline-flex items-center gap-2 rounded-lg border border-border-light bg-card-light px-4 py-2 text-sm font-bold text-text-primary-light hover:bg-primary/10 disabled:opacity-50"
@@ -1610,19 +1512,6 @@ export default function CrawlerImport() {
           >
             <span className="material-symbols-outlined text-base">play_arrow</span>
             {importLoading ? "處理中..." : "導入網站"}
-          </button>
-          <button
-            onClick={handleDosoPause}
-            disabled={
-              importLoading ||
-              !importSession ||
-              importSession.status === "completed" ||
-              importSession.status === "failed"
-            }
-            className="inline-flex items-center gap-2 rounded-lg border border-border-light bg-card-light px-4 py-2 text-sm font-bold text-text-primary-light hover:bg-primary/10 disabled:opacity-50"
-          >
-            <span className="material-symbols-outlined text-base">pause</span>
-            暫停
           </button>
           <button
             onClick={handleResetImportSession}
@@ -1667,63 +1556,6 @@ export default function CrawlerImport() {
           </div>
         )}
 
-        {probeResult && (
-          <div className="space-y-3">
-            <div className="rounded-lg border border-border-light bg-background-light p-3 text-xs text-text-secondary-light">
-              總商品數：
-              <span className="font-medium text-text-primary-light ml-1">
-                {probeResult.targets.reduce((sum, t) => sum + (t.total_count || 0), 0)}
-              </span>
-              <span className="mx-2">|</span>
-              預估導入批次：
-              <span className="font-medium text-text-primary-light ml-1">
-                {probeResult.targets.reduce((sum, t) => sum + (t.estimated_sessions || 0), 0)}
-              </span>
-            </div>
-          <div className="overflow-x-auto border border-border-light rounded-lg">
-            <table className="min-w-full text-sm">
-              <thead className="bg-background-light text-text-secondary-light">
-                <tr>
-                  <th className="text-left px-3 py-2">目錄</th>
-                  <th className="text-left px-3 py-2">列表</th>
-                  <th className="text-left px-3 py-2">總商品數</th>
-                  <th className="text-left px-3 py-2">預估導入批次</th>
-                  <th className="text-left px-3 py-2">詳情</th>
-                  <th className="text-left px-3 py-2">樣本</th>
-                </tr>
-              </thead>
-              <tbody>
-                {probeResult.targets.map((t, idx) => (
-                  <tr key={`${t.url}-${idx}`} className="border-t border-border-light">
-                    <td className="px-3 py-2 align-top">
-                      <div className="font-medium text-text-primary-light">{t.title || "(無標題)"}</div>
-                      <div className="text-xs text-text-secondary-light break-all">{t.url}</div>
-                      {t.error && <div className="text-xs text-red-600 mt-1">{t.error}</div>}
-                    </td>
-                    <td className="px-3 py-2 align-top">{t.list_ok ? "OK" : "FAIL"}</td>
-                    <td className="px-3 py-2 align-top">{t.total_count}</td>
-                    <td className="px-3 py-2 align-top">{t.estimated_sessions}</td>
-                    <td className="px-3 py-2 align-top">{t.detail_ok ? "OK" : "FAIL"}</td>
-                    <td className="px-3 py-2 align-top">
-                      {t.samples.length === 0 ? (
-                        <span className="text-text-secondary-light">無</span>
-                      ) : (
-                        <div className="space-y-1">
-                          {t.samples.map((s, i) => (
-                            <div key={`${s.id}-${i}`} className="text-xs text-text-secondary-light">
-                              {s.id || "-"} / {s.title || "-"}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          </div>
-        )}
       </div>
 
       {showDosoGuide && (
@@ -1760,24 +1592,40 @@ export default function CrawlerImport() {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={refreshSourceCategories}
-              disabled={mappingLoading}
-              className="inline-flex items-center gap-2 rounded-lg border border-border-light bg-background-light px-3 py-2 text-xs font-medium text-text-primary-light hover:bg-primary/10 disabled:opacity-50"
+              type="button"
+              onClick={() => setShowSourceCategoryMapping((prev) => !prev)}
+              className="inline-flex items-center gap-2 rounded-lg border border-border-light bg-background-light px-3 py-2 text-xs font-medium text-text-primary-light hover:bg-primary/10"
             >
-              <span className="material-symbols-outlined text-sm">sync</span>
-              {mappingLoading ? "同步中..." : "同步來源分類"}
+              <span className="material-symbols-outlined text-sm">
+                {showSourceCategoryMapping ? "expand_less" : "expand_more"}
+              </span>
+              {showSourceCategoryMapping ? "收合" : "展開"}
             </button>
-            <button
-              onClick={saveSourceCategoryMapping}
-              disabled={mappingSaving}
-              className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-white hover:bg-primary/90 disabled:opacity-50"
-            >
-              <span className="material-symbols-outlined text-sm">save</span>
-              {mappingSaving ? "儲存中..." : "儲存映射"}
-            </button>
+            {showSourceCategoryMapping && (
+              <>
+                <button
+                  onClick={refreshSourceCategories}
+                  disabled={mappingLoading}
+                  className="inline-flex items-center gap-2 rounded-lg border border-border-light bg-background-light px-3 py-2 text-xs font-medium text-text-primary-light hover:bg-primary/10 disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-sm">sync</span>
+                  {mappingLoading ? "同步中..." : "同步來源分類"}
+                </button>
+                <button
+                  onClick={saveSourceCategoryMapping}
+                  disabled={mappingSaving}
+                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-white hover:bg-primary/90 disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-sm">save</span>
+                  {mappingSaving ? "儲存中..." : "儲存映射"}
+                </button>
+              </>
+            )}
           </div>
         </div>
 
+        {showSourceCategoryMapping && (
+          <>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
           <div>
             <label className="block text-xs text-text-secondary-light mb-1">L1（固定日本）</label>
@@ -1916,6 +1764,8 @@ export default function CrawlerImport() {
             })}
           </div>
         </div>
+          </>
+        )}
       </div>
 
       {/* 上架前：預設分類與標籤 */}
