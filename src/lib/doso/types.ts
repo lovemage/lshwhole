@@ -39,8 +39,8 @@ export interface DosoImportProduct {
   description: string;
   url: string | null;
   images: string[];
-  wholesalePriceTWD?: number;
-  wholesalePriceJPY?: number;
+  wholesalePriceTWD?: number | null;
+  wholesalePriceJPY?: number | null;
 }
 
 export interface DosoImportTargetResult {
@@ -56,3 +56,101 @@ export interface DosoImportResponse {
   targets: DosoImportTargetResult[];
   error?: string;
 }
+
+export type DosoImportSessionStatus =
+  | "pending"
+  | "running"
+  | "paused"
+  | "completed"
+  | "failed";
+
+export interface DosoImportSessionProgress {
+  session_id: number;
+  status: DosoImportSessionStatus;
+  total_count: number;
+  processed_count: number;
+  imported_count: number;
+  skipped_count: number;
+  failed_count: number;
+  last_checkpoint_product_code?: string | null;
+  error_message?: string | null;
+}
+
+export interface DosoImportStartRequest {
+  username: string;
+  password: string;
+  target_url: string;
+  targetUrl?: string;
+}
+
+export interface DosoImportStartResponse {
+  ok?: true;
+  login_ok: boolean;
+  session: DosoImportSessionProgress;
+}
+
+export interface DosoImportStartErrorResponse {
+  ok?: false;
+  error: string;
+  session?: DosoImportSessionProgress;
+  login_ok?: boolean;
+}
+
+export interface DosoImportRunRequest {
+  batch_size?: number;
+  batchSize?: number;
+}
+
+export interface DosoImportRunResponse {
+  ok?: true;
+  session: DosoImportSessionProgress;
+  products: DosoImportProduct[];
+  processed_in_batch: number;
+  imported_in_batch: number;
+  skipped_in_batch: number;
+  failed_in_batch: number;
+}
+
+export interface DosoImportRunErrorResponse {
+  ok?: false;
+  error: string;
+  session?: DosoImportSessionProgress;
+}
+
+export interface DosoImportProgressResponse {
+  ok?: true;
+  session: DosoImportSessionProgress;
+}
+
+export interface DosoImportProgressErrorResponse {
+  ok?: false;
+  error: string;
+  session?: DosoImportSessionProgress;
+}
+
+export interface DosoImportPauseResponse {
+  ok?: true;
+  session: DosoImportSessionProgress;
+}
+
+export interface DosoImportPauseErrorResponse {
+  ok?: false;
+  error: string;
+  session?: DosoImportSessionProgress;
+}
+
+export type DosoImportStartApiResponse =
+  | DosoImportStartResponse
+  | DosoImportStartErrorResponse;
+
+export type DosoImportRunApiResponse =
+  | DosoImportRunResponse
+  | DosoImportRunErrorResponse;
+
+export type DosoImportProgressApiResponse =
+  | DosoImportProgressResponse
+  | DosoImportProgressErrorResponse;
+
+export type DosoImportPauseApiResponse =
+  | DosoImportPauseResponse
+  | DosoImportPauseErrorResponse;

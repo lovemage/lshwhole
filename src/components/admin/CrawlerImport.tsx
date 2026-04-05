@@ -2,7 +2,14 @@ import { useState, useEffect } from "react";
 import Script from "next/script";
 import { supabase } from "@/lib/supabase";
 import { DEFAULT_DOSO_TARGETS } from "@/lib/doso/targets";
-import type { DosoImportResponse, DosoProbeResponse } from "@/lib/doso/types";
+import type {
+  DosoImportProduct,
+  DosoImportProgressApiResponse,
+  DosoImportRunApiResponse,
+  DosoImportStartApiResponse,
+  DosoImportSessionProgress,
+  DosoProbeResponse,
+} from "@/lib/doso/types";
 
 interface Category {
   id: number;
@@ -106,11 +113,13 @@ export default function CrawlerImport() {
 
   const [dosoUsername, setDosoUsername] = useState("");
   const [dosoPassword, setDosoPassword] = useState("");
-  const [dosoTargetsText, setDosoTargetsText] = useState(DEFAULT_DOSO_TARGETS.join("\n"));
+  const [dosoTargetUrl, setDosoTargetUrl] = useState(DEFAULT_DOSO_TARGETS[0] || "");
   const [probeLoading, setProbeLoading] = useState(false);
   const [probeError, setProbeError] = useState<string | null>(null);
   const [probeResult, setProbeResult] = useState<DosoProbeResponse | null>(null);
   const [importLoading, setImportLoading] = useState(false);
+  const [importSession, setImportSession] = useState<DosoImportSessionProgress | null>(null);
+  const [importStorageKey, setImportStorageKey] = useState("dosoImport:anon");
 
   useEffect(() => {
     fetchCategories();
@@ -127,6 +136,70 @@ export default function CrawlerImport() {
       }
     } catch { }
   }, []);
+
+  useEffect(() => {
+    const restoreImportSession = async () => {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        const userId = session?.user?.id || "anon";
+        const storageKey = `dosoImport:${userId}`;
+        setImportStorageKey(storageKey);
+
+        const cachedProducts = localStorage.getItem(`${storageKey}:products`);
+        if (cachedProducts) {
+          const parsed = JSON.parse(cachedProducts);
+          if (Array.isArray(parsed)) {
+            setCrawlerProducts(parsed);
+            setCrawlerFiltered(applyFilterSort(parsed));
+          }
+        }
+
+        const rawId = localStorage.getItem(`${storageKey}:sessionId`);
+        if (!rawId) return;
+        const sessionId = Number(rawId);
+        if (!Number.isInteger(sessionId) || sessionId <= 0) return;
+        if (!session?.access_token) return;
+
+        const res = await fetch(`/api/admin/sync/doso/import/${sessionId}/progress`, {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        const data = (await res.json().catch(() => null)) as DosoImportProgressApiResponse | null;
+        if (!res.ok || !data || !data.ok) return;
+        setImportSession(data.session);
+      } catch {
+        // noop
+      }
+    };
+
+    restoreImportSession();
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`${importStorageKey}:products`, JSON.stringify(crawlerProducts));
+    } catch {
+      // noop
+    }
+  }, [crawlerProducts, importStorageKey]);
+
+  useEffect(() => {
+    if (!importSession) return;
+    if (importSession.status === "completed") {
+      localStorage.removeItem(`${importStorageKey}:sessionId`);
+      return;
+    }
+    localStorage.setItem(`${importStorageKey}:sessionId`, String(importSession.session_id));
+  }, [importSession, importStorageKey]);
+
+  useEffect(() => {
+    if (!importSession || importSession.status !== "running") return;
+    const timer = setInterval(() => {
+      handleRefreshProgress();
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [importSession]);
 
   const fetchSpecTemplates = async () => {
     try {
@@ -287,39 +360,56 @@ export default function CrawlerImport() {
     e.target.value = "";
   };
 
+  const mapRawImportItem = (it: any) => {
+    const images = Array.isArray(it.images)
+      ? it.images
+      : Array.isArray(it.imgs)
+        ? it.imgs
+        : Array.isArray(it.imageUrls)
+          ? it.imageUrls
+          : it.image
+            ? [it.image]
+            : [];
+
+    const _images = images.map((url: string) => ({
+      url,
+      isProduct: true,
+      isDescription: false,
+    }));
+
+    return {
+      productCode: it.productCode || it.code || it.sku || it.id || "無代碼",
+      title: it.title || it.name || "無標題",
+      description: it.description || it.desc || "",
+      wholesalePriceJPY: it.wholesalePriceJPY || it.priceJPY || it.price_jpy || it.jpy || null,
+      wholesalePriceKRW: it.wholesalePriceKRW || it.priceKRW || it.price_krw || it.krw || null,
+      wholesalePriceTWD: it.wholesalePriceTWD || it.priceTWD || it.twd || null,
+      url: it.url || it.link || null,
+      images,
+      _images,
+    };
+  };
+
   const parseJson = (input: any) => {
     const arr = Array.isArray(input) ? input : [input];
-    const mapped = arr.map((it: any) => {
-      const images = Array.isArray(it.images)
-        ? it.images
-        : Array.isArray(it.imgs)
-          ? it.imgs
-          : Array.isArray(it.imageUrls)
-            ? it.imageUrls
-            : it.image
-              ? [it.image]
-              : [];
-      
-      const _images = images.map((url: string) => ({
-        url,
-        isProduct: true,
-        isDescription: false
-      }));
-
-      return {
-        productCode: it.productCode || it.code || it.sku || it.id || "無代碼",
-        title: it.title || it.name || "無標題",
-        description: it.description || it.desc || "",
-        wholesalePriceJPY: it.wholesalePriceJPY || it.priceJPY || it.price_jpy || it.jpy || null,
-        wholesalePriceKRW: it.wholesalePriceKRW || it.priceKRW || it.price_krw || it.krw || null,
-        wholesalePriceTWD: it.wholesalePriceTWD || it.priceTWD || it.twd || null,
-        url: it.url || it.link || null,
-        images,
-        _images,
-      };
-    });
+    const mapped = arr.map((it: any) => mapRawImportItem(it));
     setCrawlerProducts(mapped);
     setCrawlerFiltered(applyFilterSort(mapped));
+  };
+
+  const appendImportedProducts = (products: DosoImportProduct[]) => {
+    if (!products.length) return;
+    const mapped = products.map((p) => mapRawImportItem(p));
+    const merged = [...crawlerProducts, ...mapped];
+    setCrawlerProducts(merged);
+    setCrawlerFiltered(applyFilterSort(merged));
+  };
+
+  const getAdminAccessToken = async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    return session?.access_token || null;
   };
 
   const handleDosoProbe = async () => {
@@ -329,13 +419,9 @@ export default function CrawlerImport() {
       return;
     }
 
-    const targets = dosoTargetsText
-      .split(/\s+/)
-      .map((x) => x.trim())
-      .filter((x) => x.startsWith("https://www.doso.net/"));
-
-    if (targets.length === 0) {
-      alert("請至少提供一個 DOSO 目錄網址");
+    const targetUrl = dosoTargetUrl.trim();
+    if (!targetUrl || !targetUrl.startsWith("https://www.doso.net/")) {
+      alert("請輸入單一 DOSO 目錄網址");
       return;
     }
 
@@ -362,7 +448,7 @@ export default function CrawlerImport() {
         body: JSON.stringify({
           username,
           password: dosoPassword,
-          targets,
+          targets: [targetUrl],
         }),
       });
 
@@ -391,18 +477,15 @@ export default function CrawlerImport() {
       return;
     }
 
-    const targets = dosoTargetsText
-      .split(/\s+/)
-      .map((x) => x.trim())
-      .filter((x) => x.startsWith("https://www.doso.net/"));
-
-    if (targets.length === 0) {
-      alert("請至少提供一個 DOSO 目錄網址");
+    const targetUrl = dosoTargetUrl.trim();
+    if (!targetUrl || !targetUrl.startsWith("https://www.doso.net/")) {
+      alert("請輸入單一 DOSO 目錄網址");
       return;
     }
 
-    if (crawlerProducts.length > 0) {
-      const ok = confirm("目前已有導入清單，是否要以 DOSO 商品覆蓋目前清單？");
+    const shouldResetList = crawlerProducts.length > 0;
+    if (shouldResetList) {
+      const ok = confirm("目前已有導入清單，建立新導入 session 後是否清空並重新開始？");
       if (!ok) return;
     }
 
@@ -410,47 +493,149 @@ export default function CrawlerImport() {
     setProbeError(null);
 
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!session?.access_token) {
+      const accessToken = await getAdminAccessToken();
+      if (!accessToken) {
         setProbeError("尚未登入管理員，請重新登入後再試");
         return;
       }
 
-      const res = await fetch("/api/admin/sync/doso/import", {
+      const res = await fetch("/api/admin/sync/doso/import/start", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
           username,
           password: dosoPassword,
-          targets,
+          target_url: targetUrl,
         }),
       });
 
-      const data = (await res.json().catch(() => null)) as DosoImportResponse | null;
+      const data = (await res.json().catch(() => null)) as DosoImportStartApiResponse | null;
       if (!res.ok || !data) {
         setProbeError((data as any)?.error || `導入失敗 (${res.status})`);
         return;
       }
 
-      if (!data.login_ok) {
-        setProbeError(data.error || "登入失敗");
+      if (!data.ok) {
+        setProbeError(("error" in data ? data.error : null) || "建立導入 session 失敗");
         return;
       }
 
-      parseJson(data.products);
-      setSelectedCrawlerProducts(new Set());
-      alert(`已載入 ${data.products.length} 件 DOSO 商品到導入清單，可直接批量上架。`);
+      setImportSession(data.session);
+
+      if (shouldResetList) {
+        setCrawlerProducts([]);
+        setCrawlerFiltered([]);
+        setSelectedCrawlerProducts(new Set());
+        localStorage.removeItem(`${importStorageKey}:products`);
+      }
+
+      alert(`已建立導入 session，總商品數 ${data.session.total_count}，請按「繼續導入下一批」。`);
     } catch (err) {
       setProbeError(err instanceof Error ? err.message : "導入時發生錯誤");
     } finally {
       setImportLoading(false);
-      setDosoPassword("");
+    }
+  };
+
+  const handleDosoRun = async () => {
+    if (!importSession) {
+      alert("請先建立導入 session");
+      return;
+    }
+
+    setImportLoading(true);
+    setProbeError(null);
+
+    try {
+      const accessToken = await getAdminAccessToken();
+      if (!accessToken) {
+        setProbeError("尚未登入管理員，請重新登入後再試");
+        return;
+      }
+
+      const res = await fetch(`/api/admin/sync/doso/import/${importSession.session_id}/run`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ batch_size: 20 }),
+      });
+
+      const data = (await res.json().catch(() => null)) as DosoImportRunApiResponse | null;
+      if (!res.ok || !data) {
+        setProbeError((data as any)?.error || `續傳失敗 (${res.status})`);
+        return;
+      }
+
+      if (!data.ok) {
+        setProbeError(("error" in data ? data.error : null) || "續傳失敗");
+        return;
+      }
+
+      setImportSession(data.session);
+      appendImportedProducts(data.products || []);
+    } catch (err) {
+      setProbeError(err instanceof Error ? err.message : "續傳時發生錯誤");
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const handleDosoPause = async () => {
+    if (!importSession) return;
+
+    setImportLoading(true);
+    setProbeError(null);
+
+    try {
+      const accessToken = await getAdminAccessToken();
+      if (!accessToken) {
+        setProbeError("尚未登入管理員，請重新登入後再試");
+        return;
+      }
+
+      const res = await fetch(`/api/admin/sync/doso/import/${importSession.session_id}/pause`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      const data = (await res.json().catch(() => null)) as any;
+      if (!res.ok || !data?.ok) {
+        setProbeError(data?.error || `暫停失敗 (${res.status})`);
+        return;
+      }
+
+      setImportSession(data.session as DosoImportSessionProgress);
+    } catch (err) {
+      setProbeError(err instanceof Error ? err.message : "暫停時發生錯誤");
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const handleRefreshProgress = async () => {
+    if (!importSession) return;
+
+    try {
+      const accessToken = await getAdminAccessToken();
+      if (!accessToken) return;
+
+      const res = await fetch(`/api/admin/sync/doso/import/${importSession.session_id}/progress`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      const data = (await res.json().catch(() => null)) as DosoImportProgressApiResponse | null;
+      if (!res.ok || !data || !data.ok) return;
+      setImportSession(data.session);
+    } catch {
+      // noop
     }
   };
 
@@ -1029,11 +1214,13 @@ export default function CrawlerImport() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-text-primary-light mb-1">目錄 URL（空白或換行分隔）</label>
-          <textarea
-            value={dosoTargetsText}
-            onChange={(e) => setDosoTargetsText(e.target.value)}
-            className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm min-h-24"
+          <label className="block text-sm font-medium text-text-primary-light mb-1">目錄 URL（一次僅限一個）</label>
+          <input
+            type="url"
+            value={dosoTargetUrl}
+            onChange={(e) => setDosoTargetUrl(e.target.value)}
+            className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+            placeholder="https://www.doso.net/..."
           />
         </div>
 
@@ -1052,14 +1239,76 @@ export default function CrawlerImport() {
             className="inline-flex items-center gap-2 rounded-lg border border-border-light bg-card-light px-4 py-2 text-sm font-bold text-text-primary-light hover:bg-primary/10 disabled:opacity-50"
           >
             <span className="material-symbols-outlined text-base">download</span>
-            {importLoading ? "導入中..." : "導入商品到清單"}
+            {importLoading ? "處理中..." : "開始導入"}
+          </button>
+          <button
+            onClick={handleDosoRun}
+            disabled={
+              importLoading ||
+              !importSession ||
+              importSession.status === "completed" ||
+              importSession.status === "failed"
+            }
+            className="inline-flex items-center gap-2 rounded-lg border border-border-light bg-card-light px-4 py-2 text-sm font-bold text-text-primary-light hover:bg-primary/10 disabled:opacity-50"
+          >
+            <span className="material-symbols-outlined text-base">play_arrow</span>
+            {importLoading ? "處理中..." : "繼續導入下一批"}
+          </button>
+          <button
+            onClick={handleDosoPause}
+            disabled={
+              importLoading ||
+              !importSession ||
+              importSession.status === "completed" ||
+              importSession.status === "failed"
+            }
+            className="inline-flex items-center gap-2 rounded-lg border border-border-light bg-card-light px-4 py-2 text-sm font-bold text-text-primary-light hover:bg-primary/10 disabled:opacity-50"
+          >
+            <span className="material-symbols-outlined text-base">pause</span>
+            暫停
+          </button>
+          <button
+            onClick={handleRefreshProgress}
+            disabled={importLoading || !importSession}
+            className="inline-flex items-center gap-2 rounded-lg border border-border-light bg-card-light px-4 py-2 text-sm font-bold text-text-primary-light hover:bg-primary/10 disabled:opacity-50"
+          >
+            <span className="material-symbols-outlined text-base">refresh</span>
+            刷新進度
           </button>
           {probeError && <span className="text-sm text-red-600">{probeError}</span>}
         </div>
 
         <p className="text-xs text-text-secondary-light">
-          導入商品會把 DOSO 列表轉成下方導入清單，接著可使用「批量上架」套用分類、標籤與價格策略後上架。
+          導入商品會先建立 session，可中斷後續傳，並自動跳過已存在 SKU。導入成功的商品會追加到下方導入清單。
         </p>
+
+        {importSession && (
+          <div className="rounded-lg border border-border-light p-3 bg-background-light space-y-2">
+            <div className="text-sm text-text-primary-light font-medium">導入進度（Session #{importSession.session_id}）</div>
+            <div className="text-xs text-text-secondary-light">
+              狀態：<span className="font-medium text-text-primary-light">{importSession.status}</span>
+              ，總商品數：<span className="font-medium text-text-primary-light">{importSession.total_count}</span>
+              ，目前進度：<span className="font-medium text-text-primary-light">{importSession.processed_count} / {importSession.total_count}</span>
+            </div>
+            <div className="text-xs text-text-secondary-light">
+              imported：<span className="font-medium text-text-primary-light">{importSession.imported_count}</span>
+              ，skipped：<span className="font-medium text-text-primary-light">{importSession.skipped_count}</span>
+              ，failed：<span className="font-medium text-text-primary-light">{importSession.failed_count}</span>
+            </div>
+            <div className="h-2 rounded bg-border-light overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all"
+                style={{
+                  width: `${
+                    importSession.total_count > 0
+                      ? Math.min(100, Math.round((importSession.processed_count / importSession.total_count) * 100))
+                      : 0
+                  }%`,
+                }}
+              />
+            </div>
+          </div>
+        )}
 
         {probeResult && (
           <div className="overflow-x-auto border border-border-light rounded-lg">
