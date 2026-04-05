@@ -15,7 +15,7 @@ interface CapturedResponse {
 }
 
 const LOGIN_URL = "https://www.doso.net/auth/login";
-const MAX_IMPORT_ROWS_PER_TARGET = 1000;
+const MAX_IMPORT_ROWS_PER_TARGET = 20000;
 const IMPORT_BATCH_SIZE = 20;
 
 const safeJson = (text: string) => {
@@ -665,6 +665,20 @@ const clickListNextPage = async (page: any) => {
       return true;
     }
 
+    const activeItem = document.querySelector("li.ant-pagination-item-active") as HTMLElement | null;
+    if (activeItem) {
+      let sibling = activeItem.nextElementSibling as HTMLElement | null;
+      while (sibling) {
+        const cls = String(sibling.className || "");
+        if (/ant-pagination-item/.test(cls) && !/disabled/i.test(cls)) {
+          const target = (sibling.querySelector("a") as HTMLElement | null) || sibling;
+          target.click();
+          return true;
+        }
+        sibling = sibling.nextElementSibling as HTMLElement | null;
+      }
+    }
+
     return false;
   });
 };
@@ -674,10 +688,11 @@ const collectListRowsAcrossPages = async (
   targetUrl: string,
   captures: CapturedResponse[],
   startCapture: number,
-  maxPages: number = 20
+  maxPages: number = 200
 ) => {
   const mergedRows: any[] = [];
   const seen = new Set<string>();
+  let desiredPages = maxPages;
 
   const appendRows = (rows: any[]) => {
     for (const row of rows) {
@@ -688,19 +703,35 @@ const collectListRowsAcrossPages = async (
     }
   };
 
+  const readCurrentPayload = () => {
+    return pickListPayload(targetUrl, captures.slice(startCapture));
+  };
+
   const readCurrentRows = () => {
-    const payload = pickListPayload(targetUrl, captures.slice(startCapture));
+    const payload = readCurrentPayload();
     return pickRows(payload);
   };
 
+  const syncDesiredPages = () => {
+    const payload = readCurrentPayload();
+    const rows = pickRows(payload);
+    const total = pickTotalCount(payload, rows);
+    if (rows.length > 0 && total > rows.length) {
+      const estimated = Math.ceil(total / rows.length);
+      desiredPages = Math.max(desiredPages, Math.min(estimated, 500));
+    }
+  };
+
+  syncDesiredPages();
   appendRows(readCurrentRows());
 
-  for (let i = 0; i < maxPages; i++) {
+  for (let i = 0; i < desiredPages; i++) {
     const hasNext = await clickListNextPage(page);
     if (!hasNext) break;
 
     await page.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
     await page.waitForTimeout(1200);
+    syncDesiredPages();
 
     const before = seen.size;
     appendRows(readCurrentRows());
