@@ -2,7 +2,8 @@ export interface DosoProbeTargetResult {
   url: string;
   title: string;
   list_ok: boolean;
-  list_count_page: number;
+  total_count: number;
+  estimated_sessions: number;
   samples: Array<{
     id: string;
     title: string;
@@ -41,6 +42,9 @@ export interface DosoImportProduct {
   images: string[];
   wholesalePriceTWD?: number | null;
   wholesalePriceJPY?: number | null;
+  sourceCategoryId?: string | null;
+  sourceCategoryName?: string | null;
+  sourceDirectoryUrl?: string | null;
 }
 
 export interface DosoImportTargetResult {
@@ -169,3 +173,43 @@ export interface DosoCredentialsErrorResponse {
 export type DosoCredentialsApiResponse =
   | DosoCredentialsResponse
   | DosoCredentialsErrorResponse;
+
+export interface DosoSourceCategoryNode {
+  source_category_id: string;
+  name: string;
+  parent_id: string | null;
+  level: number;
+  directory_url: string;
+}
+
+export interface DosoSourceCategoryCache {
+  updated_at: string;
+  directories: Record<string, DosoSourceCategoryNode[]>;
+}
+
+export interface DosoCategoryMappingEntry {
+  l2_id: number;
+  l3_id?: number | null;
+}
+
+export interface DosoSourceCategoryMappingConfig {
+  l1_japan_id: number | null;
+  by_source_category_id: Record<string, DosoCategoryMappingEntry>;
+  directory_fallback: Record<string, DosoCategoryMappingEntry>;
+  updated_at?: string;
+}
+
+export interface DosoSourceCategoryMappingResponse {
+  ok: true;
+  categories: DosoSourceCategoryCache;
+  mapping: DosoSourceCategoryMappingConfig;
+}
+
+export interface DosoSourceCategoryMappingErrorResponse {
+  ok: false;
+  error: string;
+}
+
+export type DosoSourceCategoryMappingApiResponse =
+  | DosoSourceCategoryMappingResponse
+  | DosoSourceCategoryMappingErrorResponse;

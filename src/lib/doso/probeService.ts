@@ -5,6 +5,7 @@ import type {
   DosoImportResponse,
   DosoImportTargetResult,
   DosoProbeResponse,
+  DosoSourceCategoryNode,
   DosoProbeTargetResult,
 } from "@/lib/doso/types";
 
@@ -14,6 +15,8 @@ interface CapturedResponse {
 }
 
 const LOGIN_URL = "https://www.doso.net/auth/login";
+const MAX_IMPORT_ROWS_PER_TARGET = 1000;
+const IMPORT_BATCH_SIZE = 20;
 
 const safeJson = (text: string) => {
   try {
@@ -46,6 +49,25 @@ const pickRows = (payload: any): any[] => {
   }
 
   return [];
+};
+
+const pickTotalCount = (payload: any, fallbackRows: any[] = []): number => {
+  const candidates = [
+    payload?.result?.total,
+    payload?.result?.totalCount,
+    payload?.result?.count,
+    payload?.data?.total,
+    payload?.data?.count,
+    payload?.total,
+    payload?.count,
+  ];
+
+  for (const c of candidates) {
+    const n = Number(c);
+    if (Number.isFinite(n) && n > 0) return Math.floor(n);
+  }
+
+  return fallbackRows.length;
 };
 
 const inferDetailUrl = (targetUrl: string, id: string) => {
@@ -137,9 +159,15 @@ const isLikelyProductImageUrl = (url: string) => {
   if (!/^https?:\/\//i.test(u)) return false;
   if (!/\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(u)) return false;
 
-  // DOSO 站上的圖床來源
+  // DOSO 與各目錄常見圖床來源
   if (/images\.doso\.net/i.test(u)) return true;
   if (/mydoso\.oss-cn-shanghai\.aliyuncs\.com/i.test(u)) return true;
+  if (/etonet\.etoile\.co\.jp/i.test(u)) return true;
+  if (/files\.tanbaya1690\.co\.jp/i.test(u)) return true;
+  if (/webshop\.self\.co\.jp/i.test(u)) return true;
+  if (/fanbi-store\.jp/i.test(u)) return true;
+  if (/makeshop-multi-images\.akamaized\.net/i.test(u)) return true;
+  if (/gomen\.jp/i.test(u)) return true;
 
   return false;
 };
@@ -414,6 +442,9 @@ const mapRowToImportProduct = (targetUrl: string, row: any): DosoImportProduct |
     description,
     url: detailUrl,
     images,
+    sourceCategoryId: String(row.category_id ?? row.cate_id ?? row.category ?? "").trim() || null,
+    sourceCategoryName: String(row.category_name ?? row.categoryName ?? row.cate_name ?? "").trim() || null,
+    sourceDirectoryUrl: targetUrl,
   };
 
   if (priceTwd !== null) mapped.wholesalePriceTWD = Math.floor(priceTwd);
@@ -486,6 +517,92 @@ const pickListPayload = (targetUrl: string, captures: CapturedResponse[]) => {
   return hit ? safeJson(hit.body) : null;
 };
 
+const getRowIdentity = (row: any) =>
+  String(
+    row?.id ?? row?.goods_id ?? row?.product_id ?? row?.site_id ?? row?.code ?? row?.sku ?? row?.item_id ?? ""
+  ).trim();
+
+const clickListNextPage = async (page: any) => {
+  return page.evaluate(() => {
+    const selectors = [
+      ".ant-pagination-next:not(.ant-pagination-disabled) button",
+      ".ant-pagination-next:not(.ant-pagination-disabled)",
+      ".pagination-next:not(.disabled)",
+      "button[aria-label='Next Page']",
+      "a[aria-label='Next Page']",
+      "button[title='Next Page']",
+      "button[title='下一頁']",
+      "a[title='下一頁']",
+    ];
+
+    for (const selector of selectors) {
+      const node = document.querySelector(selector) as HTMLElement | null;
+      if (!node) continue;
+      if (node.getAttribute("disabled") !== null) continue;
+      node.click();
+      return true;
+    }
+
+    const fallbackButtons = Array.from(document.querySelectorAll("button,a")) as HTMLElement[];
+    const textHit = fallbackButtons.find((el) => {
+      const t = (el.textContent || "").trim();
+      if (!t) return false;
+      if (!/下一頁|next/i.test(t)) return false;
+      const cls = String(el.className || "");
+      return !/disabled/i.test(cls) && el.getAttribute("disabled") === null;
+    });
+    if (textHit) {
+      textHit.click();
+      return true;
+    }
+
+    return false;
+  });
+};
+
+const collectListRowsAcrossPages = async (
+  page: any,
+  targetUrl: string,
+  captures: CapturedResponse[],
+  startCapture: number,
+  maxPages: number = 20
+) => {
+  const mergedRows: any[] = [];
+  const seen = new Set<string>();
+
+  const appendRows = (rows: any[]) => {
+    for (const row of rows) {
+      const key = getRowIdentity(row);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      mergedRows.push(row);
+    }
+  };
+
+  const readCurrentRows = () => {
+    const payload = pickListPayload(targetUrl, captures.slice(startCapture));
+    return pickRows(payload);
+  };
+
+  appendRows(readCurrentRows());
+
+  for (let i = 0; i < maxPages; i++) {
+    const hasNext = await clickListNextPage(page);
+    if (!hasNext) break;
+
+    await page.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
+    await page.waitForTimeout(1200);
+
+    const before = seen.size;
+    appendRows(readCurrentRows());
+    if (seen.size === before) {
+      break;
+    }
+  }
+
+  return mergedRows;
+};
+
 const probeSingleTarget = async (
   page: any,
   targetUrl: string,
@@ -495,7 +612,8 @@ const probeSingleTarget = async (
     url: targetUrl,
     title: "",
     list_ok: false,
-    list_count_page: 0,
+    total_count: 0,
+    estimated_sessions: 0,
     samples: [],
     detail_ok: false,
     detail_fields_presence: {
@@ -530,15 +648,9 @@ const probeSingleTarget = async (
       detail_url: s.detail_url || inferDetailUrl(targetUrl, s.id),
     }));
 
-    const listCount =
-      pickRows(listPayload).length ||
-      Number(
-        listPayload?.result?.total ??
-          listPayload?.result?.totalCount ??
-          listPayload?.result?.count ??
-          listPayload?.total ??
-          0
-      );
+    const rows = pickRows(listPayload);
+    const totalCount = pickTotalCount(listPayload, rows);
+    const estimatedSessions = totalCount > 0 ? Math.ceil(totalCount / IMPORT_BATCH_SIZE) : 0;
 
     const detailCandidate = samples.find((s) => s.detail_url)?.detail_url || domDetailLinks[0] || null;
     const detailInfo = await probeDetail(page, detailCandidate);
@@ -546,8 +658,9 @@ const probeSingleTarget = async (
     return {
       ...base,
       title,
-      list_ok: Boolean(listPayload && (listPayload.code === 0 || listCount > 0)),
-      list_count_page: Number(listCount || 0),
+      list_ok: Boolean(listPayload && (listPayload.code === 0 || totalCount > 0)),
+      total_count: totalCount,
+      estimated_sessions: estimatedSessions,
       samples,
       detail_ok: detailInfo.detail_ok,
       detail_fields_presence: detailInfo.detail_fields_presence,
@@ -675,10 +788,11 @@ export async function runDosoImportPreview(input: {
         const title = await page.title();
         const localCaptures = captures.slice(start);
         const listPayload = pickListPayload(target, localCaptures);
-        const rows = pickRows(listPayload);
+        const rowsFromPages = await collectListRowsAcrossPages(page, target, captures, start);
+        const rows = rowsFromPages.length > 0 ? rowsFromPages : pickRows(listPayload);
 
         const mapped = rows
-          .slice(0, 200)
+          .slice(0, MAX_IMPORT_ROWS_PER_TARGET)
           .map((row: any) => mapRowToImportProduct(target, row))
           .filter((x: DosoImportProduct | null): x is DosoImportProduct => Boolean(x));
 
@@ -712,6 +826,182 @@ export async function runDosoImportPreview(input: {
       products: [],
       targets: [],
       error: err instanceof Error ? err.message : "import preview failed",
+    };
+  } finally {
+    await context.close();
+    await browser.close();
+  }
+}
+
+const flattenCategoryNodes = (
+  value: any,
+  directoryUrl: string,
+  parentId: string | null = null,
+  level = 1,
+  out: DosoSourceCategoryNode[] = []
+) => {
+  if (Array.isArray(value)) {
+    for (const row of value) {
+      flattenCategoryNodes(row, directoryUrl, parentId, level, out);
+    }
+    return out;
+  }
+
+  if (!value || typeof value !== "object") {
+    return out;
+  }
+
+  const hasName =
+    typeof value.name === "string" ||
+    typeof value.name_tw === "string" ||
+    typeof value.label === "string" ||
+    typeof value.title === "string";
+  const rawId =
+    value.site_id ??
+    value.id ??
+    value.category_id ??
+    value.cid ??
+    value.code ??
+    null;
+  const nodeId = String(rawId ?? "").trim();
+
+  if (hasName && nodeId) {
+    const nodeParent =
+      value.parent_id !== undefined && value.parent_id !== null
+        ? String(value.parent_id)
+        : value.pid !== undefined && value.pid !== null
+          ? String(value.pid)
+          : parentId;
+
+    out.push({
+      source_category_id: nodeId,
+      name: String(value.name_tw ?? value.name ?? value.label ?? value.title ?? "").trim(),
+      parent_id: nodeParent && nodeParent !== "0" ? nodeParent : null,
+      level,
+      directory_url: directoryUrl,
+    });
+  }
+
+  const children =
+    value.children ?? value.childrens ?? value.child ?? value.list ?? value.items ?? value.sub_category;
+  if (Array.isArray(children) && children.length > 0) {
+    flattenCategoryNodes(children, directoryUrl, nodeId || parentId, level + 1, out);
+  }
+
+  return out;
+};
+
+const dedupCategoryNodes = (nodes: DosoSourceCategoryNode[]) => {
+  const map = new Map<string, DosoSourceCategoryNode>();
+  for (const node of nodes) {
+    const key = `${node.directory_url}::${node.source_category_id}`;
+    if (!map.has(key)) {
+      map.set(key, node);
+    }
+  }
+  return Array.from(map.values());
+};
+
+const extractSourceCategoriesFromSessionStorage = async (page: any, directoryUrl: string) => {
+  const raw = await page.evaluate(() => {
+    const out: Array<{ key: string; value: any }> = [];
+    const keys = Object.keys(sessionStorage);
+    for (const key of keys) {
+      if (!/category|cate/i.test(key)) continue;
+      try {
+        const text = sessionStorage.getItem(key);
+        if (!text) continue;
+        const json = JSON.parse(text);
+        out.push({ key, value: json });
+      } catch {
+        // noop
+      }
+    }
+    return out;
+  });
+
+  const nodes: DosoSourceCategoryNode[] = [];
+  for (const entry of raw as Array<{ key: string; value: any }>) {
+    const value = entry.value;
+    if (Array.isArray(value)) {
+      flattenCategoryNodes(value, directoryUrl, null, 1, nodes);
+    } else if (value && typeof value === "object") {
+      const candidates = [
+        value.categories,
+        value.category,
+        value.categoryTree,
+        value.category_tree,
+        value.data,
+        value.rows,
+        value.list,
+        value.items,
+        value.result,
+      ];
+
+      let parsed = false;
+      for (const c of candidates) {
+        if (Array.isArray(c) || (c && typeof c === "object")) {
+          flattenCategoryNodes(c, directoryUrl, null, 1, nodes);
+          parsed = true;
+          break;
+        }
+      }
+
+      if (!parsed) {
+        flattenCategoryNodes(value, directoryUrl, null, 1, nodes);
+      }
+    }
+  }
+
+  return dedupCategoryNodes(nodes);
+};
+
+export async function runDosoSourceCategoryRefresh(input: {
+  username: string;
+  password: string;
+  targets?: string[];
+}) {
+  const browser = await chromium.launch({ headless: true });
+  const context = await browser.newContext();
+  const page = await context.newPage();
+
+  try {
+    await page.goto(LOGIN_URL, { waitUntil: "networkidle", timeout: 45000 });
+    await page.getByPlaceholder("請輸入用戶名").fill(input.username);
+    await page.getByPlaceholder("密碼").fill(input.password);
+    await page.getByRole("button", { name: /login/i }).click();
+    await page.waitForTimeout(2500);
+
+    if (page.url().includes("/auth/login")) {
+      return {
+        login_ok: false,
+        directories: {},
+        error: "登入失敗，用戶名稱或密碼錯誤",
+      };
+    }
+
+    const targets = (input.targets && input.targets.length > 0 ? input.targets : DEFAULT_DOSO_TARGETS).slice(0, 20);
+    const directories: Record<string, DosoSourceCategoryNode[]> = {};
+
+    for (const target of targets) {
+      try {
+        await page.goto(target, { waitUntil: "networkidle", timeout: 45000 });
+        await page.waitForTimeout(1800);
+        directories[target] = await extractSourceCategoriesFromSessionStorage(page, target);
+      } catch {
+        directories[target] = [];
+      }
+    }
+
+    return {
+      login_ok: true,
+      directories,
+    };
+  } catch (err) {
+    return {
+      login_ok: false,
+      directories: {},
+      error: err instanceof Error ? err.message : "source category refresh failed",
     };
   } finally {
     await context.close();
