@@ -32,3 +32,27 @@ export interface DosoProbeResponse {
   targets: DosoProbeTargetResult[];
   error?: string;
 }
+
+export interface DosoImportProduct {
+  productCode: string;
+  title: string;
+  description: string;
+  url: string | null;
+  images: string[];
+  wholesalePriceTWD?: number;
+  wholesalePriceJPY?: number;
+}
+
+export interface DosoImportTargetResult {
+  url: string;
+  title: string;
+  count: number;
+  error?: string;
+}
+
+export interface DosoImportResponse {
+  login_ok: boolean;
+  products: DosoImportProduct[];
+  targets: DosoImportTargetResult[];
+  error?: string;
+}

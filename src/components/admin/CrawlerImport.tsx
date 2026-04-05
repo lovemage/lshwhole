@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import Script from "next/script";
 import { supabase } from "@/lib/supabase";
 import { DEFAULT_DOSO_TARGETS } from "@/lib/doso/targets";
-import type { DosoProbeResponse } from "@/lib/doso/types";
+import type { DosoImportResponse, DosoProbeResponse } from "@/lib/doso/types";
 
 interface Category {
   id: number;
@@ -110,6 +110,7 @@ export default function CrawlerImport() {
   const [probeLoading, setProbeLoading] = useState(false);
   const [probeError, setProbeError] = useState<string | null>(null);
   const [probeResult, setProbeResult] = useState<DosoProbeResponse | null>(null);
+  const [importLoading, setImportLoading] = useState(false);
 
   useEffect(() => {
     fetchCategories();
@@ -379,6 +380,76 @@ export default function CrawlerImport() {
       setProbeError(err instanceof Error ? err.message : "探測時發生錯誤");
     } finally {
       setProbeLoading(false);
+      setDosoPassword("");
+    }
+  };
+
+  const handleDosoImport = async () => {
+    const username = dosoUsername.trim();
+    if (!username || !dosoPassword) {
+      alert("請輸入 DOSO 帳號與密碼");
+      return;
+    }
+
+    const targets = dosoTargetsText
+      .split(/\s+/)
+      .map((x) => x.trim())
+      .filter((x) => x.startsWith("https://www.doso.net/"));
+
+    if (targets.length === 0) {
+      alert("請至少提供一個 DOSO 目錄網址");
+      return;
+    }
+
+    if (crawlerProducts.length > 0) {
+      const ok = confirm("目前已有導入清單，是否要以 DOSO 商品覆蓋目前清單？");
+      if (!ok) return;
+    }
+
+    setImportLoading(true);
+    setProbeError(null);
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        setProbeError("尚未登入管理員，請重新登入後再試");
+        return;
+      }
+
+      const res = await fetch("/api/admin/sync/doso/import", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          username,
+          password: dosoPassword,
+          targets,
+        }),
+      });
+
+      const data = (await res.json().catch(() => null)) as DosoImportResponse | null;
+      if (!res.ok || !data) {
+        setProbeError((data as any)?.error || `導入失敗 (${res.status})`);
+        return;
+      }
+
+      if (!data.login_ok) {
+        setProbeError(data.error || "登入失敗");
+        return;
+      }
+
+      parseJson(data.products);
+      setSelectedCrawlerProducts(new Set());
+      alert(`已載入 ${data.products.length} 件 DOSO 商品到導入清單，可直接批量上架。`);
+    } catch (err) {
+      setProbeError(err instanceof Error ? err.message : "導入時發生錯誤");
+    } finally {
+      setImportLoading(false);
       setDosoPassword("");
     }
   };
@@ -975,8 +1046,20 @@ export default function CrawlerImport() {
             <span className="material-symbols-outlined text-base">travel_explore</span>
             {probeLoading ? "探測中..." : "探測目錄"}
           </button>
+          <button
+            onClick={handleDosoImport}
+            disabled={importLoading}
+            className="inline-flex items-center gap-2 rounded-lg border border-border-light bg-card-light px-4 py-2 text-sm font-bold text-text-primary-light hover:bg-primary/10 disabled:opacity-50"
+          >
+            <span className="material-symbols-outlined text-base">download</span>
+            {importLoading ? "導入中..." : "導入商品到清單"}
+          </button>
           {probeError && <span className="text-sm text-red-600">{probeError}</span>}
         </div>
+
+        <p className="text-xs text-text-secondary-light">
+          導入商品會把 DOSO 列表轉成下方導入清單，接著可使用「批量上架」套用分類、標籤與價格策略後上架。
+        </p>
 
         {probeResult && (
           <div className="overflow-x-auto border border-border-light rounded-lg">

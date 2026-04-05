@@ -1,6 +1,12 @@
 import { chromium } from "playwright";
 import { DEFAULT_DOSO_TARGETS } from "@/lib/doso/targets";
-import type { DosoProbeResponse, DosoProbeTargetResult } from "@/lib/doso/types";
+import type {
+  DosoImportProduct,
+  DosoImportResponse,
+  DosoImportTargetResult,
+  DosoProbeResponse,
+  DosoProbeTargetResult,
+} from "@/lib/doso/types";
 
 interface CapturedResponse {
   url: string;
@@ -80,6 +86,91 @@ const parseSamples = (payload: any) => {
       detail_url: detailUrl,
     };
   });
+};
+
+const toNumber = (value: any): number | null => {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+};
+
+const collectImages = (row: any): string[] => {
+  const candidates: string[] = [];
+  const listCandidates = [
+    row.images,
+    row.image_list,
+    row.img_list,
+    row.goods_images,
+    row.gallery,
+  ];
+
+  for (const list of listCandidates) {
+    if (Array.isArray(list)) {
+      for (const x of list) {
+        if (typeof x === "string") candidates.push(x);
+        else if (x?.url) candidates.push(String(x.url));
+        else if (x?.src) candidates.push(String(x.src));
+      }
+    }
+  }
+
+  const singleCandidates = [
+    row.image,
+    row.img,
+    row.main_pic,
+    row.main_image,
+    row.goods_image,
+    row.thumb,
+    row.thumbnail,
+  ];
+
+  for (const x of singleCandidates) {
+    if (typeof x === "string" && x) candidates.push(x);
+  }
+
+  return Array.from(new Set(candidates.filter(Boolean)));
+};
+
+const mapRowToImportProduct = (targetUrl: string, row: any): DosoImportProduct | null => {
+  const rawId =
+    row.id ?? row.goods_id ?? row.product_id ?? row.site_id ?? row.code ?? row.sku ?? row.item_id;
+  const productCode = String(rawId || "").trim();
+  const title = String(row.title ?? row.goods_name ?? row.name ?? row.product_name ?? "").trim();
+
+  if (!productCode || !title) return null;
+
+  const detailUrl =
+    row.detail_url || row.url || row.link || inferDetailUrl(targetUrl, productCode) || null;
+  const description = String(
+    row.description ?? row.desc ?? row.brief ?? row.remark ?? row.summary ?? ""
+  ).trim();
+
+  const images = collectImages(row);
+
+  const priceTwd =
+    toNumber(row.price_twd) ??
+    toNumber(row.twd_price) ??
+    toNumber(row.wholesale_price_twd) ??
+    toNumber(row.price_ntd);
+
+  const priceJpy =
+    toNumber(row.price_jpy) ??
+    toNumber(row.price) ??
+    toNumber(row.jpy_price) ??
+    toNumber(row.wholesale_price_jpy);
+
+  const mapped: DosoImportProduct = {
+    productCode,
+    title,
+    description,
+    url: detailUrl,
+    images,
+  };
+
+  if (priceTwd !== null) mapped.wholesalePriceTWD = Math.floor(priceTwd);
+  else if (priceJpy !== null) mapped.wholesalePriceJPY = Math.floor(priceJpy);
+
+  return mapped;
 };
 
 const probeDetail = async (page: any, detailUrl: string | null) => {
@@ -276,6 +367,99 @@ export async function runDosoProbe(input: {
       login_ok: false,
       targets: [],
       error: err instanceof Error ? err.message : "probe failed",
+    };
+  } finally {
+    await context.close();
+    await browser.close();
+  }
+}
+
+export async function runDosoImportPreview(input: {
+  username: string;
+  password: string;
+  targets?: string[];
+}): Promise<DosoImportResponse> {
+  const browser = await chromium.launch({ headless: true });
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  const captures: CapturedResponse[] = [];
+
+  page.on("response", async (resp) => {
+    try {
+      const url = resp.url();
+      if (!url.includes("/mydoso/")) return;
+      const ct = resp.headers()["content-type"] || "";
+      if (!ct.includes("application/json")) return;
+      const body = await resp.text();
+      captures.push({ url, body });
+    } catch {
+      // noop
+    }
+  });
+
+  try {
+    await page.goto(LOGIN_URL, { waitUntil: "networkidle", timeout: 45000 });
+    await page.getByPlaceholder("請輸入用戶名").fill(input.username);
+    await page.getByPlaceholder("密碼").fill(input.password);
+    await page.getByRole("button", { name: /login/i }).click();
+    await page.waitForTimeout(2500);
+
+    if (page.url().includes("/auth/login")) {
+      return {
+        login_ok: false,
+        products: [],
+        targets: [],
+        error: "登入失敗，用戶名稱或密碼錯誤",
+      };
+    }
+
+    const targets = (input.targets && input.targets.length > 0 ? input.targets : DEFAULT_DOSO_TARGETS).slice(0, 20);
+    const products: DosoImportProduct[] = [];
+    const targetResults: DosoImportTargetResult[] = [];
+
+    for (const target of targets) {
+      try {
+        const start = captures.length;
+        await page.goto(target, { waitUntil: "networkidle", timeout: 45000 });
+        await page.waitForTimeout(1500);
+
+        const title = await page.title();
+        const localCaptures = captures.slice(start);
+        const listPayload = pickListPayload(target, localCaptures);
+        const rows = pickRows(listPayload);
+
+        const mapped = rows
+          .map((row: any) => mapRowToImportProduct(target, row))
+          .filter((x: DosoImportProduct | null): x is DosoImportProduct => Boolean(x));
+
+        products.push(...mapped);
+        targetResults.push({ url: target, title, count: mapped.length });
+      } catch (err) {
+        targetResults.push({
+          url: target,
+          title: "",
+          count: 0,
+          error: err instanceof Error ? err.message : "target import preview failed",
+        });
+      }
+    }
+
+    const dedup = new Map<string, DosoImportProduct>();
+    for (const p of products) {
+      dedup.set(p.productCode, p);
+    }
+
+    return {
+      login_ok: true,
+      products: Array.from(dedup.values()),
+      targets: targetResults,
+    };
+  } catch (err) {
+    return {
+      login_ok: false,
+      products: [],
+      targets: [],
+      error: err instanceof Error ? err.message : "import preview failed",
     };
   } finally {
     await context.close();
