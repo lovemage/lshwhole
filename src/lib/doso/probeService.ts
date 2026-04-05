@@ -234,6 +234,33 @@ const scoreListCaptureUrl = (url: string) => {
   return score;
 };
 
+const extractDomOverallTotal = async (page: any): Promise<number | null> => {
+  try {
+    const text = await page.evaluate(() => (document.body?.innerText || "").replace(/\s+/g, " "));
+    if (!text) return null;
+
+    const candidates: number[] = [];
+    const patterns = [
+      /全\s*([\d,]+)\s*件/g,
+      /總\s*([\d,]+)\s*件/g,
+      /total\s*[:：]?\s*([\d,]+)/gi,
+    ];
+
+    for (const pattern of patterns) {
+      let match: RegExpExecArray | null = null;
+      while ((match = pattern.exec(text)) !== null) {
+        const n = Number(String(match[1] || "").replace(/,/g, ""));
+        if (Number.isFinite(n) && n > 0) candidates.push(n);
+      }
+    }
+
+    if (candidates.length === 0) return null;
+    return Math.max(...candidates);
+  } catch {
+    return null;
+  }
+};
+
 const inferDetailUrl = (targetUrl: string, id: string) => {
   if (!id) return null;
   const path = new URL(targetUrl).pathname;
@@ -681,13 +708,13 @@ const pickListPayload = (targetUrl: string, captures: CapturedResponse[]) => {
 
   if (matched.length > 0) {
     let best: { payload: any; score: number } | null = null;
-    for (const cap of matched) {
+    for (const cap of [...matched].reverse()) {
       const payload = safeJson(cap.body);
       if (!payload) continue;
       const scored = scorePayloadByProductLikelihood(payload);
       const urlScore = scoreListCaptureUrl(cap.url);
       const finalScore = scored.score + urlScore;
-      if (!best || finalScore > best.score) {
+      if (!best || finalScore >= best.score) {
         best = { payload, score: finalScore };
       }
     }
@@ -807,6 +834,7 @@ const collectListRowsAcrossPages = async (
   targetUrl: string,
   captures: CapturedResponse[],
   startCapture: number,
+  expectedTotalCount: number | null = null,
   maxPages: number = 200
 ) => {
   const mergedRows: any[] = [];
@@ -834,10 +862,11 @@ const collectListRowsAcrossPages = async (
   const syncDesiredPages = () => {
     const payload = readCurrentPayload();
     const rows = pickRows(payload);
-    const total = pickTotalCount(payload, rows);
+    const payloadTotal = pickTotalCount(payload, rows);
+    const total = Math.max(payloadTotal, expectedTotalCount || 0);
     if (rows.length > 0 && total > rows.length) {
       const estimated = Math.ceil(total / rows.length);
-      desiredPages = Math.max(desiredPages, Math.min(estimated, 500));
+      desiredPages = Math.min(Math.max(desiredPages, estimated), 500);
     }
   };
 
@@ -901,6 +930,7 @@ const probeSingleTarget = async (
 
     const localCaptures = captures.slice(start);
     const listPayload = pickListPayload(targetUrl, localCaptures);
+    const domOverallTotal = await extractDomOverallTotal(page);
 
     const samples = parseSamples(listPayload).map((s) => ({
       ...s,
@@ -908,7 +938,7 @@ const probeSingleTarget = async (
     }));
 
     const rows = pickRows(listPayload);
-    const totalCount = pickTotalCount(listPayload, rows);
+    const totalCount = Math.max(pickTotalCount(listPayload, rows), domOverallTotal || 0);
     const estimatedSessions = totalCount > 0 ? Math.ceil(totalCount / IMPORT_BATCH_SIZE) : 0;
 
     const detailCandidate = samples.find((s) => s.detail_url)?.detail_url || domDetailLinks[0] || null;
@@ -1047,7 +1077,8 @@ export async function runDosoImportPreview(input: {
         const title = await page.title();
         const localCaptures = captures.slice(start);
         const listPayload = pickListPayload(target, localCaptures);
-        const rowsFromPages = await collectListRowsAcrossPages(page, target, captures, start);
+        const domOverallTotal = await extractDomOverallTotal(page);
+        const rowsFromPages = await collectListRowsAcrossPages(page, target, captures, start, domOverallTotal);
         const rows = rowsFromPages.length > 0 ? rowsFromPages : pickRows(listPayload);
 
         const mapped = rows
