@@ -21,16 +21,21 @@ export async function POST(request: NextRequest) {
     const requestUsername = typeof body?.username === "string" ? body.username.trim() : "";
     const requestPassword = typeof body?.password === "string" ? body.password : "";
 
-    if ((requestUsername && !requestPassword) || (!requestUsername && requestPassword)) {
+    if (!requestUsername && requestPassword) {
       return NextResponse.json(
-        { ok: false, error: "請同時輸入帳號與密碼，或兩者皆留空使用已儲存帳密" },
+        { ok: false, error: "僅輸入密碼時需同時輸入帳號" },
         { status: 400 }
       );
     }
 
+    const savedCredentials = await getSavedDosoCredentialsForLogin();
     const credentials = requestUsername && requestPassword
       ? { username: requestUsername, password: requestPassword }
-      : await getSavedDosoCredentialsForLogin();
+      : requestUsername && !requestPassword
+        ? savedCredentials?.username === requestUsername
+          ? savedCredentials
+          : null
+        : savedCredentials;
 
     if (!credentials?.username || !credentials?.password) {
       return NextResponse.json(

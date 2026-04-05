@@ -740,6 +740,7 @@ export async function runDosoImportPreview(input: {
   username: string;
   password: string;
   targets?: string[];
+  includeDetails?: boolean;
 }): Promise<DosoImportResponse> {
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext();
@@ -776,6 +777,7 @@ export async function runDosoImportPreview(input: {
     }
 
     const targets = (input.targets && input.targets.length > 0 ? input.targets : DEFAULT_DOSO_TARGETS).slice(0, 20);
+    const includeDetails = input.includeDetails !== false;
     const products: DosoImportProduct[] = [];
     const targetResults: DosoImportTargetResult[] = [];
 
@@ -796,7 +798,9 @@ export async function runDosoImportPreview(input: {
           .map((row: any) => mapRowToImportProduct(target, row))
           .filter((x: DosoImportProduct | null): x is DosoImportProduct => Boolean(x));
 
-        const enriched = await enrichProductsWithDetails(context, page, target, mapped);
+        const enriched = includeDetails
+          ? await enrichProductsWithDetails(context, page, target, mapped)
+          : mapped;
 
         products.push(...enriched);
         targetResults.push({ url: target, title, count: enriched.length });

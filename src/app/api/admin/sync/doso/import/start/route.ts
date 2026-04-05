@@ -57,19 +57,24 @@ export async function POST(request: NextRequest) {
     const parsedTargetFromCamel = parseSingleDosoTarget(body?.targetUrl);
     const targetUrl = parsedTargetFromSnake || parsedTargetFromCamel;
 
-    if ((requestUsername && !requestPassword) || (!requestUsername && requestPassword)) {
+    if (!requestUsername && requestPassword) {
       return NextResponse.json(
         {
           ok: false,
-          error: "請同時輸入帳號與密碼，或兩者皆留空使用已儲存帳密",
+          error: "僅輸入密碼時需同時輸入帳號",
         } satisfies DosoImportStartApiResponse,
         { status: 400 }
       );
     }
 
+    const savedCredentials = await getSavedDosoCredentialsForLogin();
     const credentials = requestUsername && requestPassword
       ? { username: requestUsername, password: requestPassword }
-      : await getSavedDosoCredentialsForLogin();
+      : requestUsername && !requestPassword
+        ? savedCredentials?.username === requestUsername
+          ? savedCredentials
+          : null
+        : savedCredentials;
 
     if (!credentials?.username || !credentials?.password) {
       return NextResponse.json(
@@ -89,6 +94,7 @@ export async function POST(request: NextRequest) {
       username: credentials.username,
       password: credentials.password,
       targets: [targetUrl],
+      includeDetails: false,
     });
 
     if (!preview.login_ok) {
