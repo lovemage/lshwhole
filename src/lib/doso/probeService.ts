@@ -45,10 +45,20 @@ const isLikelyProductRow = (row: any): boolean => {
   ]);
   const hasImage = hasAny(row, ["image", "img", "main_pic", "main_image", "goods_image", "thumb", "thumbnail", "images"]);
   const hasDetail = hasAny(row, ["detail_url", "url", "link"]);
+  const hasCommerceHints = hasAny(row, [
+    "market_price",
+    "sale_price",
+    "min_price",
+    "max_price",
+    "price_range",
+    "inventory",
+    "stock",
+  ]);
   const looksCategoryOnly = hasAny(row, ["parent_id", "level", "children_count", "child_count", "category_id"]);
 
   if (!hasId || !hasTitle) return false;
-  if (hasPrice || hasImage || hasDetail) return true;
+  if (hasPrice || hasDetail || hasCommerceHints) return true;
+  if (hasImage && !looksCategoryOnly && hasCommerceHints) return true;
   if (looksCategoryOnly) return false;
 
   return false;
@@ -135,11 +145,16 @@ const scorePayloadByProductLikelihood = (payload: any) => {
   const rows = pickRows(payload);
   const productLikeCount = countLikelyProductRows(rows);
   const total = pickTotalCount(payload, rows);
+  const productRatio = rows.length > 0 ? productLikeCount / rows.length : 0;
+  const ratioScore = Math.floor(productRatio * 2000);
+  const totalScore = Math.min(Math.max(0, total), 50000);
+  const countScore = Math.min(productLikeCount, 500);
+
   return {
     rows,
     productLikeCount,
     total,
-    score: productLikeCount * 1000 + Math.max(0, total),
+    score: totalScore * 10 + ratioScore + countScore,
   };
 };
 
@@ -154,6 +169,7 @@ const pickTotalCount = (payload: any, fallbackRows: any[] = []): number => {
     payload?.result?.pager?.count,
     payload?.result?.pageInfo?.total,
     payload?.result?.pageInfo?.count,
+    payload?.result?.pageInfo?.totalCount,
     payload?.result?.data?.total,
     payload?.result?.data?.count,
     payload?.result?.data?.total_num,
@@ -170,6 +186,7 @@ const pickTotalCount = (payload: any, fallbackRows: any[] = []): number => {
     payload?.data?.pager?.count,
     payload?.data?.pageInfo?.total,
     payload?.data?.pageInfo?.count,
+    payload?.data?.pageInfo?.totalCount,
     payload?.data?.data?.total,
     payload?.data?.data?.count,
     payload?.data?.data?.total_num,
@@ -648,18 +665,18 @@ const probeDetail = async (page: any, detailUrl: string | null) => {
 const pickListPayload = (targetUrl: string, captures: CapturedResponse[]) => {
   const targetPath = new URL(targetUrl).pathname;
   const byPath: Record<string, RegExp> = {
-    "/onlineMall/selfOperatedMall": /online_mall\.[^/]+\/get.*List/i,
-    "/onlineMall/PreSelfOperatedMall": /online_mall\.[^/]+\/get.*List/i,
-    "/onlineMall/etonet": /etonet\.[^/]+\/get(?:EtonetRanking)?List|etonet\.[^/]+\/get.*List/i,
-    "/onlineMall/etonetRanking": /etonet\.[^/]+\/get(?:EtonetRanking)?List|etonet\.[^/]+\/get.*List/i,
-    "/onlineMall/tanbaya": /tanbaya\.[^/]+\/get.*List/i,
-    "/onlineMall/dabandaxi": /dabandaxi\.[^/]+\/get.*List/i,
-    "/onlineMall/dabansinei": /dabansinei\.[^/]+\/get.*List/i,
-    "/onlineMall/shineiRanking": /dabansinei\.[^/]+\/get.*List/i,
-    "/onlineMall/gomen": /gomen\.[^/]+\/get.*List/i,
+    "/onlineMall/selfOperatedMall": /online_mall\.selfOperatedMall\/getList/i,
+    "/onlineMall/PreSelfOperatedMall": /online_mall\.selfOperatedMall\/getList/i,
+    "/onlineMall/etonet": /etonet\.etonetGoods\/getList/i,
+    "/onlineMall/etonetRanking": /etonet\.etonetGoods\/getEtonetRankingList/i,
+    "/onlineMall/tanbaya": /tanbaya\.TanbayaGoods\/getList/i,
+    "/onlineMall/dabandaxi": /dabandaxi\.DabandaxiGoods\/getList/i,
+    "/onlineMall/dabansinei": /dabansinei\.DabansineiGoods\/getList/i,
+    "/onlineMall/shineiRanking": /dabansinei\.DabansineiGoods\/getList/i,
+    "/onlineMall/gomen": /gomen\.GomenGoods\/getList/i,
   };
 
-  const pattern = byPath[targetPath] || /getList|getEtonetRankingList/i;
+  const pattern = byPath[targetPath] || /Goods\/getList|getEtonetRankingList|selfOperatedMall\/getList/i;
   const matched = [...captures].filter((x) => pattern.test(x.url));
 
   if (matched.length > 0) {
