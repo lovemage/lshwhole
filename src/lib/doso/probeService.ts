@@ -26,6 +26,35 @@ const safeJson = (text: string) => {
   }
 };
 
+const hasAny = (obj: any, keys: string[]) => keys.some((k) => obj?.[k] !== undefined && obj?.[k] !== null && obj?.[k] !== "");
+
+const isLikelyProductRow = (row: any): boolean => {
+  if (!row || typeof row !== "object") return false;
+
+  const hasId = hasAny(row, ["id", "goods_id", "product_id", "site_id", "code", "sku", "item_id"]);
+  const hasTitle = hasAny(row, ["title", "goods_name", "product_name", "name"]);
+  const hasPrice = hasAny(row, [
+    "price",
+    "price_jpy",
+    "price_twd",
+    "jpy_price",
+    "twd_price",
+    "wholesale_price_jpy",
+    "wholesale_price_twd",
+  ]);
+  const hasImage = hasAny(row, ["image", "img", "main_pic", "main_image", "goods_image", "thumb", "thumbnail", "images"]);
+  const hasDetail = hasAny(row, ["detail_url", "url", "link"]);
+  const looksCategoryOnly = hasAny(row, ["parent_id", "level", "children_count", "child_count", "category_id"]);
+
+  if (!hasId || !hasTitle) return false;
+  if (hasPrice || hasImage || hasDetail) return true;
+  if (looksCategoryOnly) return false;
+
+  return false;
+};
+
+const countLikelyProductRows = (rows: any[]) => rows.reduce((n, row) => n + (isLikelyProductRow(row) ? 1 : 0), 0);
+
 const pickRows = (payload: any): any[] => {
   const candidates = [
     payload?.result?.data,
@@ -62,8 +91,13 @@ const pickRows = (payload: any): any[] => {
     payload?.result,
   ];
 
+  let fallbackRows: any[] = [];
+
   for (const c of candidates) {
-    if (Array.isArray(c)) return c;
+    if (!Array.isArray(c)) continue;
+    if (c.length === 0) continue;
+    if (countLikelyProductRows(c) > 0) return c;
+    if (fallbackRows.length === 0) fallbackRows = c;
   }
 
   const queue: any[] = [payload?.result, payload?.data, payload];
@@ -81,21 +115,10 @@ const pickRows = (payload: any): any[] => {
     if (Array.isArray(current)) {
       if (current.length === 0) continue;
       const first = current[0];
-      if (first && typeof first === "object") {
-        if (
-          "goods_id" in first ||
-          "product_id" in first ||
-          "site_id" in first ||
-          "sku" in first ||
-          "code" in first ||
-          "goods_name" in first ||
-          "product_name" in first ||
-          "title" in first ||
-          ("id" in first && ("name" in first || "title" in first))
-        ) {
-          return current;
-        }
+      if (first && typeof first === "object" && countLikelyProductRows(current) > 0) {
+        return current;
       }
+      if (fallbackRows.length === 0) fallbackRows = current;
       continue;
     }
 
@@ -104,7 +127,19 @@ const pickRows = (payload: any): any[] => {
     }
   }
 
-  return [];
+  return fallbackRows;
+};
+
+const scorePayloadByProductLikelihood = (payload: any) => {
+  const rows = pickRows(payload);
+  const productLikeCount = countLikelyProductRows(rows);
+  const total = pickTotalCount(payload, rows);
+  return {
+    rows,
+    productLikeCount,
+    total,
+    score: productLikeCount * 1000 + Math.max(0, total),
+  };
 };
 
 const pickTotalCount = (payload: any, fallbackRows: any[] = []): number => {
@@ -583,9 +618,19 @@ const pickListPayload = (targetUrl: string, captures: CapturedResponse[]) => {
   };
 
   const pattern = byPath[targetPath] || /getList|getEtonetRankingList/i;
-  const hit = [...captures].reverse().find((x) => pattern.test(x.url));
-  if (hit) {
-    return safeJson(hit.body);
+  const matched = [...captures].filter((x) => pattern.test(x.url));
+
+  if (matched.length > 0) {
+    let best: { payload: any; score: number } | null = null;
+    for (const cap of matched) {
+      const payload = safeJson(cap.body);
+      if (!payload) continue;
+      const scored = scorePayloadByProductLikelihood(payload);
+      if (!best || scored.score > best.score) {
+        best = { payload, score: scored.score };
+      }
+    }
+    if (best) return best.payload;
   }
 
   const moduleHintByPath: Record<string, RegExp> = {
@@ -602,26 +647,37 @@ const pickListPayload = (targetUrl: string, captures: CapturedResponse[]) => {
 
   const moduleHint = moduleHintByPath[targetPath];
   if (moduleHint) {
+    let best: { payload: any; score: number } | null = null;
     for (const cap of [...captures].reverse()) {
       if (!moduleHint.test(cap.url)) continue;
       const payload = safeJson(cap.body);
       if (!payload) continue;
       const rows = pickRows(payload);
       if (rows.length > 0 || pickTotalCount(payload, rows) > 0) {
-        return payload;
+        const scored = scorePayloadByProductLikelihood(payload);
+        if (!best || scored.score > best.score) {
+          best = { payload, score: scored.score };
+        }
       }
     }
+    if (best) return best.payload;
   }
 
+  let bestGlobal: { payload: any; score: number } | null = null;
   for (const cap of [...captures].reverse()) {
     if (!/\/mydoso\//i.test(cap.url)) continue;
     const payload = safeJson(cap.body);
     if (!payload) continue;
     const rows = pickRows(payload);
     if (rows.length > 0 || pickTotalCount(payload, rows) > 0) {
-      return payload;
+      const scored = scorePayloadByProductLikelihood(payload);
+      if (!bestGlobal || scored.score > bestGlobal.score) {
+        bestGlobal = { payload, score: scored.score };
+      }
     }
   }
+
+  if (bestGlobal) return bestGlobal.payload;
 
   return null;
 };

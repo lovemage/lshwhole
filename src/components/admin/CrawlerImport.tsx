@@ -835,6 +835,40 @@ export default function CrawlerImport() {
     }
   };
 
+  const handleResetImportSession = async () => {
+    const hasSession = Boolean(importSession);
+    if (!hasSession) {
+      localStorage.removeItem(`${importStorageKey}:sessionId`);
+      alert("已清除本機導入 session 記錄");
+      return;
+    }
+
+    const ok = confirm("確定要重置目前導入 session 嗎？此動作不會刪除已導入商品清單。");
+    if (!ok) return;
+
+    setImportLoading(true);
+    setProbeError(null);
+
+    try {
+      if (importSession && importSession.status === "running") {
+        const accessToken = await getAdminAccessToken();
+        if (accessToken) {
+          await fetch(`/api/admin/sync/doso/import/${importSession.session_id}/pause`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${accessToken}`,
+            },
+          }).catch(() => null);
+        }
+      }
+    } finally {
+      setImportSession(null);
+      localStorage.removeItem(`${importStorageKey}:sessionId`);
+      setImportLoading(false);
+    }
+  };
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -1563,6 +1597,14 @@ export default function CrawlerImport() {
           >
             <span className="material-symbols-outlined text-base">pause</span>
             暫停
+          </button>
+          <button
+            onClick={handleResetImportSession}
+            disabled={importLoading}
+            className="inline-flex items-center gap-2 rounded-lg border border-border-light bg-card-light px-4 py-2 text-sm font-bold text-text-primary-light hover:bg-primary/10 disabled:opacity-50"
+          >
+            <span className="material-symbols-outlined text-base">restart_alt</span>
+            重置 Session
           </button>
           {probeError && <span className="text-sm text-red-600">{probeError}</span>}
         </div>
