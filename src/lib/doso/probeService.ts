@@ -17,9 +17,50 @@ const safeJson = (text: string) => {
   }
 };
 
+const pickRows = (payload: any): any[] => {
+  const candidates = [
+    payload?.result?.data,
+    payload?.result?.list,
+    payload?.result?.rows,
+    payload?.result?.records,
+    payload?.result?.items,
+    payload?.data?.list,
+    payload?.data?.rows,
+    payload?.data?.records,
+    payload?.data?.items,
+    payload?.rows,
+    payload?.records,
+    payload?.list,
+    payload?.items,
+    payload?.result,
+  ];
+
+  for (const c of candidates) {
+    if (Array.isArray(c)) return c;
+  }
+
+  return [];
+};
+
+const inferDetailUrl = (targetUrl: string, id: string) => {
+  if (!id) return null;
+  const path = new URL(targetUrl).pathname;
+
+  if (path === "/onlineMall/selfOperatedMall" || path === "/onlineMall/PreSelfOperatedMall") {
+    return `https://www.doso.net/onlineMall/selfOperatedMall/SelfOperatedGoodsDetailPage/${id}`;
+  }
+  if (path === "/onlineMall/etonet" || path === "/onlineMall/etonetRanking") {
+    return `https://www.doso.net/onlineMall/etonet/DetailPage/${id}`;
+  }
+  if (path === "/onlineMall/tanbaya") {
+    return `https://www.doso.net/onlineMall/tanbaya/tanbayaDetailPage/${id}`;
+  }
+
+  return null;
+};
+
 const parseSamples = (payload: any) => {
-  const rows = payload?.result?.data || payload?.result?.list || payload?.result || [];
-  if (!Array.isArray(rows)) return [];
+  const rows = pickRows(payload);
   return rows.slice(0, 3).map((row: any) => {
     const id = String(
       row.id ?? row.goods_id ?? row.product_id ?? row.site_id ?? row.code ?? row.sku ?? ""
@@ -132,16 +173,34 @@ const probeSingleTarget = async (
     await page.waitForTimeout(1500);
 
     const title = await page.title();
+    const domDetailLinks: string[] = await page.evaluate(() => {
+      const links = Array.from(
+        document.querySelectorAll('a[href*="DetailPage"],a[href*="detailPage"],a[href*="detail"]')
+      )
+        .map((a) => (a as HTMLAnchorElement).href)
+        .filter(Boolean);
+      return Array.from(new Set(links)).slice(0, 20);
+    });
+
     const localCaptures = captures.slice(start);
     const listPayload = pickListPayload(targetUrl, localCaptures);
 
-    const samples = parseSamples(listPayload);
-    const listCount =
-      listPayload?.result?.data?.length ??
-      listPayload?.result?.list?.length ??
-      (Array.isArray(listPayload?.result) ? listPayload.result.length : 0);
+    const samples = parseSamples(listPayload).map((s) => ({
+      ...s,
+      detail_url: s.detail_url || inferDetailUrl(targetUrl, s.id),
+    }));
 
-    const detailCandidate = samples.find((s) => s.detail_url)?.detail_url || null;
+    const listCount =
+      pickRows(listPayload).length ||
+      Number(
+        listPayload?.result?.total ??
+          listPayload?.result?.totalCount ??
+          listPayload?.result?.count ??
+          listPayload?.total ??
+          0
+      );
+
+    const detailCandidate = samples.find((s) => s.detail_url)?.detail_url || domDetailLinks[0] || null;
     const detailInfo = await probeDetail(page, detailCandidate);
 
     return {
