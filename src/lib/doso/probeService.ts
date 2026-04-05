@@ -131,6 +131,168 @@ const collectImages = (row: any): string[] => {
   return Array.from(new Set(candidates.filter(Boolean)));
 };
 
+const getDetailEndpoint = (targetUrl: string) => {
+  const path = new URL(targetUrl).pathname;
+
+  if (path === "/onlineMall/selfOperatedMall" || path === "/onlineMall/PreSelfOperatedMall") {
+    return "https://www.doso.net/mydoso/online_mall.selfOperatedMall/getSelfOperatedGoodsDetail";
+  }
+  if (path === "/onlineMall/etonet" || path === "/onlineMall/etonetRanking") {
+    return "https://www.doso.net/mydoso/etonet.etonetGoods/getGoodsDetail";
+  }
+  if (path === "/onlineMall/tanbaya") {
+    return "https://www.doso.net/mydoso/tanbaya.TanbayaGoods/getGoodsDetail";
+  }
+  if (path === "/onlineMall/dabandaxi") {
+    return "https://www.doso.net/mydoso/dabandaxi.DabandaxiGoods/getGoodsDetail";
+  }
+  if (path === "/onlineMall/dabansinei" || path === "/onlineMall/shineiRanking") {
+    return "https://www.doso.net/mydoso/dabansinei.DabansineiGoods/getGoodsDetail";
+  }
+  if (path === "/onlineMall/gomen") {
+    return "https://www.doso.net/mydoso/gomen.GomenGoods/getGoodsDetail";
+  }
+
+  return null;
+};
+
+const normalizeDetailObject = (payload: any): any => {
+  const cands = [payload?.result?.data, payload?.result?.item, payload?.result, payload?.data, payload];
+  for (const c of cands) {
+    if (Array.isArray(c) && c.length > 0) return c[0];
+    if (c && typeof c === "object") return c;
+  }
+  return null;
+};
+
+const specsToText = (value: any): string => {
+  if (!value) return "";
+
+  if (typeof value === "string") return value.trim();
+
+  if (!Array.isArray(value)) return "";
+
+  const lines = value
+    .map((row: any) => {
+      if (typeof row === "string") return row.trim();
+      if (!row || typeof row !== "object") return "";
+
+      const k = String(row.name ?? row.key ?? row.title ?? row.label ?? "").trim();
+      const rawV = row.value ?? row.values ?? row.content ?? row.text ?? "";
+      const v = Array.isArray(rawV)
+        ? rawV.map((x) => String(x).trim()).filter(Boolean).join("/")
+        : String(rawV).trim();
+
+      if (!k && !v) return "";
+      return `${k}: ${v}`.trim();
+    })
+    .filter(Boolean);
+
+  return lines.join("\n");
+};
+
+const mergeDetailIntoProduct = (product: DosoImportProduct, detailPayload: any): DosoImportProduct => {
+  const d = normalizeDetailObject(detailPayload);
+  if (!d) return product;
+
+  const desc = String(
+    d.description ?? d.desc ?? d.detail ?? d.content ?? d.goods_desc ?? d.intro ?? d.goods_intro ?? ""
+  ).trim();
+  const specsText = specsToText(d.specs ?? d.spec ?? d.attributes ?? d.attr_list ?? d.spec_list);
+
+  const description = [product.description, desc, specsText]
+    .map((x) => (x || "").trim())
+    .filter(Boolean)
+    .join("\n\n");
+
+  const mergedImages = Array.from(new Set([...product.images, ...collectImages(d)]));
+
+  const merged: DosoImportProduct = {
+    ...product,
+    description: description || product.description,
+    images: mergedImages,
+  };
+
+  if (merged.wholesalePriceTWD === undefined) {
+    const twd =
+      toNumber(d.price_twd) ??
+      toNumber(d.twd_price) ??
+      toNumber(d.wholesale_price_twd) ??
+      toNumber(d.price_ntd);
+    if (twd !== null) merged.wholesalePriceTWD = Math.floor(twd);
+  }
+
+  if (merged.wholesalePriceTWD === undefined && merged.wholesalePriceJPY === undefined) {
+    const jpy =
+      toNumber(d.price_jpy) ??
+      toNumber(d.price) ??
+      toNumber(d.jpy_price) ??
+      toNumber(d.wholesale_price_jpy);
+    if (jpy !== null) merged.wholesalePriceJPY = Math.floor(jpy);
+  }
+
+  return merged;
+};
+
+const fetchDetailPayload = async (context: any, targetUrl: string, productCode: string) => {
+  const endpoint = getDetailEndpoint(targetUrl);
+  if (!endpoint || !productCode) return null;
+
+  const encoded = encodeURIComponent(productCode);
+  const queryUrl = `${endpoint}?id=${encoded}&goods_id=${encoded}&product_id=${encoded}&site_id=${encoded}`;
+
+  try {
+    const getResp = await context.request.get(queryUrl, { timeout: 15000 });
+    if (getResp.ok()) {
+      const text = await getResp.text();
+      const json = safeJson(text);
+      if (json && (json.code === 0 || json.result || json.data)) return json;
+    }
+  } catch {
+    // noop
+  }
+
+  const bodies = [
+    { id: productCode },
+    { goods_id: productCode },
+    { product_id: productCode },
+    { site_id: productCode },
+    { id: productCode, goods_id: productCode, product_id: productCode, site_id: productCode },
+  ];
+
+  for (const body of bodies) {
+    try {
+      const postResp = await context.request.post(endpoint, {
+        data: body,
+        timeout: 15000,
+      });
+      if (!postResp.ok()) continue;
+      const text = await postResp.text();
+      const json = safeJson(text);
+      if (json && (json.code === 0 || json.result || json.data)) return json;
+    } catch {
+      // noop
+    }
+  }
+
+  return null;
+};
+
+const enrichProductsWithDetails = async (
+  context: any,
+  targetUrl: string,
+  products: DosoImportProduct[]
+): Promise<DosoImportProduct[]> => {
+  const out: DosoImportProduct[] = [];
+
+  for (const p of products) {
+    const detail = await fetchDetailPayload(context, targetUrl, p.productCode);
+    out.push(detail ? mergeDetailIntoProduct(p, detail) : p);
+  }
+
+  return out;
+};
+
 const mapRowToImportProduct = (targetUrl: string, row: any): DosoImportProduct | null => {
   const rawId =
     row.id ?? row.goods_id ?? row.product_id ?? row.site_id ?? row.code ?? row.sku ?? row.item_id;
@@ -432,8 +594,10 @@ export async function runDosoImportPreview(input: {
           .map((row: any) => mapRowToImportProduct(target, row))
           .filter((x: DosoImportProduct | null): x is DosoImportProduct => Boolean(x));
 
-        products.push(...mapped);
-        targetResults.push({ url: target, title, count: mapped.length });
+        const enriched = await enrichProductsWithDetails(context, target, mapped);
+
+        products.push(...enriched);
+        targetResults.push({ url: target, title, count: enriched.length });
       } catch (err) {
         targetResults.push({
           url: target,
