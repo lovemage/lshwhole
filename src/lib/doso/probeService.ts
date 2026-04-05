@@ -33,10 +33,28 @@ const pickRows = (payload: any): any[] => {
     payload?.result?.rows,
     payload?.result?.records,
     payload?.result?.items,
+    payload?.result?.goods,
+    payload?.result?.goodsList,
+    payload?.result?.productList,
+    payload?.result?.page?.list,
+    payload?.result?.page?.records,
+    payload?.result?.page?.items,
+    payload?.result?.pageData?.list,
+    payload?.result?.pageData?.records,
+    payload?.result?.pageData?.items,
     payload?.data?.list,
     payload?.data?.rows,
     payload?.data?.records,
     payload?.data?.items,
+    payload?.data?.goods,
+    payload?.data?.goodsList,
+    payload?.data?.productList,
+    payload?.data?.page?.list,
+    payload?.data?.page?.records,
+    payload?.data?.page?.items,
+    payload?.data?.pageData?.list,
+    payload?.data?.pageData?.records,
+    payload?.data?.pageData?.items,
     payload?.rows,
     payload?.records,
     payload?.list,
@@ -46,6 +64,44 @@ const pickRows = (payload: any): any[] => {
 
   for (const c of candidates) {
     if (Array.isArray(c)) return c;
+  }
+
+  const queue: any[] = [payload?.result, payload?.data, payload];
+  const visited = new Set<any>();
+  let depth = 0;
+
+  while (queue.length > 0 && depth < 80) {
+    const current = queue.shift();
+    depth += 1;
+
+    if (!current || typeof current !== "object") continue;
+    if (visited.has(current)) continue;
+    visited.add(current);
+
+    if (Array.isArray(current)) {
+      if (current.length === 0) continue;
+      const first = current[0];
+      if (first && typeof first === "object") {
+        if (
+          "goods_id" in first ||
+          "product_id" in first ||
+          "site_id" in first ||
+          "sku" in first ||
+          "code" in first ||
+          "goods_name" in first ||
+          "product_name" in first ||
+          "title" in first ||
+          ("id" in first && ("name" in first || "title" in first))
+        ) {
+          return current;
+        }
+      }
+      continue;
+    }
+
+    for (const value of Object.values(current)) {
+      if (value && typeof value === "object") queue.push(value);
+    }
   }
 
   return [];
@@ -58,8 +114,22 @@ const pickTotalCount = (payload: any, fallbackRows: any[] = []): number => {
     payload?.result?.count,
     payload?.data?.total,
     payload?.data?.count,
+    payload?.result?.total_num,
+    payload?.result?.totalNum,
+    payload?.result?.page?.total,
+    payload?.result?.page?.count,
+    payload?.result?.pageData?.total,
+    payload?.result?.pageData?.count,
+    payload?.data?.total_num,
+    payload?.data?.totalNum,
+    payload?.data?.page?.total,
+    payload?.data?.page?.count,
+    payload?.data?.pageData?.total,
+    payload?.data?.pageData?.count,
     payload?.total,
     payload?.count,
+    payload?.total_num,
+    payload?.totalNum,
   ];
 
   for (const c of candidates) {
@@ -501,15 +571,15 @@ const probeDetail = async (page: any, detailUrl: string | null) => {
 const pickListPayload = (targetUrl: string, captures: CapturedResponse[]) => {
   const targetPath = new URL(targetUrl).pathname;
   const byPath: Record<string, RegExp> = {
-    "/onlineMall/selfOperatedMall": /online_mall\.selfOperatedMall\/getList/i,
-    "/onlineMall/PreSelfOperatedMall": /online_mall\.selfOperatedMall\/getList/i,
+    "/onlineMall/selfOperatedMall": /online_mall\.[^/]+\/get.*List/i,
+    "/onlineMall/PreSelfOperatedMall": /online_mall\.[^/]+\/get.*List/i,
     "/onlineMall/etonet": /etonet\.[^/]+\/get(?:EtonetRanking)?List|etonet\.[^/]+\/get.*List/i,
     "/onlineMall/etonetRanking": /etonet\.[^/]+\/get(?:EtonetRanking)?List|etonet\.[^/]+\/get.*List/i,
-    "/onlineMall/tanbaya": /tanbaya\.TanbayaGoods\/getList/i,
-    "/onlineMall/dabandaxi": /dabandaxi\.DabandaxiGoods\/getList/i,
-    "/onlineMall/dabansinei": /dabansinei\.DabansineiGoods\/getList/i,
-    "/onlineMall/shineiRanking": /dabansinei\.DabansineiGoods\/getList/i,
-    "/onlineMall/gomen": /gomen\.GomenGoods\/getList/i,
+    "/onlineMall/tanbaya": /tanbaya\.[^/]+\/get.*List/i,
+    "/onlineMall/dabandaxi": /dabandaxi\.[^/]+\/get.*List/i,
+    "/onlineMall/dabansinei": /dabansinei\.[^/]+\/get.*List/i,
+    "/onlineMall/shineiRanking": /dabansinei\.[^/]+\/get.*List/i,
+    "/onlineMall/gomen": /gomen\.[^/]+\/get.*List/i,
   };
 
   const pattern = byPath[targetPath] || /getList|getEtonetRankingList/i;
@@ -518,15 +588,38 @@ const pickListPayload = (targetUrl: string, captures: CapturedResponse[]) => {
     return safeJson(hit.body);
   }
 
-  if (targetPath === "/onlineMall/etonet" || targetPath === "/onlineMall/etonetRanking") {
+  const moduleHintByPath: Record<string, RegExp> = {
+    "/onlineMall/selfOperatedMall": /\/mydoso\/(online_mall\.|selfOperatedMall)/i,
+    "/onlineMall/PreSelfOperatedMall": /\/mydoso\/(online_mall\.|selfOperatedMall)/i,
+    "/onlineMall/etonet": /\/mydoso\/etonet\./i,
+    "/onlineMall/etonetRanking": /\/mydoso\/etonet\./i,
+    "/onlineMall/tanbaya": /\/mydoso\/tanbaya\./i,
+    "/onlineMall/dabandaxi": /\/mydoso\/dabandaxi\./i,
+    "/onlineMall/dabansinei": /\/mydoso\/dabansinei\./i,
+    "/onlineMall/shineiRanking": /\/mydoso\/dabansinei\./i,
+    "/onlineMall/gomen": /\/mydoso\/gomen\./i,
+  };
+
+  const moduleHint = moduleHintByPath[targetPath];
+  if (moduleHint) {
     for (const cap of [...captures].reverse()) {
-      if (!/\/mydoso\/etonet\./i.test(cap.url)) continue;
+      if (!moduleHint.test(cap.url)) continue;
       const payload = safeJson(cap.body);
       if (!payload) continue;
       const rows = pickRows(payload);
       if (rows.length > 0 || pickTotalCount(payload, rows) > 0) {
         return payload;
       }
+    }
+  }
+
+  for (const cap of [...captures].reverse()) {
+    if (!/\/mydoso\//i.test(cap.url)) continue;
+    const payload = safeJson(cap.body);
+    if (!payload) continue;
+    const rows = pickRows(payload);
+    if (rows.length > 0 || pickTotalCount(payload, rows) > 0) {
+      return payload;
     }
   }
 
