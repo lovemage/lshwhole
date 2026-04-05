@@ -148,6 +148,12 @@ const normalizeImageUrls = (urls: string[]) => {
   return Array.from(new Set(urls.map((u) => u.trim()).filter((u) => isLikelyProductImageUrl(u))));
 };
 
+const extractImageUrlsFromText = (text: string) => {
+  const matched =
+    text.match(/https?:\/\/[^\s\"'<>]+\.(?:jpg|jpeg|png|webp|gif)(?:\?[^\s\"'<>]*)?/gi) || [];
+  return normalizeImageUrls(matched);
+};
+
 const getDetailEndpoint = (targetUrl: string) => {
   const path = new URL(targetUrl).pathname;
 
@@ -297,15 +303,11 @@ const fetchDetailPayload = async (context: any, targetUrl: string, productCode: 
 
 const extractDetailImagesViaBrowser = async (
   page: any,
-  detailUrl: string | null,
   productCode: string
 ): Promise<string[]> => {
-  if (!detailUrl) return [];
+  if (!productCode) return [];
 
   try {
-    await page.goto(detailUrl, { waitUntil: "networkidle", timeout: 45000 });
-    await page.waitForTimeout(1000);
-
     const found = await page.evaluate((code: string) => {
       const out = new Set<string>();
 
@@ -365,10 +367,11 @@ const enrichProductsWithDetails = async (
     const detail = await fetchDetailPayload(context, targetUrl, p.productCode);
     const merged = detail ? mergeDetailIntoProduct(p, detail) : p;
 
-    const browserImages = await extractDetailImagesViaBrowser(page, merged.url, merged.productCode);
+    const browserImages = await extractDetailImagesViaBrowser(page, merged.productCode);
+    const descImages = extractImageUrlsFromText(merged.description || "");
     const withBrowserImages: DosoImportProduct = {
       ...merged,
-      images: normalizeImageUrls([...merged.images, ...browserImages]),
+      images: normalizeImageUrls([...merged.images, ...browserImages, ...descImages]),
     };
 
     out.push(withBrowserImages);
@@ -675,6 +678,7 @@ export async function runDosoImportPreview(input: {
         const rows = pickRows(listPayload);
 
         const mapped = rows
+          .slice(0, 40)
           .map((row: any) => mapRowToImportProduct(target, row))
           .filter((x: DosoImportProduct | null): x is DosoImportProduct => Boolean(x));
 
