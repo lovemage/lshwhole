@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import Script from "next/script";
 import { supabase } from "@/lib/supabase";
+import { DEFAULT_DOSO_TARGETS } from "@/lib/doso/targets";
+import type { DosoProbeResponse } from "@/lib/doso/types";
 
 interface Category {
   id: number;
@@ -101,6 +103,13 @@ export default function CrawlerImport() {
 
   // Batch image editor
   const [showBatchImageEditor, setShowBatchImageEditor] = useState(false);
+
+  const [dosoUsername, setDosoUsername] = useState("");
+  const [dosoPassword, setDosoPassword] = useState("");
+  const [dosoTargetsText, setDosoTargetsText] = useState(DEFAULT_DOSO_TARGETS.join("\n"));
+  const [probeLoading, setProbeLoading] = useState(false);
+  const [probeError, setProbeError] = useState<string | null>(null);
+  const [probeResult, setProbeResult] = useState<DosoProbeResponse | null>(null);
 
   useEffect(() => {
     fetchCategories();
@@ -310,6 +319,68 @@ export default function CrawlerImport() {
     });
     setCrawlerProducts(mapped);
     setCrawlerFiltered(applyFilterSort(mapped));
+  };
+
+  const handleDosoProbe = async () => {
+    const username = dosoUsername.trim();
+    if (!username || !dosoPassword) {
+      alert("請輸入 DOSO 帳號與密碼");
+      return;
+    }
+
+    const targets = dosoTargetsText
+      .split(/\s+/)
+      .map((x) => x.trim())
+      .filter((x) => x.startsWith("https://www.doso.net/"));
+
+    if (targets.length === 0) {
+      alert("請至少提供一個 DOSO 目錄網址");
+      return;
+    }
+
+    setProbeLoading(true);
+    setProbeError(null);
+    setProbeResult(null);
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        setProbeError("尚未登入管理員，請重新登入後再試");
+        return;
+      }
+
+      const res = await fetch("/api/admin/sync/doso/probe", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          username,
+          password: dosoPassword,
+          targets,
+        }),
+      });
+
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setProbeError(data?.error || `探測失敗 (${res.status})`);
+        return;
+      }
+
+      setProbeResult(data as DosoProbeResponse);
+      if (!(data as DosoProbeResponse).login_ok) {
+        setProbeError((data as DosoProbeResponse).error || "登入失敗");
+      }
+    } catch (err) {
+      setProbeError(err instanceof Error ? err.message : "探測時發生錯誤");
+    } finally {
+      setProbeLoading(false);
+      setDosoPassword("");
+    }
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -856,6 +927,100 @@ export default function CrawlerImport() {
           </div>
         </div>
       )}
+
+      <div className="rounded-xl border border-border-light bg-card-light p-4 space-y-4">
+        <div>
+          <h3 className="text-lg font-bold text-text-primary-light">DOSO 目錄探測（一次性帳密）</h3>
+          <p className="text-xs text-text-secondary-light mt-1">輸入 DOSO 帳密後只做本次探測，不儲存帳密。</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-text-primary-light mb-1">DOSO 帳號</label>
+            <input
+              type="text"
+              value={dosoUsername}
+              onChange={(e) => setDosoUsername(e.target.value)}
+              className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+              placeholder="例如：陳奕如"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-text-primary-light mb-1">DOSO 密碼</label>
+            <input
+              type="password"
+              value={dosoPassword}
+              onChange={(e) => setDosoPassword(e.target.value)}
+              className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+              placeholder="輸入本次探測密碼"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-text-primary-light mb-1">目錄 URL（空白或換行分隔）</label>
+          <textarea
+            value={dosoTargetsText}
+            onChange={(e) => setDosoTargetsText(e.target.value)}
+            className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm min-h-24"
+          />
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleDosoProbe}
+            disabled={probeLoading}
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50"
+          >
+            <span className="material-symbols-outlined text-base">travel_explore</span>
+            {probeLoading ? "探測中..." : "探測目錄"}
+          </button>
+          {probeError && <span className="text-sm text-red-600">{probeError}</span>}
+        </div>
+
+        {probeResult && (
+          <div className="overflow-x-auto border border-border-light rounded-lg">
+            <table className="min-w-full text-sm">
+              <thead className="bg-background-light text-text-secondary-light">
+                <tr>
+                  <th className="text-left px-3 py-2">目錄</th>
+                  <th className="text-left px-3 py-2">列表</th>
+                  <th className="text-left px-3 py-2">當頁筆數</th>
+                  <th className="text-left px-3 py-2">詳情</th>
+                  <th className="text-left px-3 py-2">樣本</th>
+                </tr>
+              </thead>
+              <tbody>
+                {probeResult.targets.map((t, idx) => (
+                  <tr key={`${t.url}-${idx}`} className="border-t border-border-light">
+                    <td className="px-3 py-2 align-top">
+                      <div className="font-medium text-text-primary-light">{t.title || "(無標題)"}</div>
+                      <div className="text-xs text-text-secondary-light break-all">{t.url}</div>
+                      {t.error && <div className="text-xs text-red-600 mt-1">{t.error}</div>}
+                    </td>
+                    <td className="px-3 py-2 align-top">{t.list_ok ? "OK" : "FAIL"}</td>
+                    <td className="px-3 py-2 align-top">{t.list_count_page}</td>
+                    <td className="px-3 py-2 align-top">{t.detail_ok ? "OK" : "FAIL"}</td>
+                    <td className="px-3 py-2 align-top">
+                      {t.samples.length === 0 ? (
+                        <span className="text-text-secondary-light">無</span>
+                      ) : (
+                        <div className="space-y-1">
+                          {t.samples.map((s, i) => (
+                            <div key={`${s.id}-${i}`} className="text-xs text-text-secondary-light">
+                              {s.id || "-"} / {s.title || "-"}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {/* 上架前：預設分類與標籤 */}
       <div className="rounded-xl border border-border-light bg-card-light p-4">
