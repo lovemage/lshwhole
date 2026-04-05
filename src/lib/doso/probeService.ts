@@ -131,6 +131,23 @@ const collectImages = (row: any): string[] => {
   return Array.from(new Set(candidates.filter(Boolean)));
 };
 
+const isLikelyProductImageUrl = (url: string) => {
+  if (!url) return false;
+  const u = url.trim();
+  if (!/^https?:\/\//i.test(u)) return false;
+  if (!/\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(u)) return false;
+
+  // DOSO 站上的圖床來源
+  if (/images\.doso\.net/i.test(u)) return true;
+  if (/mydoso\.oss-cn-shanghai\.aliyuncs\.com/i.test(u)) return true;
+
+  return false;
+};
+
+const normalizeImageUrls = (urls: string[]) => {
+  return Array.from(new Set(urls.map((u) => u.trim()).filter((u) => isLikelyProductImageUrl(u))));
+};
+
 const getDetailEndpoint = (targetUrl: string) => {
   const path = new URL(targetUrl).pathname;
 
@@ -205,7 +222,7 @@ const mergeDetailIntoProduct = (product: DosoImportProduct, detailPayload: any):
     .filter(Boolean)
     .join("\n\n");
 
-  const mergedImages = Array.from(new Set([...product.images, ...collectImages(d)]));
+  const mergedImages = normalizeImageUrls([...product.images, ...collectImages(d)]);
 
   const merged: DosoImportProduct = {
     ...product,
@@ -278,8 +295,67 @@ const fetchDetailPayload = async (context: any, targetUrl: string, productCode: 
   return null;
 };
 
+const extractDetailImagesViaBrowser = async (
+  page: any,
+  detailUrl: string | null,
+  productCode: string
+): Promise<string[]> => {
+  if (!detailUrl) return [];
+
+  try {
+    await page.goto(detailUrl, { waitUntil: "networkidle", timeout: 45000 });
+    await page.waitForTimeout(1000);
+
+    const found = await page.evaluate((code: string) => {
+      const out = new Set<string>();
+
+      const addFromText = (text: string) => {
+        if (!text) return;
+        const matched = text.match(/https?:\/\/[^\s\"'<>]+\.(?:jpg|jpeg|png|webp|gif)(?:\?[^\s\"'<>]*)?/gi) || [];
+        for (const m of matched) out.add(m);
+      };
+
+      const imgs = Array.from(document.querySelectorAll("img"));
+      for (const img of imgs) {
+        const cls = String(img.className || "");
+        if (/vben-menu__icon|tabs-chrome|size-4|logo/i.test(cls)) continue;
+
+        const attrs = [
+          img.getAttribute("src") || "",
+          img.getAttribute("data-src") || "",
+          img.getAttribute("data-original") || "",
+          img.getAttribute("srcset") || "",
+        ];
+
+        for (const x of attrs) {
+          if (!x) continue;
+          addFromText(x);
+        }
+      }
+
+      const keys = Object.keys(sessionStorage);
+      for (const key of keys) {
+        try {
+          const raw = sessionStorage.getItem(key) || "";
+          if (!raw || !raw.includes(code)) continue;
+          addFromText(raw);
+        } catch {
+          // noop
+        }
+      }
+
+      return Array.from(out);
+    }, productCode);
+
+    return normalizeImageUrls(found);
+  } catch {
+    return [];
+  }
+};
+
 const enrichProductsWithDetails = async (
   context: any,
+  page: any,
   targetUrl: string,
   products: DosoImportProduct[]
 ): Promise<DosoImportProduct[]> => {
@@ -287,7 +363,15 @@ const enrichProductsWithDetails = async (
 
   for (const p of products) {
     const detail = await fetchDetailPayload(context, targetUrl, p.productCode);
-    out.push(detail ? mergeDetailIntoProduct(p, detail) : p);
+    const merged = detail ? mergeDetailIntoProduct(p, detail) : p;
+
+    const browserImages = await extractDetailImagesViaBrowser(page, merged.url, merged.productCode);
+    const withBrowserImages: DosoImportProduct = {
+      ...merged,
+      images: normalizeImageUrls([...merged.images, ...browserImages]),
+    };
+
+    out.push(withBrowserImages);
   }
 
   return out;
@@ -594,7 +678,7 @@ export async function runDosoImportPreview(input: {
           .map((row: any) => mapRowToImportProduct(target, row))
           .filter((x: DosoImportProduct | null): x is DosoImportProduct => Boolean(x));
 
-        const enriched = await enrichProductsWithDetails(context, target, mapped);
+        const enriched = await enrichProductsWithDetails(context, page, target, mapped);
 
         products.push(...enriched);
         targetResults.push({ url: target, title, count: enriched.length });
