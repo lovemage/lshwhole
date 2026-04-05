@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import Script from "next/script";
 import { supabase } from "@/lib/supabase";
-import { DEFAULT_DOSO_TARGETS } from "@/lib/doso/targets";
+import { DEFAULT_DOSO_TARGETS, DOSO_TARGET_OPTIONS } from "@/lib/doso/targets";
 import type {
   DosoImportProduct,
   DosoImportProgressApiResponse,
@@ -1214,14 +1214,18 @@ export default function CrawlerImport() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-text-primary-light mb-1">目錄 URL（一次僅限一個）</label>
-          <input
-            type="url"
+          <label className="block text-sm font-medium text-text-primary-light mb-1">目錄（一次僅限一個）</label>
+          <select
             value={dosoTargetUrl}
             onChange={(e) => setDosoTargetUrl(e.target.value)}
             className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-            placeholder="https://www.doso.net/..."
-          />
+          >
+            {DOSO_TARGET_OPTIONS.map((option) => (
+              <option key={option.url} value={option.url}>
+                {option.label}（{option.url}）
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="flex items-center gap-3">
