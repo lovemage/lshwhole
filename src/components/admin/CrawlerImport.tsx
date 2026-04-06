@@ -8,11 +8,8 @@ import type {
   DosoImportProgressApiResponse,
   DosoImportRunApiResponse,
   DosoImportSessionsListApiResponse,
-  DosoSourceCategoryMappingApiResponse,
   DosoImportStartApiResponse,
   DosoImportSessionProgress,
-  DosoSourceCategoryMappingConfig,
-  DosoSourceCategoryNode,
 } from "@/lib/doso/types";
 
 interface Category {
@@ -66,7 +63,7 @@ export default function CrawlerImport() {
   const [batchPriceAdjustWholesale, setBatchPriceAdjustWholesale] = useState(0);
   const [batchPriceAdjustRetail, setBatchPriceAdjustRetail] = useState(0);
   const [batchPublishing, setBatchPublishing] = useState(false);
-  const [autoClearPublished, setAutoClearPublished] = useState(false);
+  const [autoClearPublished, setAutoClearPublished] = useState(true);
   const [isTranslating, setIsTranslating] = useState(false);
   const [publishForm, setPublishForm] = useState({
     sku: "",
@@ -127,15 +124,6 @@ export default function CrawlerImport() {
   const [importSessions, setImportSessions] = useState<DosoImportSessionProgress[]>([]);
   const [runBatchSize, setRunBatchSize] = useState(20);
   const [importStorageKey, setImportStorageKey] = useState("dosoImport:anon");
-  const [sourceCategoryNodes, setSourceCategoryNodes] = useState<DosoSourceCategoryNode[]>([]);
-  const [sourceCategoryMapping, setSourceCategoryMapping] = useState<DosoSourceCategoryMappingConfig>({
-    l1_japan_id: null,
-    by_source_category_id: {},
-    directory_fallback: {},
-  });
-  const [mappingLoading, setMappingLoading] = useState(false);
-  const [mappingSaving, setMappingSaving] = useState(false);
-  const [showSourceCategoryMapping, setShowSourceCategoryMapping] = useState(false);
 
   useEffect(() => {
     fetchCategories();
@@ -218,7 +206,6 @@ export default function CrawlerImport() {
     };
 
     fetchSavedCredentials();
-    fetchSourceCategoryMapping();
     fetchImportSessions(true);
   }, []);
 
@@ -506,108 +493,6 @@ export default function CrawlerImport() {
     }
   };
 
-  const flattenSourceCategoryNodes = (directories: Record<string, DosoSourceCategoryNode[]>) => {
-    const out: DosoSourceCategoryNode[] = [];
-    for (const nodes of Object.values(directories || {})) {
-      for (const node of nodes || []) {
-        out.push(node);
-      }
-    }
-    return out;
-  };
-
-  const fetchSourceCategoryMapping = async () => {
-    setMappingLoading(true);
-    try {
-      const accessToken = await getAdminAccessToken();
-      if (!accessToken) return;
-
-      const res = await fetch("/api/admin/sync/doso/source-category-mapping", {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      const data = (await res.json().catch(() => null)) as DosoSourceCategoryMappingApiResponse | null;
-      if (!res.ok || !data || !data.ok) return;
-
-      setSourceCategoryNodes(flattenSourceCategoryNodes(data.categories.directories || {}));
-      setSourceCategoryMapping(data.mapping);
-    } catch {
-      // noop
-    } finally {
-      setMappingLoading(false);
-    }
-  };
-
-  const refreshSourceCategories = async () => {
-    setMappingLoading(true);
-    setProbeError(null);
-    try {
-      const accessToken = await getAdminAccessToken();
-      if (!accessToken) {
-        setProbeError("尚未登入管理員，請重新登入後再試");
-        return;
-      }
-
-      const res = await fetch("/api/admin/sync/doso/source-categories/refresh", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          username: dosoUsername || undefined,
-          password: dosoPassword || undefined,
-        }),
-      });
-
-      const data = (await res.json().catch(() => null)) as any;
-      if (!res.ok || !data?.ok) {
-        setProbeError(mapDosoError(data?.error, "同步來源分類失敗"));
-        return;
-      }
-
-      await fetchSourceCategoryMapping();
-      alert("來源分類已同步");
-    } catch (err) {
-      setProbeError(err instanceof Error ? err.message : "同步來源分類時發生錯誤");
-    } finally {
-      setMappingLoading(false);
-    }
-  };
-
-  const saveSourceCategoryMapping = async () => {
-    setMappingSaving(true);
-    setProbeError(null);
-    try {
-      const accessToken = await getAdminAccessToken();
-      if (!accessToken) {
-        setProbeError("尚未登入管理員，請重新登入後再試");
-        return;
-      }
-
-      const res = await fetch("/api/admin/sync/doso/source-category-mapping", {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify(sourceCategoryMapping),
-      });
-
-      const data = (await res.json().catch(() => null)) as DosoSourceCategoryMappingApiResponse | null;
-      if (!res.ok || !data || !data.ok) {
-        setProbeError(mapDosoError((data as any)?.error, "儲存來源分類映射失敗"));
-        return;
-      }
-
-      setSourceCategoryNodes(flattenSourceCategoryNodes(data.categories.directories || {}));
-      setSourceCategoryMapping(data.mapping);
-      alert("來源分類映射已儲存");
-    } catch (err) {
-      setProbeError(err instanceof Error ? err.message : "儲存來源分類映射時發生錯誤");
-    } finally {
-      setMappingSaving(false);
-    }
-  };
 
   const getDirectoryUrlFromProduct = (p: any) => {
     const candidate = String(p?.sourceDirectoryUrl || "").trim();
@@ -620,28 +505,16 @@ export default function CrawlerImport() {
     return found?.url || null;
   };
 
-  const resolveMappedCategoryIds = (p: any): number[] | null => {
-    const l1 = sourceCategoryMapping.l1_japan_id;
-    if (!l1) return null;
-
-    const sourceCategoryId = String(p?.sourceCategoryId || "").trim();
-    const directoryUrl = getDirectoryUrlFromProduct(p);
-    const compositeKey =
-      sourceCategoryId && directoryUrl ? makeSourceCategoryMappingKey(directoryUrl, sourceCategoryId) : null;
-    const bySource =
-      (compositeKey ? sourceCategoryMapping.by_source_category_id?.[compositeKey] : null) ||
-      (sourceCategoryId ? sourceCategoryMapping.by_source_category_id?.[sourceCategoryId] : null);
-    if (bySource?.l2_id) {
-      return [l1, bySource.l2_id, bySource.l3_id || null].filter(Boolean) as number[];
+  const getTargetLabelByUrl = (url?: string | null) => {
+    const raw = String(url || "").trim();
+    if (!raw) return "未知目錄";
+    for (const option of DOSO_TARGET_OPTIONS) {
+      const path = option.url.replace("https://www.doso.net", "");
+      if (raw.includes(path)) return option.label;
     }
-
-    const fallback = directoryUrl ? sourceCategoryMapping.directory_fallback?.[directoryUrl] : null;
-    if (fallback?.l2_id) {
-      return [l1, fallback.l2_id, fallback.l3_id || null].filter(Boolean) as number[];
-    }
-
-    return null;
+    return "未知目錄";
   };
+
 
   const isValidDosoTargetUrl = (value: string) => {
     try {
@@ -668,6 +541,7 @@ export default function CrawlerImport() {
       invalid_category_mapping: "來源分類映射包含無效分類，請重新選擇",
       invalid_category_mapping_hierarchy: "來源分類映射層級不正確，請確認 L2/L3 階層",
       missing_category_mapping: "部分商品沒有可用分類映射，請先補齊來源分類對應",
+      unauthorized: "管理員登入已過期，請重新登入後再試",
     };
     return map[code] || code;
   };
@@ -711,6 +585,11 @@ export default function CrawlerImport() {
       });
 
       const data = (await res.json().catch(() => null)) as DosoImportStartApiResponse | null;
+      if (res.status === 401) {
+        const message = (data as any)?.error || "unauthorized";
+        setProbeError(mapDosoError(message, "導入失敗 (401)"));
+        return;
+      }
       if (!res.ok || !data) {
         setProbeError(mapDosoError((data as any)?.error, `導入失敗 (${res.status})`));
         return;
@@ -765,6 +644,11 @@ export default function CrawlerImport() {
       });
 
       const data = (await res.json().catch(() => null)) as DosoImportRunApiResponse | null;
+      if (res.status === 401) {
+        const message = (data as any)?.error || "unauthorized";
+        setProbeError(mapDosoError(message, "續傳失敗 (401)"));
+        return;
+      }
       if (!res.ok || !data) {
         setProbeError(mapDosoError((data as any)?.error, `續傳失敗 (${res.status})`));
         return;
@@ -1067,8 +951,6 @@ export default function CrawlerImport() {
     const wholesaleTwd = Math.floor(costTwd * 1.25);
     const retailTwd = Math.floor(costTwd * 1.35);
 
-    const mappedCategoryIds = resolveMappedCategoryIds(p);
-
     setPublishTarget(p);
     setPublishForm({
       sku: String(p.productCode || ""),
@@ -1077,9 +959,9 @@ export default function CrawlerImport() {
       cost_twd: costTwd,
       wholesale_price_twd: wholesaleTwd,
       retail_price_twd: retailTwd,
-      l1Id: mappedCategoryIds?.[0] || selectedCrawlerL1,
-      l2Id: mappedCategoryIds?.[1] || selectedCrawlerL2,
-      l3Id: mappedCategoryIds?.[2] || selectedCrawlerL3,
+      l1Id: selectedCrawlerL1,
+      l2Id: selectedCrawlerL2,
+      l3Id: selectedCrawlerL3,
       image_urls: [], // Will be derived from candidateImages
     });
 
@@ -1181,11 +1063,7 @@ export default function CrawlerImport() {
 
       const toInt = (v: any) =>
         v === null || v === undefined || v === "" ? null : Math.floor(Number(v));
-      const autoCategoryIds = resolveMappedCategoryIds(publishTarget);
-      const category_ids = (
-        autoCategoryIds ||
-        [publishForm.l1Id, publishForm.l2Id, publishForm.l3Id].filter(Boolean)
-      ) as number[];
+      const category_ids = [publishForm.l1Id, publishForm.l2Id, publishForm.l3Id].filter(Boolean) as number[];
       const payload = {
         sku: publishForm.sku,
         title: publishForm.title,
@@ -1377,7 +1255,7 @@ export default function CrawlerImport() {
         image_urls = Array.isArray(p.images) ? [...p.images] : [];
       }
 
-        const payload = {
+      const payload = {
           sku: String(p.productCode || ""),
           title: String(p.title || ""),
         description: description,
@@ -1385,9 +1263,7 @@ export default function CrawlerImport() {
         wholesale_price_twd: toInt(wholesale),
         retail_price_twd: toInt(retail),
         status: "published",
-        category_ids:
-          resolveMappedCategoryIds(p) ||
-          [selectedCrawlerL1, selectedCrawlerL2, selectedCrawlerL3].filter(Boolean),
+        category_ids: [selectedCrawlerL1, selectedCrawlerL2, selectedCrawlerL3].filter(Boolean),
         tag_ids: selectedCrawlerTags,
           image_urls: image_urls,
           original_url: p.url || null,
@@ -1446,52 +1322,16 @@ export default function CrawlerImport() {
     setSelectedCrawlerProducts(new Set());
   };
 
-  const makeSourceCategoryMappingKey = (directoryUrl: string, sourceCategoryId: string) => {
-    return `${directoryUrl}::${sourceCategoryId}`;
-  };
+  const clearAllImportedProducts = () => {
+    const total = crawlerProducts.length;
+    if (total <= 0) return;
 
-  const updateSourceCategoryMappingEntry = (
-    directoryUrl: string,
-    sourceCategoryId: string,
-    field: "l2_id" | "l3_id",
-    value: number | null
-  ) => {
-    const mappingKey = makeSourceCategoryMappingKey(directoryUrl, sourceCategoryId);
-    setSourceCategoryMapping((prev) => {
-      const old = prev.by_source_category_id?.[mappingKey] || { l2_id: 0, l3_id: null };
-      const nextEntry = {
-        l2_id: field === "l2_id" ? Number(value || 0) : Number(old.l2_id || 0),
-        l3_id: field === "l3_id" ? value : old.l3_id || null,
-      };
-      const nextMap = { ...(prev.by_source_category_id || {}) };
-      if (!nextEntry.l2_id) {
-        delete nextMap[mappingKey];
-      } else {
-        nextMap[mappingKey] = nextEntry;
-      }
-      return { ...prev, by_source_category_id: nextMap };
-    });
-  };
+    const ok = confirm(`確定要清空目前導入的 ${total} 件商品嗎？`);
+    if (!ok) return;
 
-  const updateDirectoryFallbackEntry = (
-    directoryUrl: string,
-    field: "l2_id" | "l3_id",
-    value: number | null
-  ) => {
-    setSourceCategoryMapping((prev) => {
-      const old = prev.directory_fallback?.[directoryUrl] || { l2_id: 0, l3_id: null };
-      const nextEntry = {
-        l2_id: field === "l2_id" ? Number(value || 0) : Number(old.l2_id || 0),
-        l3_id: field === "l3_id" ? value : old.l3_id || null,
-      };
-      const nextMap = { ...(prev.directory_fallback || {}) };
-      if (!nextEntry.l2_id) {
-        delete nextMap[directoryUrl];
-      } else {
-        nextMap[directoryUrl] = nextEntry;
-      }
-      return { ...prev, directory_fallback: nextMap };
-    });
+    setCrawlerProducts([]);
+    setCrawlerFiltered([]);
+    setSelectedCrawlerProducts(new Set());
   };
 
   const updateBatchImage = (productIdx: number, imgIdx: number, field: 'isProduct' | 'isDescription') => {
@@ -1655,7 +1495,7 @@ export default function CrawlerImport() {
             {importSessions.length === 0 && (
               <div className="md:col-span-3 text-xs text-text-secondary-light">尚無同步任務，請先按「同步商品（建立新任務）」。</div>
             )}
-            {importSessions.map((s, idx) => {
+            {importSessions.map((s) => {
               const selected = importSession?.session_id === s.session_id;
               return (
                 <div
@@ -1663,7 +1503,7 @@ export default function CrawlerImport() {
                   className={`rounded-lg border p-2 ${selected ? "border-primary bg-primary/5" : "border-border-light bg-card-light"}`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <div className="text-xs font-bold text-text-primary-light">Session {idx + 1} #{s.session_id}</div>
+                    <div className="text-xs font-bold text-text-primary-light">{getTargetLabelByUrl(s.target_url)} Session #{s.session_id}</div>
                     <div className="text-[11px] text-text-secondary-light">{s.status}</div>
                   </div>
                   <div className="mt-1 text-[11px] text-text-secondary-light break-all">{s.target_url || "-"}</div>
@@ -1738,7 +1578,7 @@ export default function CrawlerImport() {
 
         {importSession && (
           <div className="rounded-lg border border-border-light p-3 bg-background-light space-y-2">
-            <div className="text-sm text-text-primary-light font-medium">導入進度（Session #{importSession.session_id}）</div>
+            <div className="text-sm text-text-primary-light font-medium">導入進度（{getTargetLabelByUrl(importSession.target_url)} Session #{importSession.session_id}）</div>
             <div className="text-xs text-text-secondary-light">
               狀態：<span className="font-medium text-text-primary-light">{importSession.status}</span>
               ，總商品數：<span className="font-medium text-text-primary-light">{importSession.total_count}</span>
@@ -1795,192 +1635,6 @@ export default function CrawlerImport() {
           </div>
         </div>
       )}
-
-      <div className="rounded-xl border border-border-light bg-card-light p-4 space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h3 className="text-base font-bold text-text-primary-light">DOSO 來源分類映射</h3>
-            <p className="text-xs text-text-secondary-light mt-1">
-              來源分類 ID 對應站內 L2/L3，上架時優先套用；未命中時使用目錄 fallback。
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setShowSourceCategoryMapping((prev) => !prev)}
-              className="inline-flex items-center gap-2 rounded-lg border border-border-light bg-background-light px-3 py-2 text-xs font-medium text-text-primary-light hover:bg-primary/10"
-            >
-              <span className="material-symbols-outlined text-sm">
-                {showSourceCategoryMapping ? "expand_less" : "expand_more"}
-              </span>
-              {showSourceCategoryMapping ? "收合" : "展開"}
-            </button>
-            {showSourceCategoryMapping && (
-              <>
-                <button
-                  onClick={refreshSourceCategories}
-                  disabled={mappingLoading}
-                  className="inline-flex items-center gap-2 rounded-lg border border-border-light bg-background-light px-3 py-2 text-xs font-medium text-text-primary-light hover:bg-primary/10 disabled:opacity-50"
-                >
-                  <span className="material-symbols-outlined text-sm">sync</span>
-                  {mappingLoading ? "同步中..." : "同步來源分類"}
-                </button>
-                <button
-                  onClick={saveSourceCategoryMapping}
-                  disabled={mappingSaving}
-                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-white hover:bg-primary/90 disabled:opacity-50"
-                >
-                  <span className="material-symbols-outlined text-sm">save</span>
-                  {mappingSaving ? "儲存中..." : "儲存映射"}
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-
-        {showSourceCategoryMapping && (
-          <>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
-          <div>
-            <label className="block text-xs text-text-secondary-light mb-1">L1（固定日本）</label>
-            <select
-              value={sourceCategoryMapping.l1_japan_id || ""}
-              onChange={(e) =>
-                setSourceCategoryMapping((prev) => ({
-                  ...prev,
-                  l1_japan_id: e.target.value ? Number(e.target.value) : null,
-                }))
-              }
-              className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-            >
-              <option value="">請選擇日本 L1</option>
-              {categories
-                .filter((c) => c.level === 1)
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-            </select>
-          </div>
-          <div className="md:col-span-3 text-xs text-text-secondary-light">
-            已同步來源分類：
-            <span className="font-medium text-text-primary-light ml-1">{sourceCategoryNodes.length}</span>
-            ，已映射：
-            <span className="font-medium text-text-primary-light ml-1">
-              {Object.keys(sourceCategoryMapping.by_source_category_id || {}).length}
-            </span>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto border border-border-light rounded-lg">
-          <table className="min-w-full text-xs">
-            <thead className="bg-background-light text-text-secondary-light">
-              <tr>
-                <th className="text-left px-3 py-2">來源目錄</th>
-                <th className="text-left px-3 py-2">來源分類</th>
-                <th className="text-left px-3 py-2">來源分類ID</th>
-                <th className="text-left px-3 py-2">L2</th>
-                <th className="text-left px-3 py-2">L3</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sourceCategoryNodes.slice(0, 160).map((node) => {
-                const compositeKey = makeSourceCategoryMappingKey(node.directory_url, node.source_category_id);
-                const mapped =
-                  sourceCategoryMapping.by_source_category_id?.[compositeKey] ||
-                  sourceCategoryMapping.by_source_category_id?.[node.source_category_id] ||
-                  null;
-                const l2Candidates = categories.filter((c) => c.level === 2);
-                const l3Candidates = categories.filter(
-                  (c) => c.level === 3 && (!mapped?.l2_id || categoryRelations.some((r: any) => r.parent_category_id === mapped.l2_id && r.child_category_id === c.id))
-                );
-
-                return (
-                  <tr key={`${node.directory_url}-${node.source_category_id}`} className="border-t border-border-light">
-                    <td className="px-3 py-2 align-top max-w-56 break-all">{node.directory_url}</td>
-                    <td className="px-3 py-2 align-top">{node.name}</td>
-                    <td className="px-3 py-2 align-top">{node.source_category_id}</td>
-                    <td className="px-3 py-2 align-top min-w-40">
-                      <select
-                        value={mapped?.l2_id || ""}
-                        onChange={(e) => updateSourceCategoryMappingEntry(node.directory_url, node.source_category_id, "l2_id", e.target.value ? Number(e.target.value) : null)}
-                        className="w-full rounded-lg border border-border-light bg-background-light px-2 py-1"
-                      >
-                        <option value="">未映射</option>
-                        {l2Candidates.map((c) => (
-                          <option key={c.id} value={c.id}>{c.name}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="px-3 py-2 align-top min-w-40">
-                      <select
-                        value={mapped?.l3_id || ""}
-                        onChange={(e) => updateSourceCategoryMappingEntry(node.directory_url, node.source_category_id, "l3_id", e.target.value ? Number(e.target.value) : null)}
-                        className="w-full rounded-lg border border-border-light bg-background-light px-2 py-1"
-                      >
-                        <option value="">不指定</option>
-                        {l3Candidates.map((c) => (
-                          <option key={c.id} value={c.id}>{c.name}</option>
-                        ))}
-                      </select>
-                    </td>
-                  </tr>
-                );
-              })}
-              {sourceCategoryNodes.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-3 py-3 text-text-secondary-light">尚未同步來源分類，請先按「同步來源分類」。</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="space-y-2">
-          <div className="text-xs text-text-secondary-light">目錄 fallback（來源分類缺失時使用）</div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {DOSO_TARGET_OPTIONS.map((opt) => {
-              const mapped = sourceCategoryMapping.directory_fallback?.[opt.url] || null;
-              const l2Candidates = categories.filter((c) => c.level === 2);
-              const l3Candidates = categories.filter(
-                (c) => c.level === 3 && (!mapped?.l2_id || categoryRelations.some((r: any) => r.parent_category_id === mapped.l2_id && r.child_category_id === c.id))
-              );
-
-              return (
-                <div key={opt.url} className="rounded-lg border border-border-light p-2">
-                  <div className="text-xs text-text-primary-light font-medium">{opt.label}</div>
-                  <div className="text-[11px] text-text-secondary-light break-all mb-2">{opt.url}</div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <select
-                      value={mapped?.l2_id || ""}
-                      onChange={(e) => updateDirectoryFallbackEntry(opt.url, "l2_id", e.target.value ? Number(e.target.value) : null)}
-                      className="w-full rounded-lg border border-border-light bg-background-light px-2 py-1 text-xs"
-                    >
-                      <option value="">L2 未設定</option>
-                      {l2Candidates.map((c) => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                    </select>
-                    <select
-                      value={mapped?.l3_id || ""}
-                      onChange={(e) => updateDirectoryFallbackEntry(opt.url, "l3_id", e.target.value ? Number(e.target.value) : null)}
-                      className="w-full rounded-lg border border-border-light bg-background-light px-2 py-1 text-xs"
-                    >
-                      <option value="">L3 不指定</option>
-                      {l3Candidates.map((c) => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-          </>
-        )}
-      </div>
 
       {/* 上架前：預設分類與標籤 */}
       <div className="rounded-xl border border-border-light bg-card-light p-4">
@@ -2172,6 +1826,14 @@ export default function CrawlerImport() {
               全選 ({selectedCrawlerProducts.size}/{crawlerFiltered.length})
             </span>
           </label>
+
+          <button
+            onClick={clearAllImportedProducts}
+            className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100"
+          >
+            <span className="material-symbols-outlined text-base">delete_sweep</span>
+            全部清空
+          </button>
 
           {selectedCrawlerProducts.size > 0 && (
             <>
