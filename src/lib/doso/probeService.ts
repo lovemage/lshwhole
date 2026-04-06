@@ -18,6 +18,15 @@ interface CapturedResponse {
 const LOGIN_URL = "https://www.doso.net/auth/login";
 const MAX_IMPORT_ROWS_PER_TARGET = 20000;
 const IMPORT_BATCH_SIZE = 20;
+const CATALOG_API_TIMEOUT_MS = 45000;
+const CATALOG_API_RETRY_TIMES = 2;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const isRequestTimeoutError = (err: unknown) => {
+  const message = err instanceof Error ? err.message : String(err || "");
+  return /timeout|timed out|etimedout/i.test(message);
+};
 
 const safeJson = (text: string) => {
   try {
@@ -838,21 +847,37 @@ const fetchCatalogRowsViaApi = async (
 
   while (pageNo <= maxPages) {
     const payload = config.buildPayload(pageNo, total, lastPageHint);
-    const resp =
-      config.method === "GET"
-        ? await context.request.get(config.endpoint, {
-            params: payload,
-            headers,
-            timeout: 20000,
-          })
-        : await context.request.post(config.endpoint, {
-            data: payload,
-            headers: {
-              ...headers,
-              "Content-Type": "application/json;charset=UTF-8",
-            },
-            timeout: 20000,
-          });
+    let resp: any = null;
+
+    for (let attempt = 0; attempt <= CATALOG_API_RETRY_TIMES; attempt += 1) {
+      try {
+        resp =
+          config.method === "GET"
+            ? await context.request.get(config.endpoint, {
+                params: payload,
+                headers,
+                timeout: CATALOG_API_TIMEOUT_MS,
+              })
+            : await context.request.post(config.endpoint, {
+                data: payload,
+                headers: {
+                  ...headers,
+                  "Content-Type": "application/json;charset=UTF-8",
+                },
+                timeout: CATALOG_API_TIMEOUT_MS,
+              });
+        break;
+      } catch (err) {
+        if (isRequestTimeoutError(err) && attempt < CATALOG_API_RETRY_TIMES) {
+          await sleep(600 * (attempt + 1));
+          continue;
+        }
+        resp = null;
+        break;
+      }
+    }
+
+    if (!resp) break;
 
     if (!resp.ok()) break;
 
