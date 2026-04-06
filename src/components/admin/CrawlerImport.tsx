@@ -1173,6 +1173,12 @@ export default function CrawlerImport() {
   const publishNow = async () => {
     try {
       setPublishing(true);
+      const accessToken = await getAdminAccessToken();
+      if (!accessToken) {
+        alert("尚未登入管理員，請重新登入後再試");
+        return;
+      }
+
       const toInt = (v: any) =>
         v === null || v === undefined || v === "" ? null : Math.floor(Number(v));
       const autoCategoryIds = resolveMappedCategoryIds(publishTarget);
@@ -1226,7 +1232,10 @@ export default function CrawlerImport() {
       }
       const res = await fetch("/api/publish-product", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: JSON.stringify(payload),
       });
       if (res.ok) {
@@ -1322,6 +1331,13 @@ export default function CrawlerImport() {
     const toInt = (v: any) =>
       v === null || v === undefined || v === "" ? null : Math.floor(Number(v));
 
+    const accessToken = await getAdminAccessToken();
+    if (!accessToken) {
+      setBatchPublishing(false);
+      alert("尚未登入管理員，請重新登入後再試");
+      return;
+    }
+
     for (const idx of Array.from(selectedCrawlerProducts)) {
       const p = crawlerFiltered[idx];
       if (!p) continue;
@@ -1379,7 +1395,10 @@ export default function CrawlerImport() {
       try {
         const res = await fetch("/api/publish-product", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
           body: JSON.stringify(payload),
         });
         if (res.ok) {
