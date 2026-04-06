@@ -78,7 +78,9 @@ export async function POST(request: NextRequest) {
           : String(source_category_id).trim();
       const sourceCategoryName =
         body?.source_category_name === null || body?.source_category_name === undefined
-          ? ""
+          ? body?.sourceCategoryName === null || body?.sourceCategoryName === undefined
+            ? ""
+            : String(body.sourceCategoryName).trim()
           : String(body.source_category_name).trim();
 
       const autoCreated = await resolveOrCreateCategoryByDosoSource(

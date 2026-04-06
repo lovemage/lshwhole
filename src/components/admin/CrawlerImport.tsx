@@ -1199,6 +1199,7 @@ export default function CrawlerImport() {
         image_urls: candidateImages.filter(i => i.isProduct).map(i => i.url),
         original_url: publishTarget?.url || null,
         source_category_id: publishTarget?.sourceCategoryId || null,
+        source_category_name: publishTarget?.sourceCategoryName || null,
         source_directory_url: getDirectoryUrlFromProduct(publishTarget),
         specs,
         variants: variants.map(v => ({
@@ -1376,9 +1377,9 @@ export default function CrawlerImport() {
         image_urls = Array.isArray(p.images) ? [...p.images] : [];
       }
 
-      const payload = {
-        sku: String(p.productCode || ""),
-        title: String(p.title || ""),
+        const payload = {
+          sku: String(p.productCode || ""),
+          title: String(p.title || ""),
         description: description,
         cost_twd: toInt(cost),
         wholesale_price_twd: toInt(wholesale),
@@ -1388,11 +1389,12 @@ export default function CrawlerImport() {
           resolveMappedCategoryIds(p) ||
           [selectedCrawlerL1, selectedCrawlerL2, selectedCrawlerL3].filter(Boolean),
         tag_ids: selectedCrawlerTags,
-        image_urls: image_urls,
-        original_url: p.url || null,
-        source_category_id: p.sourceCategoryId || null,
-        source_directory_url: getDirectoryUrlFromProduct(p),
-      };
+          image_urls: image_urls,
+          original_url: p.url || null,
+          source_category_id: p.sourceCategoryId || null,
+          source_category_name: p.sourceCategoryName || null,
+          source_directory_url: getDirectoryUrlFromProduct(p),
+        };
 
       try {
         const res = await fetch("/api/publish-product", {
