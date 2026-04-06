@@ -1,5 +1,6 @@
 import { chromium } from "playwright";
 import { DEFAULT_DOSO_TARGETS } from "@/lib/doso/targets";
+import { getDosoCatalogListConfig } from "@/lib/doso/catalogConfigs";
 import type {
   DosoImportProduct,
   DosoImportResponse,
@@ -777,6 +778,113 @@ const getRowIdentity = (row: any) =>
     row?.id ?? row?.goods_id ?? row?.product_id ?? row?.site_id ?? row?.code ?? row?.sku ?? row?.item_id ?? ""
   ).trim();
 
+const getDosoAccessTokenFromPage = async (page: any): Promise<string> => {
+  try {
+    const token = await page.evaluate(() => {
+      try {
+        const app = (document.querySelector("#app") as any)?.__vue_app__;
+        const piniaToken = app?.config?.globalProperties?.$pinia?.state?.value?.["core-access"]?.accessToken;
+        if (typeof piniaToken === "string" && piniaToken.trim()) return piniaToken.trim();
+      } catch {
+        // noop
+      }
+
+      try {
+        const keys = Object.keys(localStorage || {});
+        for (const key of keys) {
+          if (!/^vben-web-a/i.test(key)) continue;
+          const raw = localStorage.getItem(key);
+          if (!raw) continue;
+          const parsed = JSON.parse(raw);
+          const token = parsed?.accessToken;
+          if (typeof token === "string" && token.trim()) return token.trim();
+        }
+      } catch {
+        // noop
+      }
+
+      return "";
+    });
+    return String(token || "").trim();
+  } catch {
+    return "";
+  }
+};
+
+const fetchCatalogRowsViaApi = async (
+  context: any,
+  page: any,
+  targetUrl: string,
+  maxPages: number = 500
+): Promise<any[]> => {
+  const config = getDosoCatalogListConfig(targetUrl);
+  if (!config) return [];
+
+  const token = await getDosoAccessTokenFromPage(page);
+  if (!token) return [];
+
+  const headers = {
+    Authorization: token,
+    Accept: "application/json, text/plain, */*",
+    "Accept-Language": "zh-TW",
+  } as Record<string, string>;
+
+  const mergedRows: any[] = [];
+  const seen = new Set<string>();
+
+  let pageNo = 1;
+  let total = 0;
+  let lastPageHint = 0;
+
+  while (pageNo <= maxPages) {
+    const payload = config.buildPayload(pageNo, total, lastPageHint);
+    const resp =
+      config.method === "GET"
+        ? await context.request.get(config.endpoint, {
+            params: payload,
+            headers,
+            timeout: 20000,
+          })
+        : await context.request.post(config.endpoint, {
+            data: payload,
+            headers: {
+              ...headers,
+              "Content-Type": "application/json;charset=UTF-8",
+            },
+            timeout: 20000,
+          });
+
+    if (!resp.ok()) break;
+
+    const text = await resp.text();
+    const json = safeJson(text);
+    if (!json || Number(json?.code) !== 0) break;
+
+    const rows = config.extractRows(json);
+    const safeRows = Array.isArray(rows) ? rows : [];
+
+    const extractedTotal = config.extractTotal(json);
+    if (Number.isFinite(extractedTotal) && extractedTotal > 0) {
+      total = Math.floor(extractedTotal);
+      lastPageHint = Math.max(1, Math.ceil(total / Math.max(1, config.pageSize)));
+    }
+
+    for (const row of safeRows) {
+      const key = getRowIdentity(row);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      mergedRows.push(row);
+    }
+
+    const hasNext = config.hasNextPage(json, safeRows);
+    if (!hasNext) break;
+
+    pageNo += 1;
+  }
+
+  return mergedRows;
+};
+
 const clickListNextPage = async (page: any) => {
   return page.evaluate(() => {
     const isDisabled = (el: HTMLElement | null) => {
@@ -1113,7 +1221,11 @@ export async function runDosoImportPreview(input: {
         const localCaptures = captures.slice(start);
         const listPayload = pickListPayload(target, localCaptures);
         const domOverallTotal = await extractDomOverallTotal(page);
-        const rowsFromPages = await collectListRowsAcrossPages(page, target, captures, start, domOverallTotal);
+        const rowsFromApi = await fetchCatalogRowsViaApi(context, page, target);
+        const rowsFromPages =
+          rowsFromApi.length > 0
+            ? rowsFromApi
+            : await collectListRowsAcrossPages(page, target, captures, start, domOverallTotal);
         const rows = rowsFromPages.length > 0 ? rowsFromPages : pickRows(listPayload);
 
         const mapped = rows

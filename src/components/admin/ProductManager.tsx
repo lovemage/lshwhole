@@ -47,6 +47,10 @@ export default function ProductManager() {
   const [productTotal, setProductTotal] = useState(0);
   const pageSize = 20;
   const [selectedProductIds, setSelectedProductIds] = useState<number[]>([]);
+  const [bulkDeleteDays, setBulkDeleteDays] = useState(60);
+  const [bulkDeleteMode, setBulkDeleteMode] = useState<"or" | "and">("or");
+  const [bulkDeleteL1Id, setBulkDeleteL1Id] = useState<number | null>(null);
+  const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
   const [showProductEdit, setShowProductEdit] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
@@ -349,6 +353,64 @@ export default function ProductManager() {
     } else {
       const j = await res.json().catch(() => ({}));
       alert(j?.error || "刪除失敗");
+    }
+  };
+
+  const conditionalHardDelete = async () => {
+    const days = Number(bulkDeleteDays);
+    if (!Number.isInteger(days) || days <= 0) {
+      alert("天數必須是大於 0 的整數");
+      return;
+    }
+
+    const l1Name = bulkDeleteL1Id
+      ? categories.find((c) => c.id === bulkDeleteL1Id)?.name || `#${bulkDeleteL1Id}`
+      : "未指定";
+
+    const modeLabel = bulkDeleteMode === "or" ? "OR（任一條件）" : "AND（同時符合）";
+    const summary = [
+      "確定要執行條件硬刪除嗎？",
+      `- 天數條件：超過 ${days} 天（created_at）`,
+      `- 條件模式：${modeLabel}`,
+      `- L1 分類：${l1Name}`,
+      "注意：此操作為硬刪除，無法復原。",
+    ].join("\n");
+
+    if (!confirm(summary)) return;
+
+    try {
+      setBulkDeleteLoading(true);
+      const res = await fetch("/api/admin/products/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          days,
+          mode: bulkDeleteMode,
+          l1CategoryId: bulkDeleteL1Id,
+        }),
+      });
+
+      const j = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        alert(j?.error || "條件硬刪除失敗");
+        return;
+      }
+
+      const deletedCount = Number(j?.deletedCount || 0);
+      if (deletedCount === 0) {
+        alert("沒有符合條件的商品");
+      } else {
+        alert(`刪除成功，共刪除 ${deletedCount} 件商品`);
+      }
+
+      setSelectedProductIds([]);
+      fetchProducts(productPage, selectedProductL1);
+    } catch (err) {
+      console.error("conditional hard delete failed:", err);
+      alert("條件硬刪除發生錯誤");
+    } finally {
+      setBulkDeleteLoading(false);
     }
   };
 
@@ -736,6 +798,61 @@ export default function ProductManager() {
           <button onClick={() => batchUpdateStatus('published')} className="px-3 py-1 rounded-lg border border-border-light text-sm hover:bg-background-light">批量上架</button>
           <button onClick={() => batchUpdateStatus('draft')} className="px-3 py-1 rounded-lg border border-border-light text-sm hover:bg-background-light">批量下架</button>
           <button onClick={batchDelete} className="px-3 py-1 rounded-lg border border-danger text-danger text-sm hover:bg-danger/10">批量刪除</button>
+        </div>
+      </div>
+
+      {/* 工具列：條件硬刪除 */}
+      <div className="rounded-xl border border-danger/30 bg-danger/5 p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 flex-1">
+            <div>
+              <label className="text-xs text-text-secondary-light">超過 X 天（created_at）</label>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                value={bulkDeleteDays}
+                onChange={(e) => setBulkDeleteDays(Math.max(1, Math.floor(Number(e.target.value || 1))))}
+                className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-text-secondary-light">條件模式</label>
+              <select
+                value={bulkDeleteMode}
+                onChange={(e) => setBulkDeleteMode((e.target.value === "and" ? "and" : "or") as "or" | "and")}
+                className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+              >
+                <option value="or">OR（任一條件）</option>
+                <option value="and">AND（同時符合）</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-text-secondary-light">L1 分類（可不選）</label>
+              <select
+                value={bulkDeleteL1Id ?? ""}
+                onChange={(e) => setBulkDeleteL1Id(e.target.value ? Number(e.target.value) : null)}
+                className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+              >
+                <option value="">未指定</option>
+                {categories
+                  .filter((c) => c.level === 1)
+                  .sort((a, b) => a.sort - b.sort)
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          </div>
+          <button
+            onClick={conditionalHardDelete}
+            disabled={bulkDeleteLoading}
+            className="rounded-lg border border-danger bg-danger px-4 py-2 text-sm font-medium text-white hover:bg-danger/90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {bulkDeleteLoading ? "刪除中..." : "條件硬刪除"}
+          </button>
         </div>
       </div>
 
