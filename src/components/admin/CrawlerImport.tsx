@@ -1710,7 +1710,7 @@ export default function CrawlerImport() {
         </div>
 
         <p className="text-xs text-text-secondary-light">
-          同步任務可建立多筆（最多顯示近 3 筆），並可切換目前 Session 後再執行導入。導入會自動跳過已存在 SKU。
+          使用摘要：Step 1 先「同步商品」建立任務（可保留近 3 筆並切換／重置）；Step 2 再對目前 Session 按「導入網站」。導入可中斷續跑，且會自動跳過已存在 SKU。
         </p>
 
         {importSession && (
@@ -1755,6 +1755,12 @@ export default function CrawlerImport() {
               <li>查看進度區塊的總商品數與目前進度。</li>
               <li>中斷後可回到頁面繼續導入。</li>
             </ol>
+            <div className="rounded-lg border border-border-light bg-background-light p-3 text-xs text-text-secondary-light leading-5">
+              <div className="font-semibold text-text-primary-light mb-1">使用方式摘要</div>
+              <div>1) 先同步：建立或選擇一個 Session（可重置）。</div>
+              <div>2) 再導入：用目前 Session 分批導入（可調整批次大小）。</div>
+              <div>3) 若中斷：回到此頁選同一個 Session，直接續傳。</div>
+            </div>
             <div className="flex justify-end">
               <button
                 onClick={() => setShowDosoGuide(false)}
