@@ -12,6 +12,25 @@ const CATEGORY_MAPPING_KEY = "doso_source_category_mapping_v1";
 
 const VALID_DIRECTORY_URLS = new Set(DOSO_TARGET_OPTIONS.map((x) => x.url));
 
+const slugPart = (value: string) =>
+  String(value || "")
+    .trim()
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toUpperCase();
+
+const getDirectoryKey = (directoryUrl: string) => {
+  const option = DOSO_TARGET_OPTIONS.find((x) => x.url === directoryUrl);
+  if (option?.label) return slugPart(option.label) || "DOSO";
+  try {
+    const pathname = new URL(directoryUrl).pathname;
+    const seg = pathname.split("/").filter(Boolean).pop() || "doso";
+    return slugPart(seg) || "DOSO";
+  } catch {
+    return "DOSO";
+  }
+};
+
 const emptyCache = (): DosoSourceCategoryCache => ({
   updated_at: new Date(0).toISOString(),
   directories: {},
@@ -189,4 +208,157 @@ export const resolveDirectoryFallbackCategory = async (directoryUrl?: string | n
     l2_id: hit.l2_id,
     l3_id: hit.l3_id ?? null,
   };
+};
+
+const getNodeLineage = (nodes: DosoSourceCategoryNode[], sourceCategoryId: string) => {
+  const id = String(sourceCategoryId || "").trim();
+  if (!id) return [] as DosoSourceCategoryNode[];
+
+  const byId = new Map<string, DosoSourceCategoryNode>();
+  for (const node of nodes) {
+    const key = String(node?.source_category_id || "").trim();
+    if (!key) continue;
+    if (!byId.has(key)) byId.set(key, node);
+  }
+
+  const start = byId.get(id);
+  if (!start) return [];
+
+  const lineage: DosoSourceCategoryNode[] = [];
+  const seen = new Set<string>();
+  let current: DosoSourceCategoryNode | undefined = start;
+
+  while (current) {
+    const currentId = String(current.source_category_id || "").trim();
+    if (!currentId || seen.has(currentId)) break;
+    seen.add(currentId);
+    lineage.unshift(current);
+
+    const parentId = String(current.parent_id || "").trim();
+    if (!parentId || parentId === "0") break;
+    current = byId.get(parentId);
+  }
+
+  return lineage;
+};
+
+const ensureCategoryBySlug = async (input: {
+  slug: string;
+  name: string;
+  level: number;
+}) => {
+  const admin = supabaseAdmin();
+  const slug = input.slug.toUpperCase();
+  const { data: existing, error: queryError } = await admin
+    .from("categories")
+    .select("id,name")
+    .eq("slug", slug)
+    .limit(1)
+    .maybeSingle<{ id: number; name: string }>();
+
+  if (queryError) throw new Error(queryError.message);
+
+  if (existing?.id) {
+    if (existing.name !== input.name) {
+      const { error: updateError } = await admin
+        .from("categories")
+        .update({ name: input.name, updated_at: new Date().toISOString(), active: true })
+        .eq("id", existing.id);
+      if (updateError) throw new Error(updateError.message);
+    }
+    return existing.id;
+  }
+
+  const { data, error } = await admin
+    .from("categories")
+    .insert({
+      slug,
+      name: input.name,
+      level: input.level,
+      sort: 9999,
+      description: "",
+      icon: null,
+      retail_visible: true,
+      active: true,
+    })
+    .select("id")
+    .single<{ id: number }>();
+
+  if (error) throw new Error(error.message);
+  return data.id;
+};
+
+const ensureCategoryRelation = async (parentId: number, childId: number) => {
+  const admin = supabaseAdmin();
+  const { data, error } = await admin
+    .from("category_relations")
+    .select("parent_category_id")
+    .eq("parent_category_id", parentId)
+    .eq("child_category_id", childId)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (data) return;
+
+  const { error: insertError } = await admin.from("category_relations").insert({
+    parent_category_id: parentId,
+    child_category_id: childId,
+  });
+  if (insertError) throw new Error(insertError.message);
+};
+
+export const resolveOrCreateCategoryByDosoSource = async (
+  sourceCategoryId?: string | null,
+  sourceCategoryName?: string | null,
+  directoryUrl?: string | null
+) => {
+  const key = String(sourceCategoryId || "").trim();
+  const sourceName = String(sourceCategoryName || "").trim();
+  const url = String(directoryUrl || "").trim();
+  if (!url || (!key && !sourceName)) return null;
+
+  const mapping = await getDosoSourceCategoryMapping();
+  const l1Id = Number(mapping.l1_japan_id);
+  if (!Number.isInteger(l1Id) || l1Id <= 0) return null;
+
+  const cache = await getDosoSourceCategoryCache();
+  const nodes = Array.isArray(cache.directories[url]) ? cache.directories[url] : [];
+  const lineage = key ? getNodeLineage(nodes, key) : [];
+
+  const l2Source =
+    lineage.length > 0
+      ? lineage[0]
+      : {
+          source_category_id: key || `adhoc_${slugPart(sourceName).toLowerCase()}`,
+          name: sourceName,
+          parent_id: null,
+          level: 1,
+          directory_url: url,
+        };
+
+  const l3Source = lineage.length >= 2 ? lineage[lineage.length - 1] : null;
+
+  if (!l2Source?.name) return null;
+
+  const directoryKey = getDirectoryKey(url);
+  const l2Id = await ensureCategoryBySlug({
+    slug: `DOSO_${directoryKey}_L2_${slugPart(String(l2Source.source_category_id || l2Source.name))}`,
+    name: l2Source.name,
+    level: 2,
+  });
+  await ensureCategoryRelation(l1Id, l2Id);
+
+  if (!l3Source || String(l3Source.source_category_id || "") === String(l2Source.source_category_id || "")) {
+    return { l1_id: l1Id, l2_id: l2Id, l3_id: null };
+  }
+
+  const l3Id = await ensureCategoryBySlug({
+    slug: `DOSO_${directoryKey}_L3_${slugPart(String(l3Source.source_category_id || l3Source.name))}`,
+    name: l3Source.name,
+    level: 3,
+  });
+  await ensureCategoryRelation(l2Id, l3Id);
+
+  return { l1_id: l1Id, l2_id: l2Id, l3_id: l3Id };
 };

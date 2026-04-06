@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/adminAuth";
 import {
+  resolveOrCreateCategoryByDosoSource,
   resolveDirectoryFallbackCategory,
   resolveMappedCategoryBySourceCategoryId,
 } from "@/lib/doso/sourceCategoryStore";
@@ -75,9 +76,22 @@ export async function POST(request: NextRequest) {
         source_category_id === null || source_category_id === undefined
           ? ""
           : String(source_category_id).trim();
-      const mapped = await resolveMappedCategoryBySourceCategoryId(sourceCategoryId, directoryUrl);
-      const fallback = mapped ? null : await resolveDirectoryFallbackCategory(directoryUrl);
-      const finalMapping = mapped || fallback;
+      const sourceCategoryName =
+        body?.source_category_name === null || body?.source_category_name === undefined
+          ? ""
+          : String(body.source_category_name).trim();
+
+      const autoCreated = await resolveOrCreateCategoryByDosoSource(
+        sourceCategoryId,
+        sourceCategoryName,
+        directoryUrl
+      );
+
+      const mapped = autoCreated
+        ? null
+        : await resolveMappedCategoryBySourceCategoryId(sourceCategoryId, directoryUrl);
+      const fallback = autoCreated || mapped ? null : await resolveDirectoryFallbackCategory(directoryUrl);
+      const finalMapping = autoCreated || mapped || fallback;
 
       if (!finalMapping?.l1_id || !finalMapping?.l2_id) {
         return NextResponse.json({ error: "missing_category_mapping" }, { status: 400 });

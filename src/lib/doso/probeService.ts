@@ -779,22 +779,48 @@ const getRowIdentity = (row: any) =>
 
 const clickListNextPage = async (page: any) => {
   return page.evaluate(() => {
+    const isDisabled = (el: HTMLElement | null) => {
+      if (!el) return true;
+      const anyEl = el as HTMLButtonElement;
+      const cls = String(el.className || "");
+      const ariaDisabled = (el.getAttribute("aria-disabled") || "").toLowerCase();
+      const style = window.getComputedStyle(el);
+      return (
+        anyEl.disabled === true ||
+        el.getAttribute("disabled") !== null ||
+        ariaDisabled === "true" ||
+        /disabled|is-disabled|ant-pagination-disabled/i.test(cls) ||
+        style.pointerEvents === "none"
+      );
+    };
+
     const selectors = [
       ".ant-pagination-next:not(.ant-pagination-disabled) button",
       ".ant-pagination-next:not(.ant-pagination-disabled)",
+      "li.ant-pagination-next button",
+      "li.ant-pagination-next",
       ".pagination-next:not(.disabled)",
       "button[aria-label='Next Page']",
+      "button[aria-label='next page']",
+      "button[aria-label='next']",
       "a[aria-label='Next Page']",
+      "a[aria-label='next page']",
       "button[title='Next Page']",
+      "button[title='next page']",
       "button[title='下一頁']",
       "a[title='下一頁']",
+      "button[title='right']",
+      "button[aria-label='right']",
+      "button .anticon-right",
+      "button .icon-right",
     ];
 
     for (const selector of selectors) {
       const node = document.querySelector(selector) as HTMLElement | null;
       if (!node) continue;
-      if (node.getAttribute("disabled") !== null) continue;
-      node.click();
+      const target = (node.closest("button,a,li") as HTMLElement | null) || node;
+      if (isDisabled(target)) continue;
+      target.click();
       return true;
     }
 
@@ -802,12 +828,21 @@ const clickListNextPage = async (page: any) => {
     const textHit = fallbackButtons.find((el) => {
       const t = (el.textContent || "").trim();
       if (!t) return false;
-      if (!/下一頁|next/i.test(t)) return false;
-      const cls = String(el.className || "");
-      return !/disabled/i.test(cls) && el.getAttribute("disabled") === null;
+      if (!/下一頁|next|right|>|»|›|→/i.test(t)) return false;
+      return !isDisabled(el);
     });
     if (textHit) {
       textHit.click();
+      return true;
+    }
+
+    const iconHit = fallbackButtons.find((el) => {
+      if (isDisabled(el)) return false;
+      const html = el.innerHTML || "";
+      return /anticon-right|icon-right|caret-right|arrow-right/i.test(html);
+    });
+    if (iconHit) {
+      iconHit.click();
       return true;
     }
 
@@ -816,7 +851,7 @@ const clickListNextPage = async (page: any) => {
       let sibling = activeItem.nextElementSibling as HTMLElement | null;
       while (sibling) {
         const cls = String(sibling.className || "");
-        if (/ant-pagination-item/.test(cls) && !/disabled/i.test(cls)) {
+        if (/ant-pagination-item/.test(cls) && !/disabled/i.test(cls) && !isDisabled(sibling)) {
           const target = (sibling.querySelector("a") as HTMLElement | null) || sibling;
           target.click();
           return true;
