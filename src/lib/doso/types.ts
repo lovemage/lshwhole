@@ -71,6 +71,8 @@ export type DosoImportSessionStatus =
 export interface DosoImportSessionProgress {
   session_id: number;
   status: DosoImportSessionStatus;
+  target_url?: string;
+  created_at?: string;
   total_count: number;
   processed_count: number;
   imported_count: number;
@@ -158,6 +160,20 @@ export type DosoImportProgressApiResponse =
 export type DosoImportPauseApiResponse =
   | DosoImportPauseResponse
   | DosoImportPauseErrorResponse;
+
+export interface DosoImportSessionsListResponse {
+  ok?: true;
+  sessions: DosoImportSessionProgress[];
+}
+
+export interface DosoImportSessionsListErrorResponse {
+  ok?: false;
+  error: string;
+}
+
+export type DosoImportSessionsListApiResponse =
+  | DosoImportSessionsListResponse
+  | DosoImportSessionsListErrorResponse;
 
 export interface DosoCredentialsResponse {
   ok: true;

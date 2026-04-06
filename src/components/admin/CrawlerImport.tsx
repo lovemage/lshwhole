@@ -7,6 +7,7 @@ import type {
   DosoImportProduct,
   DosoImportProgressApiResponse,
   DosoImportRunApiResponse,
+  DosoImportSessionsListApiResponse,
   DosoSourceCategoryMappingApiResponse,
   DosoImportStartApiResponse,
   DosoImportSessionProgress,
@@ -123,6 +124,8 @@ export default function CrawlerImport() {
   const [probeError, setProbeError] = useState<string | null>(null);
   const [importLoading, setImportLoading] = useState(false);
   const [importSession, setImportSession] = useState<DosoImportSessionProgress | null>(null);
+  const [importSessions, setImportSessions] = useState<DosoImportSessionProgress[]>([]);
+  const [runBatchSize, setRunBatchSize] = useState(20);
   const [importStorageKey, setImportStorageKey] = useState("dosoImport:anon");
   const [sourceCategoryNodes, setSourceCategoryNodes] = useState<DosoSourceCategoryNode[]>([]);
   const [sourceCategoryMapping, setSourceCategoryMapping] = useState<DosoSourceCategoryMappingConfig>({
@@ -170,17 +173,25 @@ export default function CrawlerImport() {
         }
 
         const rawId = localStorage.getItem(`${storageKey}:sessionId`);
-        if (!rawId) return;
+        if (!rawId || !session?.access_token) {
+          await fetchImportSessions(false);
+          return;
+        }
+
         const sessionId = Number(rawId);
-        if (!Number.isInteger(sessionId) || sessionId <= 0) return;
-        if (!session?.access_token) return;
+        if (!Number.isInteger(sessionId) || sessionId <= 0) {
+          await fetchImportSessions(false);
+          return;
+        }
 
         const res = await fetch(`/api/admin/sync/doso/import/${sessionId}/progress`, {
           headers: { Authorization: `Bearer ${session.access_token}` },
         });
         const data = (await res.json().catch(() => null)) as DosoImportProgressApiResponse | null;
-        if (!res.ok || !data || !data.ok) return;
-        setImportSession(data.session);
+        if (res.ok && data && data.ok) {
+          setImportSession(data.session);
+        }
+        await fetchImportSessions(true);
       } catch {
         // noop
       }
@@ -208,6 +219,7 @@ export default function CrawlerImport() {
 
     fetchSavedCredentials();
     fetchSourceCategoryMapping();
+    fetchImportSessions(true);
   }, []);
 
   useEffect(() => {
@@ -449,6 +461,51 @@ export default function CrawlerImport() {
     return session?.access_token || null;
   };
 
+  const fetchImportSessions = async (keepCurrent = true) => {
+    try {
+      const accessToken = await getAdminAccessToken();
+      if (!accessToken) return;
+
+      const res = await fetch("/api/admin/sync/doso/import/sessions", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const data = (await res.json().catch(() => null)) as DosoImportSessionsListApiResponse | null;
+      if (!res.ok || !data || !data.ok) return;
+
+      const sessions = data.sessions || [];
+      setImportSessions(sessions);
+
+      if (!keepCurrent) {
+        setImportSession(sessions[0] || null);
+        return;
+      }
+
+      if (importSession) {
+        const matched = sessions.find((x) => x.session_id === importSession.session_id);
+        if (matched) {
+          setImportSession(matched);
+          return;
+        }
+      }
+
+      const rawId = localStorage.getItem(`${importStorageKey}:sessionId`);
+      const sessionId = Number(rawId);
+      if (Number.isInteger(sessionId) && sessionId > 0) {
+        const matchedByLocal = sessions.find((x) => x.session_id === sessionId);
+        if (matchedByLocal) {
+          setImportSession(matchedByLocal);
+          return;
+        }
+      }
+
+      if (!importSession && sessions.length > 0) {
+        setImportSession(sessions[0]);
+      }
+    } catch {
+      // noop
+    }
+  };
+
   const flattenSourceCategoryNodes = (directories: Record<string, DosoSourceCategoryNode[]>) => {
     const out: DosoSourceCategoryNode[] = [];
     for (const nodes of Object.values(directories || {})) {
@@ -665,6 +722,7 @@ export default function CrawlerImport() {
       }
 
       setImportSession(data.session);
+      await fetchImportSessions(true);
 
       if (shouldResetList) {
         setCrawlerProducts([]);
@@ -703,7 +761,7 @@ export default function CrawlerImport() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({ batch_size: 20 }),
+        body: JSON.stringify({ batch_size: runBatchSize }),
       });
 
       const data = (await res.json().catch(() => null)) as DosoImportRunApiResponse | null;
@@ -719,8 +777,65 @@ export default function CrawlerImport() {
 
       setImportSession(data.session);
       appendImportedProducts(data.products || []);
+      await fetchImportSessions(true);
     } catch (err) {
       setProbeError(err instanceof Error ? err.message : "續傳時發生錯誤");
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const handlePickImportSession = async (sessionId: number) => {
+    try {
+      const picked = importSessions.find((x) => x.session_id === sessionId);
+      if (picked) {
+        setImportSession(picked);
+      }
+
+      const accessToken = await getAdminAccessToken();
+      if (!accessToken) return;
+      const res = await fetch(`/api/admin/sync/doso/import/${sessionId}/progress`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const data = (await res.json().catch(() => null)) as DosoImportProgressApiResponse | null;
+      if (!res.ok || !data || !data.ok) return;
+      setImportSession(data.session);
+      await fetchImportSessions(true);
+    } catch {
+      // noop
+    }
+  };
+
+  const handleResetSingleImportSession = async (sessionId: number) => {
+    const ok = confirm(`確定要重置同步任務 Session #${sessionId} 嗎？`);
+    if (!ok) return;
+
+    setImportLoading(true);
+    setProbeError(null);
+    try {
+      const accessToken = await getAdminAccessToken();
+      if (!accessToken) {
+        setProbeError("尚未登入管理員，請重新登入後再試");
+        return;
+      }
+
+      const res = await fetch(`/api/admin/sync/doso/import/${sessionId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.ok) {
+        setProbeError(mapDosoError(data?.error, "重置同步任務失敗"));
+        return;
+      }
+
+      if (importSession?.session_id === sessionId) {
+        setImportSession(null);
+        localStorage.removeItem(`${importStorageKey}:sessionId`);
+      }
+      await fetchImportSessions(false);
+    } catch (err) {
+      setProbeError(err instanceof Error ? err.message : "重置同步任務失敗");
     } finally {
       setImportLoading(false);
     }
@@ -740,6 +855,7 @@ export default function CrawlerImport() {
       const data = (await res.json().catch(() => null)) as DosoImportProgressApiResponse | null;
       if (!res.ok || !data || !data.ok) return;
       setImportSession(data.session);
+      await fetchImportSessions(true);
     } catch {
       // noop
     }
@@ -1491,41 +1607,110 @@ export default function CrawlerImport() {
           </select>
         </div>
 
+        <div className="rounded-lg border border-border-light bg-background-light p-3 space-y-3">
+          <div className="text-sm font-bold text-text-primary-light">Step 1. 同步（建立/選擇同步任務）</div>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={handleDosoImport}
+              disabled={importLoading}
+              className="inline-flex items-center gap-2 rounded-lg border border-border-light bg-card-light px-4 py-2 text-sm font-bold text-text-primary-light hover:bg-primary/10 disabled:opacity-50"
+            >
+              <span className="material-symbols-outlined text-base">download</span>
+              {importLoading ? "處理中..." : "同步商品（建立新任務）"}
+            </button>
+            <button
+              onClick={() => fetchImportSessions(false)}
+              disabled={importLoading}
+              className="inline-flex items-center gap-2 rounded-lg border border-border-light bg-card-light px-4 py-2 text-sm font-bold text-text-primary-light hover:bg-primary/10 disabled:opacity-50"
+            >
+              <span className="material-symbols-outlined text-base">refresh</span>
+              重新整理任務
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            {importSessions.length === 0 && (
+              <div className="md:col-span-3 text-xs text-text-secondary-light">尚無同步任務，請先按「同步商品（建立新任務）」。</div>
+            )}
+            {importSessions.map((s, idx) => {
+              const selected = importSession?.session_id === s.session_id;
+              return (
+                <div
+                  key={s.session_id}
+                  className={`rounded-lg border p-2 ${selected ? "border-primary bg-primary/5" : "border-border-light bg-card-light"}`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-xs font-bold text-text-primary-light">Session {idx + 1} #{s.session_id}</div>
+                    <div className="text-[11px] text-text-secondary-light">{s.status}</div>
+                  </div>
+                  <div className="mt-1 text-[11px] text-text-secondary-light break-all">{s.target_url || "-"}</div>
+                  <div className="mt-1 text-[11px] text-text-secondary-light">{s.processed_count} / {s.total_count}</div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <button
+                      onClick={() => handlePickImportSession(s.session_id)}
+                      disabled={importLoading}
+                      className="rounded border border-border-light px-2 py-1 text-[11px] text-text-primary-light hover:bg-primary/10 disabled:opacity-50"
+                    >
+                      使用此任務
+                    </button>
+                    <button
+                      onClick={() => handleResetSingleImportSession(s.session_id)}
+                      disabled={importLoading}
+                      className="rounded border border-border-light px-2 py-1 text-[11px] text-red-600 hover:bg-red-50 disabled:opacity-50"
+                    >
+                      重置
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-border-light bg-background-light p-3 space-y-3">
+          <div className="text-sm font-bold text-text-primary-light">Step 2. 導入（依目前選擇 Session）</div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="inline-flex items-center gap-2 text-xs text-text-secondary-light">
+              <span>批次大小</span>
+              <input
+                type="number"
+                min={1}
+                max={100}
+                value={runBatchSize}
+                onChange={(e) => setRunBatchSize(Math.min(100, Math.max(1, Number(e.target.value) || 20)))}
+                className="w-20 rounded border border-border-light bg-card-light px-2 py-1 text-xs"
+              />
+            </div>
+            <button
+              onClick={handleDosoRun}
+              disabled={
+                importLoading ||
+                !importSession ||
+                importSession.status === "completed" ||
+                importSession.status === "failed"
+              }
+              className="inline-flex items-center gap-2 rounded-lg border border-border-light bg-card-light px-4 py-2 text-sm font-bold text-text-primary-light hover:bg-primary/10 disabled:opacity-50"
+            >
+              <span className="material-symbols-outlined text-base">play_arrow</span>
+              {importLoading ? "處理中..." : `導入網站（Session #${importSession?.session_id || "-"}）`}
+            </button>
+            <button
+              onClick={handleResetImportSession}
+              disabled={importLoading}
+              className="inline-flex items-center gap-2 rounded-lg border border-border-light bg-card-light px-4 py-2 text-sm font-bold text-text-primary-light hover:bg-primary/10 disabled:opacity-50"
+            >
+              <span className="material-symbols-outlined text-base">restart_alt</span>
+              清除目前綁定
+            </button>
+          </div>
+        </div>
+
         <div className="flex items-center gap-3">
-          <button
-            onClick={handleDosoImport}
-            disabled={importLoading}
-            className="inline-flex items-center gap-2 rounded-lg border border-border-light bg-card-light px-4 py-2 text-sm font-bold text-text-primary-light hover:bg-primary/10 disabled:opacity-50"
-          >
-            <span className="material-symbols-outlined text-base">download</span>
-            {importLoading ? "處理中..." : "同步商品"}
-          </button>
-          <button
-            onClick={handleDosoRun}
-            disabled={
-              importLoading ||
-              !importSession ||
-              importSession.status === "completed" ||
-              importSession.status === "failed"
-            }
-            className="inline-flex items-center gap-2 rounded-lg border border-border-light bg-card-light px-4 py-2 text-sm font-bold text-text-primary-light hover:bg-primary/10 disabled:opacity-50"
-          >
-            <span className="material-symbols-outlined text-base">play_arrow</span>
-            {importLoading ? "處理中..." : "導入網站"}
-          </button>
-          <button
-            onClick={handleResetImportSession}
-            disabled={importLoading}
-            className="inline-flex items-center gap-2 rounded-lg border border-border-light bg-card-light px-4 py-2 text-sm font-bold text-text-primary-light hover:bg-primary/10 disabled:opacity-50"
-          >
-            <span className="material-symbols-outlined text-base">restart_alt</span>
-            重置 Session
-          </button>
           {probeError && <span className="text-sm text-red-600">{probeError}</span>}
         </div>
 
         <p className="text-xs text-text-secondary-light">
-          導入商品會先建立 session，可中斷後續傳，並自動跳過已存在 SKU。導入成功的商品會追加到下方導入清單。
+          同步任務可建立多筆（最多顯示近 3 筆），並可切換目前 Session 後再執行導入。導入會自動跳過已存在 SKU。
         </p>
 
         {importSession && (
@@ -1565,8 +1750,8 @@ export default function CrawlerImport() {
             <ol className="list-decimal pl-5 space-y-1 text-sm text-text-secondary-light">
               <li>先輸入 DOSO 帳號與密碼。</li>
               <li>從下拉選單選擇一個目錄。</li>
-              <li>按「同步商品」建立導入 session。</li>
-              <li>按「導入網站」持續導入。</li>
+              <li>Step 1：按「同步商品（建立新任務）」，可建立多個同步任務並切換 Session。</li>
+              <li>Step 2：確認目前 Session 後按「導入網站」持續導入。</li>
               <li>查看進度區塊的總商品數與目前進度。</li>
               <li>中斷後可回到頁面繼續導入。</li>
             </ol>

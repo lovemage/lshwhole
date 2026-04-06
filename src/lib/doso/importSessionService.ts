@@ -7,6 +7,8 @@ import type {
 
 interface SessionRow {
   id: number;
+  target_url: string;
+  created_at: string;
   status: DosoImportSessionStatus;
   total_count: number;
   processed_count: number;
@@ -27,10 +29,12 @@ export interface ImportItemRow {
 }
 
 const SESSION_SELECT =
-  "id,status,total_count,processed_count,imported_count,skipped_count,failed_count,last_checkpoint_product_code,error_message";
+  "id,target_url,created_at,status,total_count,processed_count,imported_count,skipped_count,failed_count,last_checkpoint_product_code,error_message";
 
 const toProgress = (row: SessionRow): DosoImportSessionProgress => ({
   session_id: row.id,
+  target_url: row.target_url,
+  created_at: row.created_at,
   status: row.status,
   total_count: row.total_count,
   processed_count: row.processed_count,
@@ -122,6 +126,39 @@ export async function getLatestOpenSession(adminUserId?: string | null) {
   }
 
   return data ? toProgress(data) : null;
+}
+
+export async function listRecentSessions(adminUserId?: string | null, limit = 3) {
+  const admin = supabaseAdmin();
+  let query = admin
+    .from("doso_import_sessions")
+    .select(SESSION_SELECT)
+    .order("created_at", { ascending: false })
+    .limit(Math.min(10, Math.max(1, Math.floor(limit))));
+
+  if (adminUserId) {
+    query = query.eq("admin_user_id", adminUserId);
+  }
+
+  const { data, error } = await query.returns<SessionRow[]>();
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data || []).map(toProgress);
+}
+
+export async function deleteSessionById(sessionId: number, adminUserId?: string | null) {
+  const admin = supabaseAdmin();
+  let query = admin.from("doso_import_sessions").delete().eq("id", sessionId);
+  if (adminUserId) {
+    query = query.eq("admin_user_id", adminUserId);
+  }
+
+  const { error } = await query;
+  if (error) {
+    throw new Error(error.message);
+  }
 }
 
 export async function listPendingItems(sessionId: number, limit = 20) {
