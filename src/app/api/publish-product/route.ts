@@ -94,10 +94,12 @@ export async function POST(request: NextRequest) {
       const finalMapping = autoCreated || mapped || fallback;
 
       if (!finalMapping?.l1_id || !finalMapping?.l2_id) {
-        return NextResponse.json({ error: "missing_category_mapping" }, { status: 400 });
+        if (!resolvedCategoryIds.length) {
+          return NextResponse.json({ error: "missing_category_mapping" }, { status: 400 });
+        }
+      } else {
+        resolvedCategoryIds = [finalMapping.l1_id, finalMapping.l2_id, finalMapping.l3_id || null].filter(Boolean) as number[];
       }
-
-      resolvedCategoryIds = [finalMapping.l1_id, finalMapping.l2_id, finalMapping.l3_id || null].filter(Boolean) as number[];
     }
 
     const productPayload: any = {

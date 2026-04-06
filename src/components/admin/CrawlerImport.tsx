@@ -1384,7 +1384,9 @@ export default function CrawlerImport() {
         wholesale_price_twd: toInt(wholesale),
         retail_price_twd: toInt(retail),
         status: "published",
-        category_ids: resolveMappedCategoryIds(p) || [],
+        category_ids:
+          resolveMappedCategoryIds(p) ||
+          [selectedCrawlerL1, selectedCrawlerL2, selectedCrawlerL3].filter(Boolean),
         tag_ids: selectedCrawlerTags,
         image_urls: image_urls,
         original_url: p.url || null,
