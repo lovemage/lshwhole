@@ -68,6 +68,9 @@ export async function POST(request: NextRequest) {
 
     let resolvedCategoryIds = (Array.isArray(category_ids) ? category_ids.filter((x: any) => !!x) : []) as number[];
     const directoryUrl =
+      detectDosoDirectoryUrl(
+        typeof source_directory_url === "string" ? source_directory_url : null
+      ) ||
       (typeof source_directory_url === "string" && source_directory_url.trim()) ||
       detectDosoDirectoryUrl(original_url);
 

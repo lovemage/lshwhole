@@ -31,6 +31,30 @@ const getDirectoryKey = (directoryUrl: string) => {
   }
 };
 
+const normalizeDirectoryUrl = (directoryUrl?: string | null) => {
+  const raw = String(directoryUrl || "").trim();
+  if (!raw) return "";
+
+  if (VALID_DIRECTORY_URLS.has(raw)) return raw;
+
+  for (const option of DOSO_TARGET_OPTIONS) {
+    const path = option.url.replace("https://www.doso.net", "");
+    if (raw.includes(path)) return option.url;
+  }
+
+  try {
+    const pathname = new URL(raw).pathname;
+    for (const option of DOSO_TARGET_OPTIONS) {
+      const path = option.url.replace("https://www.doso.net", "");
+      if (pathname.includes(path)) return option.url;
+    }
+  } catch {
+    // noop
+  }
+
+  return raw;
+};
+
 const emptyCache = (): DosoSourceCategoryCache => ({
   updated_at: new Date(0).toISOString(),
   directories: {},
@@ -184,8 +208,9 @@ export const resolveMappedCategoryBySourceCategoryId = async (
 ) => {
   const key = String(sourceCategoryId || "").trim();
   if (!key) return null;
+  const normalizedDirectoryUrl = normalizeDirectoryUrl(directoryUrl);
   const mapping = await getDosoSourceCategoryMapping();
-  const compositeKey = directoryUrl ? `${directoryUrl}::${key}` : "";
+  const compositeKey = normalizedDirectoryUrl ? `${normalizedDirectoryUrl}::${key}` : "";
   const hit = (compositeKey ? mapping.by_source_category_id[compositeKey] : null) || mapping.by_source_category_id[key];
   if (!hit) return null;
 
@@ -197,7 +222,7 @@ export const resolveMappedCategoryBySourceCategoryId = async (
 };
 
 export const resolveDirectoryFallbackCategory = async (directoryUrl?: string | null) => {
-  const key = String(directoryUrl || "").trim();
+  const key = normalizeDirectoryUrl(directoryUrl);
   if (!key) return null;
   const mapping = await getDosoSourceCategoryMapping();
   const hit = mapping.directory_fallback[key];
@@ -315,7 +340,7 @@ export const resolveOrCreateCategoryByDosoSource = async (
 ) => {
   const key = String(sourceCategoryId || "").trim();
   const sourceName = String(sourceCategoryName || "").trim();
-  const url = String(directoryUrl || "").trim();
+  const url = normalizeDirectoryUrl(directoryUrl);
   if (!url || (!key && !sourceName)) return null;
 
   const mapping = await getDosoSourceCategoryMapping();
@@ -331,7 +356,7 @@ export const resolveOrCreateCategoryByDosoSource = async (
       ? lineage[0]
       : {
           source_category_id: key || `adhoc_${slugPart(sourceName).toLowerCase()}`,
-          name: sourceName,
+          name: sourceName || key,
           parent_id: null,
           level: 1,
           directory_url: url,
