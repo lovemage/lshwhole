@@ -23,6 +23,8 @@ interface RetailProduct {
 interface Category { id: number; name: string; level: number; sort: number; icon?: string; retail_visible?: boolean; }
 interface Relation { parent_category_id: number; child_category_id: number; }
 
+const PAGE_SIZE = 48;
+
 export default function ProductsPage() {
   return (
     <Suspense fallback={<div style={{ backgroundColor: "#fffdf5" }} className="min-h-screen" />}>
@@ -83,6 +85,14 @@ function ProductsPageInner() {
     })();
   }, []);
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm.trim());
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
   // 分類層級
   const filteredCategories = useMemo(() => {
     if (!allowedCategorySet) return categoriesAll;
@@ -131,7 +141,10 @@ function ProductsPageInner() {
 
   // 商品
   const [products, setProducts] = useState<RetailProduct[]>([]);
+  const [totalProducts, setTotalProducts] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
 
   useEffect(() => {
     // 載入分類、關聯和標籤
@@ -158,14 +171,18 @@ function ProductsPageInner() {
     categoryId?: number | null;
     tagIds?: number[];
     search?: string;
+    page?: number;
   }) => {
     if (!permissions || permissions.tier === 'guest' || !permissions.permissions.can_view_products) {
       setProducts([]);
+      setTotalProducts(0);
       setLoading(false);
       return;
     }
     const params = new URLSearchParams();
-    params.set("limit", "48");
+    const page = Math.max(1, opts?.page || 1);
+    params.set("limit", String(PAGE_SIZE));
+    params.set("offset", String((page - 1) * PAGE_SIZE));
     if (opts?.search) params.set("search", opts.search);
     if (opts?.categoryId) params.set("category_id", String(opts.categoryId));
     if (opts?.tagIds && opts.tagIds.length > 0) params.set("tag_ids", opts.tagIds.join(","));
@@ -179,6 +196,10 @@ function ProductsPageInner() {
       if (res.ok) {
         const j = await res.json();
         setProducts(j.data || []);
+        setTotalProducts(j.count || 0);
+      } else {
+        setProducts([]);
+        setTotalProducts(0);
       }
     } finally {
       setLoading(false);
@@ -337,35 +358,26 @@ function ProductsPageInner() {
   }, [allowedCategorySet, selectedL1Id, selectedL2Id, selectedL3Id, searchParams]);
 
   useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedL1Id, selectedL2Id, selectedL3Id, selectedTagIds, debouncedSearchTerm]);
+
+  useEffect(() => {
     if (permissionsLoading) return;
     if (!urlSyncRef.current.ready) return;
     if (!permissions || permissions.tier === 'guest' || !permissions.permissions.can_view_products) {
       setProducts([]);
+      setTotalProducts(0);
       setLoading(false);
       return;
     }
     fetchProducts({
       categoryId: getCurrentCategoryId(),
       tagIds: selectedTagIds,
-      search: searchTerm.trim()
+      search: debouncedSearchTerm,
+      page: currentPage,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedL1Id, selectedL2Id, selectedL3Id, selectedTagIds, permissionsLoading, permissions, searchTerm]);
-
-  // 搜尋即時
-  useEffect(() => {
-    const h = setTimeout(() => {
-      if (permissions && permissions.permissions.can_view_products && permissions.tier !== 'guest') {
-        fetchProducts({
-          categoryId: getCurrentCategoryId(),
-          tagIds: selectedTagIds,
-          search: searchTerm.trim()
-        });
-      }
-    }, 250);
-    return () => clearTimeout(h);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchTerm, permissions]);
+  }, [selectedL1Id, selectedL2Id, selectedL3Id, selectedTagIds, permissionsLoading, permissions, debouncedSearchTerm, currentPage, accessToken]);
 
   const sortedProducts = useMemo(() => {
     const arr = [...products];
@@ -373,6 +385,18 @@ function ProductsPageInner() {
     if (sortBy === "price-high") return arr.sort((a,b)=>(b.retail_price_twd||0)-(a.retail_price_twd||0));
     return arr; // newest 由 API 按 created_at desc
   }, [products, sortBy]);
+
+  const totalPages = Math.max(1, Math.ceil(totalProducts / PAGE_SIZE));
+  const pageStart = totalProducts === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
+  const pageEnd = totalProducts === 0 ? 0 : Math.min(currentPage * PAGE_SIZE, totalProducts);
+  const visiblePageNumbers = useMemo(() => {
+    if (totalPages <= 5) {
+      return Array.from({ length: totalPages }, (_, index) => index + 1);
+    }
+
+    const start = Math.max(1, Math.min(currentPage - 2, totalPages - 4));
+    return Array.from({ length: 5 }, (_, index) => start + index);
+  }, [currentPage, totalPages]);
 
   const toggleTagSection = (code: string) => {
     setExpandedTagSections(prev => {
@@ -685,7 +709,9 @@ function ProductsPageInner() {
                 </div>
                 
                 <div className="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto ml-auto">
-                  <span className="text-sm font-medium text-gray-500 whitespace-nowrap bg-white px-4 py-2 rounded-full shadow-sm">{products.length} 個寶藏</span>
+                  <span className="text-sm font-medium text-gray-500 whitespace-nowrap bg-white px-4 py-2 rounded-full shadow-sm">
+                    共 {totalProducts} 個寶藏
+                  </span>
                   <div className="relative group">
                     <select
                         value={sortBy}
@@ -827,6 +853,47 @@ function ProductsPageInner() {
                     <button onClick={resetAllFilters} className="px-8 py-3 bg-primary text-white font-bold rounded-full hover:shadow-lg hover:shadow-primary/30 transition-all hover:-translate-y-1">
                       顯示所有商品
                     </button>
+                  </div>
+                )}
+
+                {sortedProducts.length > 0 && totalPages > 1 && (
+                  <div className="mt-8 flex flex-col gap-4 rounded-[2rem] border border-gray-100 bg-white px-5 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-sm text-gray-500">
+                      顯示第 {pageStart}-{pageEnd} 筆，共 {totalProducts} 筆商品
+                    </p>
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                        className="rounded-full bg-gray-100 px-4 py-2 text-sm font-bold text-gray-700 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        上一頁
+                      </button>
+                      {visiblePageNumbers.map((page) => (
+                        <button
+                          key={page}
+                          type="button"
+                          onClick={() => setCurrentPage(page)}
+                          aria-current={page === currentPage ? "page" : undefined}
+                          className={`min-w-10 rounded-full px-3 py-2 text-sm font-bold transition-colors ${
+                            page === currentPage
+                              ? "bg-primary text-white shadow-md shadow-primary/20"
+                              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                        disabled={currentPage === totalPages}
+                        className="rounded-full bg-gray-100 px-4 py-2 text-sm font-bold text-gray-700 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        下一頁
+                      </button>
+                    </div>
                   </div>
                 )}
                </>
