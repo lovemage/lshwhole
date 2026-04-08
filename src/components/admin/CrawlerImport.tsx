@@ -47,9 +47,6 @@ export default function CrawlerImport() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [categoryRelations, setCategoryRelations] = useState<any[]>([]);
-  const [selectedCrawlerL1, setSelectedCrawlerL1] = useState<number | null>(null);
-  const [selectedCrawlerL2, setSelectedCrawlerL2] = useState<number | null>(null);
-  const [selectedCrawlerL3, setSelectedCrawlerL3] = useState<number | null>(null);
   const [selectedCrawlerTags, setSelectedCrawlerTags] = useState<number[]>([]);
   const [tagSearchTerm, setTagSearchTerm] = useState("");
 
@@ -72,11 +69,18 @@ export default function CrawlerImport() {
     cost_twd: 0,
     wholesale_price_twd: 0,
     retail_price_twd: 0,
-    l1Id: null as number | null,
-    l2Id: null as number | null,
-    l3Id: null as number | null,
     image_urls: [] as string[],
   });
+  const [showCategoryReview, setShowCategoryReview] = useState(false);
+  const [pendingPublishPayload, setPendingPublishPayload] = useState<any | null>(null);
+  const [pendingCategoryReview, setPendingCategoryReview] = useState<any | null>(null);
+  const [mergeL2Id, setMergeL2Id] = useState<number | null>(null);
+  const [mergeL3Id, setMergeL3Id] = useState<number | null>(null);
+  const [isBatchReviewMode, setIsBatchReviewMode] = useState(false);
+  const [batchReviewQueue, setBatchReviewQueue] = useState<Array<{ payload: any; review: any; productCode: string }>>([]);
+  const [batchReviewIndex, setBatchReviewIndex] = useState(0);
+  const [batchReviewStats, setBatchReviewStats] = useState({ successCount: 0, failCount: 0, mappingMissCount: 0 });
+  const [batchPublishedCodes, setBatchPublishedCodes] = useState<string[]>([]);
 
   interface Spec {
     name: string;
@@ -245,17 +249,6 @@ export default function CrawlerImport() {
       console.error("Failed to fetch spec templates:", err);
     }
   };
-
-  useEffect(() => {
-    // 當 L1 改變時重置 L2/L3
-    setSelectedCrawlerL2(null);
-    setSelectedCrawlerL3(null);
-  }, [selectedCrawlerL1]);
-
-  useEffect(() => {
-    // 當 L2 改變時重置 L3
-    setSelectedCrawlerL3(null);
-  }, [selectedCrawlerL2]);
 
   const fetchCategories = async () => {
     try {
@@ -959,9 +952,6 @@ export default function CrawlerImport() {
       cost_twd: costTwd,
       wholesale_price_twd: wholesaleTwd,
       retail_price_twd: retailTwd,
-      l1Id: selectedCrawlerL1,
-      l2Id: selectedCrawlerL2,
-      l3Id: selectedCrawlerL3,
       image_urls: [], // Will be derived from candidateImages
     });
 
@@ -1052,6 +1042,57 @@ export default function CrawlerImport() {
     }
   };
 
+  const requestPublishConfirm = async (
+    payload: any,
+    manualMergeCategoryIds?: number[] | null,
+    providedToken?: string | null
+  ) => {
+    const accessToken = providedToken || (await getAdminAccessToken());
+    if (!accessToken) {
+      return { ok: false as const, error: "unauthorized" };
+    }
+    const body = {
+      ...payload,
+      category_review_mode: "confirm",
+      ...(manualMergeCategoryIds && manualMergeCategoryIds.length > 0
+        ? { manual_merge_category_ids: manualMergeCategoryIds }
+        : {}),
+    };
+    const res = await fetch("/api/publish-product", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { ok: false as const, error: json?.error || "publish_failed" };
+    }
+    return { ok: true as const, data: json };
+  };
+
+  const confirmPublishPayload = async (payload: any, manualMergeCategoryIds?: number[] | null) => {
+    const result = await requestPublishConfirm(payload, manualMergeCategoryIds);
+    if (!result.ok) {
+      if (result.error === "unauthorized") {
+        alert("尚未登入管理員，請重新登入後再試");
+        return;
+      }
+      alert(result.error || "上架失敗");
+      return;
+    }
+
+    alert("上架成功");
+    setShowPublish(false);
+    setShowCategoryReview(false);
+    setPendingPublishPayload(null);
+    setPendingCategoryReview(null);
+    setMergeL2Id(null);
+    setMergeL3Id(null);
+  };
+
   const publishNow = async () => {
     try {
       setPublishing(true);
@@ -1063,7 +1104,6 @@ export default function CrawlerImport() {
 
       const toInt = (v: any) =>
         v === null || v === undefined || v === "" ? null : Math.floor(Number(v));
-      const category_ids = [publishForm.l1Id, publishForm.l2Id, publishForm.l3Id].filter(Boolean) as number[];
       const payload = {
         sku: publishForm.sku,
         title: publishForm.title,
@@ -1072,7 +1112,6 @@ export default function CrawlerImport() {
         wholesale_price_twd: toInt(publishForm.wholesale_price_twd),
         retail_price_twd: toInt(publishForm.retail_price_twd),
         status: "published",
-        category_ids,
         tag_ids: selectedCrawlerTags,
         image_urls: candidateImages.filter(i => i.isProduct).map(i => i.url),
         original_url: publishTarget?.url || null,
@@ -1105,25 +1144,152 @@ export default function CrawlerImport() {
         alert("請填寫 SKU 與標題");
         return;
       }
-      if (!category_ids.length && !payload.source_directory_url) {
+      if (!payload.source_directory_url) {
         alert("找不到可用分類映射，請先設定來源分類映射");
         return;
       }
-      const res = await fetch("/api/publish-product", {
+
+      const previewRes = await fetch("/api/publish-product", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          sku: payload.sku,
+          title: payload.title,
+          source_category_id: payload.source_category_id,
+          source_category_name: payload.source_category_name,
+          source_directory_url: payload.source_directory_url,
+          original_url: payload.original_url,
+          category_review_mode: "preview",
+        }),
       });
-      if (res.ok) {
-        alert("上架成功");
-        setShowPublish(false);
-      } else {
-        const j = await res.json().catch(() => ({}));
-        alert(j?.error || "上架失敗");
+
+      const previewData = await previewRes.json().catch(() => null);
+      if (!previewRes.ok) {
+        alert(previewData?.error || "分類預檢失敗");
+        return;
       }
+      const needsReview = Boolean(previewData?.category_review?.needs_review);
+      if (needsReview) {
+        setPendingPublishPayload(payload);
+        setPendingCategoryReview(previewData.category_review);
+        setMergeL2Id(null);
+        setMergeL3Id(null);
+        setShowCategoryReview(true);
+        return;
+      }
+
+      await confirmPublishPayload(payload);
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const confirmPublishWithAutoCategory = async () => {
+    if (!pendingPublishPayload) return;
+    if (isBatchReviewMode) {
+      await handleBatchReviewDecision(null);
+      return;
+    }
+    try {
+      setPublishing(true);
+      await confirmPublishPayload(pendingPublishPayload);
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const confirmPublishWithMergedCategory = async () => {
+    if (!pendingPublishPayload || !pendingCategoryReview) return;
+    const l1Id = Number(pendingCategoryReview?.proposed_category?.l1_id || 0);
+    if (!l1Id || !mergeL2Id) {
+      alert("請先選擇要合併的 L2 分類");
+      return;
+    }
+
+    const manualMergeCategoryIds = [l1Id, mergeL2Id, mergeL3Id || null].filter(Boolean) as number[];
+    if (isBatchReviewMode) {
+      await handleBatchReviewDecision(manualMergeCategoryIds);
+      return;
+    }
+    try {
+      setPublishing(true);
+      await confirmPublishPayload(pendingPublishPayload, manualMergeCategoryIds);
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const finalizeBatchPublish = (
+    successCount: number,
+    failCount: number,
+    mappingMissCount: number,
+    reviewRequiredCount: number,
+    publishedCodes: string[]
+  ) => {
+    alert(`批量上架完成\n成功：${successCount}\n失敗：${failCount}${mappingMissCount > 0 ? `\n分類映射缺失：${mappingMissCount}` : ""}${reviewRequiredCount > 0 ? `\n人工分類確認：${reviewRequiredCount}` : ""}`);
+
+    if (autoClearPublished && publishedCodes.length > 0) {
+      const codeSet = new Set(publishedCodes);
+      const updated = crawlerProducts.filter((p) => !codeSet.has(String(p.productCode || "")));
+      setCrawlerProducts(updated);
+      setCrawlerFiltered(applyFilterSort(updated));
+    }
+
+    setSelectedCrawlerProducts(new Set());
+    setIsBatchReviewMode(false);
+    setBatchReviewQueue([]);
+    setBatchReviewIndex(0);
+    setBatchReviewStats({ successCount: 0, failCount: 0, mappingMissCount: 0 });
+    setBatchPublishedCodes([]);
+    setShowCategoryReview(false);
+    setPendingPublishPayload(null);
+    setPendingCategoryReview(null);
+    setMergeL2Id(null);
+    setMergeL3Id(null);
+  };
+
+  const handleBatchReviewDecision = async (manualMergeCategoryIds: number[] | null) => {
+    const item = batchReviewQueue[batchReviewIndex];
+    if (!item) return;
+
+    try {
+      setPublishing(true);
+      const result = await requestPublishConfirm(item.payload, manualMergeCategoryIds);
+      const nextStats = { ...batchReviewStats };
+      const nextCodes = [...batchPublishedCodes];
+
+      if (result.ok) {
+        nextStats.successCount += 1;
+        nextCodes.push(item.productCode);
+      } else {
+        nextStats.failCount += 1;
+        if (result.error === "missing_category_mapping") {
+          nextStats.mappingMissCount += 1;
+        }
+      }
+
+      const nextIndex = batchReviewIndex + 1;
+      if (nextIndex >= batchReviewQueue.length) {
+        finalizeBatchPublish(
+          nextStats.successCount,
+          nextStats.failCount,
+          nextStats.mappingMissCount,
+          batchReviewQueue.length,
+          nextCodes
+        );
+        return;
+      }
+
+      setBatchReviewStats(nextStats);
+      setBatchPublishedCodes(nextCodes);
+      setBatchReviewIndex(nextIndex);
+      setPendingPublishPayload(batchReviewQueue[nextIndex].payload);
+      setPendingCategoryReview(batchReviewQueue[nextIndex].review);
+      setMergeL2Id(null);
+      setMergeL3Id(null);
     } finally {
       setPublishing(false);
     }
@@ -1204,8 +1370,9 @@ export default function CrawlerImport() {
     setBatchPublishing(true);
     let successCount = 0;
     let failCount = 0;
-    const publishedCodes = new Set<string>();
+    const publishedCodes: string[] = [];
     let mappingMissCount = 0;
+    const reviewQueue: Array<{ payload: any; review: any; productCode: string }> = [];
 
     const toInt = (v: any) =>
       v === null || v === undefined || v === "" ? null : Math.floor(Number(v));
@@ -1263,7 +1430,6 @@ export default function CrawlerImport() {
         wholesale_price_twd: toInt(wholesale),
         retail_price_twd: toInt(retail),
         status: "published",
-        category_ids: [selectedCrawlerL1, selectedCrawlerL2, selectedCrawlerL3].filter(Boolean),
         tag_ids: selectedCrawlerTags,
           image_urls: image_urls,
           original_url: p.url || null,
@@ -1273,20 +1439,42 @@ export default function CrawlerImport() {
         };
 
       try {
-        const res = await fetch("/api/publish-product", {
+        const previewRes = await fetch("/api/publish-product", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${accessToken}`,
           },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            sku: payload.sku,
+            title: payload.title,
+            source_category_id: payload.source_category_id,
+            source_category_name: payload.source_category_name,
+            source_directory_url: payload.source_directory_url,
+            original_url: payload.original_url,
+            category_review_mode: "preview",
+          }),
         });
-        if (res.ok) {
+        const previewData = await previewRes.json().catch(() => null);
+        if (!previewRes.ok) {
+          failCount++;
+          continue;
+        }
+        if (previewData?.category_review?.needs_review) {
+          reviewQueue.push({
+            payload,
+            review: previewData.category_review,
+            productCode: String(p.productCode || ""),
+          });
+          continue;
+        }
+
+        const result = await requestPublishConfirm(payload, null, accessToken);
+        if (result.ok) {
           successCount++;
-          publishedCodes.add(String(p.productCode || ""));
+          publishedCodes.push(String(p.productCode || ""));
         } else {
-          const j = await res.json().catch(() => ({}));
-          if (j?.error === "missing_category_mapping") {
+          if (result.error === "missing_category_mapping") {
             mappingMissCount++;
           }
           failCount++;
@@ -1296,16 +1484,23 @@ export default function CrawlerImport() {
       }
     }
 
-    setBatchPublishing(false);
-    alert(`批量上架完成\n成功：${successCount}\n失敗：${failCount}${mappingMissCount > 0 ? `\n分類映射缺失：${mappingMissCount}` : ""}`);
-
-    if (autoClearPublished && publishedCodes.size > 0) {
-      const updated = crawlerProducts.filter((p) => !publishedCodes.has(String(p.productCode || "")));
-      setCrawlerProducts(updated);
-      setCrawlerFiltered(applyFilterSort(updated));
+    if (reviewQueue.length > 0) {
+      setIsBatchReviewMode(true);
+      setBatchReviewQueue(reviewQueue);
+      setBatchReviewIndex(0);
+      setBatchReviewStats({ successCount, failCount, mappingMissCount });
+      setBatchPublishedCodes(publishedCodes);
+      setPendingPublishPayload(reviewQueue[0].payload);
+      setPendingCategoryReview(reviewQueue[0].review);
+      setMergeL2Id(null);
+      setMergeL3Id(null);
+      setShowCategoryReview(true);
+      setBatchPublishing(false);
+      return;
     }
 
-    setSelectedCrawlerProducts(new Set());
+    setBatchPublishing(false);
+    finalizeBatchPublish(successCount, failCount, mappingMissCount, 0, publishedCodes);
   };
 
   const removeCrawlerItem = (filteredIdx: number) => {
@@ -1641,66 +1836,13 @@ export default function CrawlerImport() {
         <div className="flex items-center justify-between mb-3">
           <div>
             <h3 className="text-lg font-bold text-text-primary-light">上架前：預設分類與標籤</h3>
-            <p className="text-xs text-text-secondary-light mt-1">必須選擇 L1 和 L2，L3 可選</p>
+            <p className="text-xs text-text-secondary-light mt-1">分類由來源自動判定，點擊上架後才會進行分類確認</p>
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div>
-            <label className="block text-sm font-medium text-text-primary-light mb-1">L1</label>
-            <select
-              value={selectedCrawlerL1 ?? ""}
-              onChange={(e) => setSelectedCrawlerL1(e.target.value ? Number(e.target.value) : null)}
-              className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-            >
-              <option value="">未選擇</option>
-              {categories
-                .filter((c) => c.level === 1)
-                .sort((a, b) => a.sort - b.sort)
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({c.slug})
-                  </option>
-                ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-text-primary-light mb-1">L2</label>
-            <select
-              value={selectedCrawlerL2 ?? ""}
-              onChange={(e) => setSelectedCrawlerL2(e.target.value ? Number(e.target.value) : null)}
-              className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-            >
-              <option value="">未選擇</option>
-              {categories
-                .filter((c) => c.level === 2)
-                .filter((l2) => !selectedCrawlerL1 || categoryRelations.some((r: any) => r.parent_category_id === selectedCrawlerL1 && r.child_category_id === l2.id))
-                .sort((a, b) => a.sort - b.sort)
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({c.slug})
-                  </option>
-                ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-text-primary-light mb-1">L3</label>
-            <select
-              value={selectedCrawlerL3 ?? ""}
-              onChange={(e) => setSelectedCrawlerL3(e.target.value ? Number(e.target.value) : null)}
-              className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-            >
-              <option value="">未選擇</option>
-              {categories
-                .filter((c) => c.level === 3)
-                .filter((l3) => !selectedCrawlerL2 || categoryRelations.some((r: any) => r.parent_category_id === selectedCrawlerL2 && r.child_category_id === l3.id))
-                .sort((a, b) => a.sort - b.sort)
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({c.slug})
-                  </option>
-                ))}
-            </select>
-          </div>
+        <div className="rounded-lg border border-border-light bg-background-light p-3 text-sm text-text-secondary-light">
+          <div className="font-medium text-text-primary-light">分類模式：來源自動判定</div>
+          <div className="mt-1">L1：日本（系統預設）</div>
+          <div className="mt-1">L2/L3：由來源分類與目錄推導，若有疑慮會在上架時彈窗確認是否合併。</div>
         </div>
         <div className="mt-3">
           <div className="flex items-center justify-between mb-2">
@@ -2192,40 +2334,8 @@ export default function CrawlerImport() {
                   )}
                 </div>
                 {/* 分類選擇 */}
-                <div className="grid grid-cols-3 gap-2">
-                  <div>
-                    <label className="text-sm text-text-secondary-light">L1</label>
-                    <select value={publishForm.l1Id ?? ""} onChange={(e) => setPublishForm({ ...publishForm, l1Id: e.target.value ? Number(e.target.value) : null, l2Id: null, l3Id: null })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm">
-                      <option value="">未選擇</option>
-                      {categories.filter(c => c.level === 1).sort((a, b) => a.sort - b.sort).map(c => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-sm text-text-secondary-light">L2</label>
-                    <select value={publishForm.l2Id ?? ""} onChange={(e) => setPublishForm({ ...publishForm, l2Id: e.target.value ? Number(e.target.value) : null, l3Id: null })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm">
-                      <option value="">未選擇</option>
-                      {categories.filter(c => c.level === 2)
-                        .filter(l2 => !publishForm.l1Id || categoryRelations.some((r: any) => r.parent_category_id === publishForm.l1Id && r.child_category_id === l2.id))
-                        .sort((a, b) => a.sort - b.sort)
-                        .map(c => (
-                          <option key={c.id} value={c.id}>{c.name}</option>
-                        ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-sm text-text-secondary-light">L3</label>
-                    <select value={publishForm.l3Id ?? ""} onChange={(e) => setPublishForm({ ...publishForm, l3Id: e.target.value ? Number(e.target.value) : null })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm">
-                      <option value="">未選擇</option>
-                      {categories.filter(c => c.level === 3)
-                        .filter(l3 => !publishForm.l2Id || categoryRelations.some((r: any) => r.parent_category_id === publishForm.l2Id && r.child_category_id === l3.id))
-                        .sort((a, b) => a.sort - b.sort)
-                        .map(c => (
-                          <option key={c.id} value={c.id}>{c.name}</option>
-                        ))}
-                    </select>
-                  </div>
+                <div className="rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm text-text-secondary-light">
+                  分類將依來源資料自動判定（L1 日本）。若系統判斷需確認，按「確認上架」後會跳出合併彈窗。
                 </div>
                 {/* 標籤選擇（共用選擇狀態） */}
                 <div>
@@ -2261,6 +2371,162 @@ export default function CrawlerImport() {
             <div className="mt-6 flex justify-end gap-3">
               <button disabled={publishing} onClick={() => setShowPublish(false)} className="px-4 py-2 rounded-lg border border-border-light text-sm disabled:opacity-50">取消</button>
               <button disabled={publishing} onClick={publishNow} className="px-4 py-2 rounded-lg bg-primary text-white text-sm disabled:opacity-50">確認上架</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCategoryReview && pendingCategoryReview && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 p-4">
+          <div className={`w-full rounded-xl border border-border-light bg-card-light p-6 ${isBatchReviewMode ? "max-w-5xl" : "max-w-2xl"}`}>
+            <div className={`grid gap-4 ${isBatchReviewMode ? "grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)]" : "grid-cols-1"}`}>
+              {isBatchReviewMode && (
+                <div className="rounded-lg border border-border-light bg-background-light p-3">
+                  <div className="text-sm font-bold text-text-primary-light">待確認清單</div>
+                  <div className="mt-1 text-xs text-text-secondary-light">
+                    已完成 {batchReviewIndex} / {batchReviewQueue.length}
+                  </div>
+                  <div className="mt-3 max-h-[56vh] space-y-2 overflow-y-auto pr-1">
+                    {batchReviewQueue.map((item, idx) => {
+                      const status = idx < batchReviewIndex ? "done" : idx === batchReviewIndex ? "current" : "pending";
+                      return (
+                        <div
+                          key={`${item.productCode}-${idx}`}
+                          className={`rounded border px-2 py-2 text-xs ${
+                            status === "done"
+                              ? "border-emerald-200 bg-emerald-50"
+                              : status === "current"
+                              ? "border-primary bg-primary/10"
+                              : "border-border-light bg-white"
+                          }`}
+                        >
+                          <div className="font-medium text-text-primary-light">#{idx + 1} {item.productCode || "無代碼"}</div>
+                          <div className="mt-1 line-clamp-2 text-text-secondary-light">{item.payload?.title || "無標題"}</div>
+                          <div className="mt-1 text-[11px] text-text-secondary-light">
+                            {status === "done" ? "已處理" : status === "current" ? "處理中" : "待處理"}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-text-primary-light">
+                分類確認{isBatchReviewMode ? `（批次 ${batchReviewIndex + 1}/${batchReviewQueue.length}）` : ""}
+              </h3>
+              <button
+                type="button"
+                className="text-text-secondary-light"
+                onClick={() => {
+                  if (isBatchReviewMode) {
+                    alert("批次分類確認進行中，請完成本輪確認。");
+                    return;
+                  }
+                  setShowCategoryReview(false);
+                  setPendingPublishPayload(null);
+                  setPendingCategoryReview(null);
+                  setMergeL2Id(null);
+                  setMergeL3Id(null);
+                }}
+              >
+                關閉
+              </button>
+            </div>
+
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              <div>系統判定此商品分類需要確認。</div>
+              <div className="mt-1 text-xs">
+                風險標記：{Array.isArray(pendingCategoryReview.risk_flags) && pendingCategoryReview.risk_flags.length > 0
+                  ? pendingCategoryReview.risk_flags.join(", ")
+                  : "無"}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
+              <div className="rounded border border-border-light bg-background-light p-3">
+                <div className="text-text-secondary-light">來源分類</div>
+                <div className="mt-1 text-text-primary-light">ID：{pendingCategoryReview?.source?.source_category_id || "-"}</div>
+                <div className="text-text-primary-light">名稱：{pendingCategoryReview?.source?.source_category_name || "-"}</div>
+              </div>
+              <div className="rounded border border-border-light bg-background-light p-3">
+                <div className="text-text-secondary-light">預計分類</div>
+                <div className="mt-1 text-text-primary-light">L1：{pendingCategoryReview?.proposed_category?.l1_id || "-"}</div>
+                <div className="text-text-primary-light">L2：{pendingCategoryReview?.proposed_category?.l2_name || pendingCategoryReview?.proposed_category?.l2_id || "-"}</div>
+                <div className="text-text-primary-light">L3：{pendingCategoryReview?.proposed_category?.l3_name || pendingCategoryReview?.proposed_category?.l3_id || "-"}</div>
+              </div>
+            </div>
+
+            <div className="rounded border border-border-light p-3 space-y-3">
+              <div className="text-sm font-medium text-text-primary-light">改為合併到既有分類（本次）</div>
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                <div>
+                  <label className="text-xs text-text-secondary-light">L2</label>
+                  <select
+                    value={mergeL2Id ?? ""}
+                    onChange={(e) => {
+                      setMergeL2Id(e.target.value ? Number(e.target.value) : null);
+                      setMergeL3Id(null);
+                    }}
+                    className="mt-1 w-full rounded border border-border-light bg-background-light px-2 py-2 text-sm"
+                  >
+                    <option value="">請選擇 L2</option>
+                    {categories
+                      .filter((c) => c.level === 2)
+                      .filter((l2) =>
+                        categoryRelations.some(
+                          (r: any) =>
+                            r.parent_category_id === Number(pendingCategoryReview?.proposed_category?.l1_id || 0) &&
+                            r.child_category_id === l2.id
+                        )
+                      )
+                      .sort((a, b) => a.sort - b.sort)
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-text-secondary-light">L3（可選）</label>
+                  <select
+                    value={mergeL3Id ?? ""}
+                    onChange={(e) => setMergeL3Id(e.target.value ? Number(e.target.value) : null)}
+                    className="mt-1 w-full rounded border border-border-light bg-background-light px-2 py-2 text-sm"
+                  >
+                    <option value="">不指定</option>
+                    {categories
+                      .filter((c) => c.level === 3)
+                      .filter((l3) => !mergeL2Id || categoryRelations.some((r: any) => r.parent_category_id === mergeL2Id && r.child_category_id === l3.id))
+                      .sort((a, b) => a.sort - b.sort)
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={confirmPublishWithAutoCategory}
+                disabled={publishing}
+                className="rounded-lg border border-border-light px-4 py-2 text-sm text-text-primary-light"
+              >
+                接受本次新增
+              </button>
+              <button
+                type="button"
+                onClick={confirmPublishWithMergedCategory}
+                disabled={publishing}
+                className="rounded-lg bg-primary px-4 py-2 text-sm text-white"
+              >
+                合併到既有分類
+              </button>
+            </div>
+              </div>
             </div>
           </div>
         </div>

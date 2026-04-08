@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/adminAuth";
 import {
+  getDosoSourceCategoryMapping,
   resolveOrCreateCategoryByDosoSource,
   resolveDirectoryFallbackCategory,
   resolveMappedCategoryBySourceCategoryId,
@@ -32,6 +33,81 @@ const detectDosoDirectoryUrl = (originalUrl?: string | null) => {
   return null;
 };
 
+const isLikelyNumericCategoryName = (value?: string | null) => {
+  const raw = String(value || "").trim();
+  if (!raw) return false;
+  const compact = raw.replace(/[\s\-_/().]/g, "");
+  if (!compact) return false;
+  if (/^\d+$/.test(compact)) return true;
+
+  const digitCount = (compact.match(/\d/g) || []).length;
+  return digitCount / compact.length >= 0.7;
+};
+
+const validateManualMergeCategoryIds = async (
+  admin: ReturnType<typeof supabaseAdmin>,
+  ids: number[],
+  expectedL1Id?: number | null
+) => {
+  if (ids.length < 2) {
+    return { ok: false as const, error: "invalid_manual_merge_category" };
+  }
+
+  const [l1Id, l2Id, l3IdRaw] = ids;
+  const l3Id = l3IdRaw || null;
+  if (expectedL1Id && l1Id !== expectedL1Id) {
+    return { ok: false as const, error: "invalid_manual_merge_hierarchy" };
+  }
+
+  const categoryIds = [l1Id, l2Id, l3Id].filter(Boolean) as number[];
+  const { data: categories, error: categoryError } = await admin
+    .from("categories")
+    .select("id, level, active")
+    .in("id", categoryIds)
+    .returns<Array<{ id: number; level: number; active: boolean }>>();
+
+  if (categoryError) {
+    return { ok: false as const, error: categoryError.message };
+  }
+
+  const map = new Map((categories || []).map((c) => [c.id, c]));
+  const l1 = map.get(l1Id);
+  const l2 = map.get(l2Id);
+  const l3 = l3Id ? map.get(l3Id) : null;
+
+  if (!l1 || !l2 || !l1.active || !l2.active || l1.level !== 1 || l2.level !== 2) {
+    return { ok: false as const, error: "invalid_manual_merge_category" };
+  }
+  if (l3Id && (!l3 || !l3.active || l3.level !== 3)) {
+    return { ok: false as const, error: "invalid_manual_merge_category" };
+  }
+
+  const relationPairs: Array<{ parent: number; child: number }> = [{ parent: l1Id, child: l2Id }];
+  if (l3Id) relationPairs.push({ parent: l2Id, child: l3Id });
+
+  for (const pair of relationPairs) {
+    const { data: relation, error: relError } = await admin
+      .from("category_relations")
+      .select("parent_category_id")
+      .eq("parent_category_id", pair.parent)
+      .eq("child_category_id", pair.child)
+      .limit(1)
+      .maybeSingle();
+
+    if (relError) {
+      return { ok: false as const, error: relError.message };
+    }
+    if (!relation) {
+      return { ok: false as const, error: "invalid_manual_merge_hierarchy" };
+    }
+  }
+
+  return {
+    ok: true as const,
+    resolvedCategoryIds: [l1Id, l2Id, l3Id].filter(Boolean) as number[],
+  };
+};
+
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAdmin(request);
@@ -58,6 +134,12 @@ export async function POST(request: NextRequest) {
       specs = [], // {name: string, values: string[]}[]
       variants = [], // {name: string, options: any, price: number, stock: number, sku: string}[]
     } = body || {};
+    const categoryReviewMode = body?.category_review_mode === "preview" ? "preview" : "confirm";
+    const manualMergeCategoryIds = Array.isArray(body?.manual_merge_category_ids)
+      ? body.manual_merge_category_ids
+          .map((x: any) => Number(x))
+          .filter((x: number) => Number.isInteger(x) && x > 0)
+      : [];
 
     if (!sku || !title) {
       return NextResponse.json({ error: "缺少必要欄位：sku, title" }, { status: 400 });
@@ -74,18 +156,81 @@ export async function POST(request: NextRequest) {
       (typeof source_directory_url === "string" && source_directory_url.trim()) ||
       detectDosoDirectoryUrl(original_url);
 
-    if (directoryUrl) {
-      const sourceCategoryId =
-        source_category_id === null || source_category_id === undefined
+    const sourceCategoryId =
+      source_category_id === null || source_category_id === undefined
+        ? ""
+        : String(source_category_id).trim();
+    const sourceCategoryName =
+      body?.source_category_name === null || body?.source_category_name === undefined
+        ? body?.sourceCategoryName === null || body?.sourceCategoryName === undefined
           ? ""
-          : String(source_category_id).trim();
-      const sourceCategoryName =
-        body?.source_category_name === null || body?.source_category_name === undefined
-          ? body?.sourceCategoryName === null || body?.sourceCategoryName === undefined
-            ? ""
-            : String(body.sourceCategoryName).trim()
-          : String(body.source_category_name).trim();
+          : String(body.sourceCategoryName).trim()
+        : String(body.source_category_name).trim();
 
+    let previewMapping: { l1_id: number | null; l2_id: number | null; l3_id: number | null } | null = null;
+    let previewWouldAutoCreate = false;
+    const riskFlags: string[] = [];
+
+    if (isLikelyNumericCategoryName(sourceCategoryName)) {
+      riskFlags.push("numeric_name");
+    }
+
+    if (directoryUrl) {
+      const mapped = await resolveMappedCategoryBySourceCategoryId(sourceCategoryId, directoryUrl);
+      const fallback = mapped ? null : await resolveDirectoryFallbackCategory(directoryUrl);
+      previewMapping = {
+        l1_id: (mapped?.l1_id || fallback?.l1_id || null) as number | null,
+        l2_id: (mapped?.l2_id || fallback?.l2_id || null) as number | null,
+        l3_id: (mapped?.l3_id || fallback?.l3_id || null) as number | null,
+      };
+      previewWouldAutoCreate = !mapped && !fallback && Boolean(sourceCategoryId || sourceCategoryName);
+      if (previewWouldAutoCreate) {
+        riskFlags.push("auto_create");
+      }
+      if (!mapped && !fallback && !previewWouldAutoCreate) {
+        riskFlags.push("missing_mapping");
+      }
+    }
+
+    if (categoryReviewMode === "preview") {
+      const mappingConfig = await getDosoSourceCategoryMapping();
+      const l1Id = Number(mappingConfig.l1_japan_id) || previewMapping?.l1_id || null;
+      const needsReview = riskFlags.length > 0;
+      return NextResponse.json({
+        ok: true,
+        category_review: {
+          needs_review: needsReview,
+          would_auto_create: previewWouldAutoCreate,
+          risk_flags: riskFlags,
+          proposed_category: {
+            l1_id: l1Id,
+            l2_id: previewMapping?.l2_id || null,
+            l3_id: previewMapping?.l3_id || null,
+            l2_name: previewWouldAutoCreate ? sourceCategoryName || sourceCategoryId || null : null,
+            l3_name: null,
+          },
+          source: {
+            source_category_id: sourceCategoryId || null,
+            source_category_name: sourceCategoryName || null,
+            directory_url: directoryUrl || null,
+          },
+        },
+      });
+    }
+
+    if (manualMergeCategoryIds.length > 0) {
+      const mappingConfig = await getDosoSourceCategoryMapping();
+      const expectedL1Id = Number(mappingConfig.l1_japan_id) || null;
+      const mergeValidation = await validateManualMergeCategoryIds(
+        admin,
+        manualMergeCategoryIds,
+        expectedL1Id
+      );
+      if (!mergeValidation.ok) {
+        return NextResponse.json({ error: mergeValidation.error }, { status: 400 });
+      }
+      resolvedCategoryIds = mergeValidation.resolvedCategoryIds;
+    } else if (directoryUrl) {
       const autoCreated = await resolveOrCreateCategoryByDosoSource(
         sourceCategoryId,
         sourceCategoryName,

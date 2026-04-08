@@ -37,6 +37,7 @@ export default function CategoryManager() {
   const [showIconPicker, setShowIconPicker] = useState(false);
   // 分類說明 Modal
   const [showCategoryHelp, setShowCategoryHelp] = useState(false);
+  const [selectedSuspiciousIds, setSelectedSuspiciousIds] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     fetchCategories();
@@ -155,6 +156,56 @@ export default function CategoryManager() {
       console.error("Failed to delete category:", err);
       alert("刪除失敗");
     }
+  };
+
+  const isSuspiciousCategory = (cat: Category) => {
+    const name = String(cat.name || "").trim();
+    const compact = name.replace(/[\s\-_/().]/g, "");
+    const digitCount = (compact.match(/\d/g) || []).length;
+    const numericHeavy = compact.length > 0 && digitCount / compact.length >= 0.7;
+    const pureNumeric = compact.length > 0 && /^\d+$/.test(compact);
+    const dosoSlug = /^DOSO_.*_L[23]_/.test(String(cat.slug || ""));
+    return pureNumeric || numericHeavy || dosoSlug;
+  };
+
+  const suspiciousCategories = categories.filter((c) => c.active && isSuspiciousCategory(c));
+
+  const toggleSuspiciousCategory = (id: number) => {
+    setSelectedSuspiciousIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAllSuspicious = () => {
+    if (selectedSuspiciousIds.size === suspiciousCategories.length) {
+      setSelectedSuspiciousIds(new Set());
+      return;
+    }
+    setSelectedSuspiciousIds(new Set(suspiciousCategories.map((c) => c.id)));
+  };
+
+  const disableSelectedSuspicious = async () => {
+    if (selectedSuspiciousIds.size === 0) {
+      alert("請先選擇要停用的分類");
+      return;
+    }
+    if (!confirm(`確定要停用 ${selectedSuspiciousIds.size} 個可疑分類嗎？`)) return;
+
+    let okCount = 0;
+    for (const id of Array.from(selectedSuspiciousIds)) {
+      try {
+        const response = await fetch(`/api/categories/${id}`, { method: "DELETE" });
+        if (response.ok) okCount += 1;
+      } catch {
+        // noop
+      }
+    }
+    await fetchCategories();
+    setSelectedSuspiciousIds(new Set());
+    alert(`已停用 ${okCount} 個分類`);
   };
 
 
@@ -458,6 +509,46 @@ export default function CategoryManager() {
                 </label>
               ))}
           </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-6">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-bold text-amber-900">可疑分類清理</h3>
+            <p className="text-xs text-amber-800 mt-1">規則：名稱純數字/數字比例過高，或 slug 為 DOSO 自動分類格式</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={toggleAllSuspicious}
+              className="text-xs px-2 py-1 rounded border border-amber-300 text-amber-900 hover:bg-amber-100"
+            >
+              {selectedSuspiciousIds.size === suspiciousCategories.length && suspiciousCategories.length > 0 ? "取消全選" : "全選"}
+            </button>
+            <button
+              onClick={disableSelectedSuspicious}
+              className="text-xs px-2 py-1 rounded bg-amber-600 text-white hover:bg-amber-700"
+            >
+              批次停用
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-3 max-h-64 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-2">
+          {suspiciousCategories.map((cat) => (
+            <label key={cat.id} className="flex items-center gap-2 rounded-lg border border-amber-200 bg-white px-3 py-2">
+              <input
+                type="checkbox"
+                checked={selectedSuspiciousIds.has(cat.id)}
+                onChange={() => toggleSuspiciousCategory(cat.id)}
+              />
+              <span className="text-sm text-text-primary-light">{cat.name}</span>
+              <span className="text-xs text-text-secondary-light">{cat.slug}</span>
+            </label>
+          ))}
+          {suspiciousCategories.length === 0 && (
+            <div className="text-sm text-amber-800">目前沒有可疑分類</div>
+          )}
         </div>
       </div>
 
