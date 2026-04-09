@@ -35,6 +35,9 @@ interface Tag {
   category?: string;
 }
 
+const DEFAULT_WHOLESALE_ADJUST_PERCENT = 8;
+const DEFAULT_RETAIL_ADJUST_PERCENT = 12;
+
 export default function CrawlerImport() {
   const [crawlerProducts, setCrawlerProducts] = useState<any[]>([]);
   const [crawlerFiltered, setCrawlerFiltered] = useState<any[]>([]);
@@ -55,10 +58,10 @@ export default function CrawlerImport() {
   const [publishTarget, setPublishTarget] = useState<any>(null);
   const [selectedCrawlerProducts, setSelectedCrawlerProducts] = useState<Set<number>>(new Set());
   const [showBatchPriceAdjust, setShowBatchPriceAdjust] = useState(false);
-  const [batchPriceAdjustMode, setBatchPriceAdjustMode] = useState<"fixed" | "percentage">("fixed");
+  const [batchPriceAdjustMode, setBatchPriceAdjustMode] = useState<"fixed" | "percentage">("percentage");
   const [batchPriceAdjustCost, setBatchPriceAdjustCost] = useState(0);
-  const [batchPriceAdjustWholesale, setBatchPriceAdjustWholesale] = useState(0);
-  const [batchPriceAdjustRetail, setBatchPriceAdjustRetail] = useState(0);
+  const [batchPriceAdjustWholesale, setBatchPriceAdjustWholesale] = useState(DEFAULT_WHOLESALE_ADJUST_PERCENT);
+  const [batchPriceAdjustRetail, setBatchPriceAdjustRetail] = useState(DEFAULT_RETAIL_ADJUST_PERCENT);
   const [batchPublishing, setBatchPublishing] = useState(false);
   const [autoClearPublished, setAutoClearPublished] = useState(true);
   const [isTranslating, setIsTranslating] = useState(false);
@@ -116,6 +119,10 @@ export default function CrawlerImport() {
 
   // Batch image editor
   const [showBatchImageEditor, setShowBatchImageEditor] = useState(false);
+  const [showBatchTranslate, setShowBatchTranslate] = useState(false);
+  const [batchTranslateTitle, setBatchTranslateTitle] = useState(true);
+  const [batchTranslateDescription, setBatchTranslateDescription] = useState(true);
+  const [batchTranslating, setBatchTranslating] = useState(false);
 
   const [dosoUsername, setDosoUsername] = useState("");
   const [dosoPassword, setDosoPassword] = useState("");
@@ -1042,6 +1049,21 @@ export default function CrawlerImport() {
     }
   };
 
+  const requestTranslateText = async (text: string) => {
+    const res = await fetch("/api/translate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+
+    if (!res.ok) {
+      throw new Error("translate_failed");
+    }
+
+    const data = await res.json();
+    return String(data?.translatedText || "");
+  };
+
   const requestPublishConfirm = async (
     payload: any,
     manualMergeCategoryIds?: number[] | null,
@@ -1357,6 +1379,85 @@ export default function CrawlerImport() {
     setCrawlerFiltered(applyFilterSort(updated));
     setShowBatchPriceAdjust(false);
     alert("價格已調整");
+  };
+
+  const applyBatchTranslate = async () => {
+    if (!batchTranslateTitle && !batchTranslateDescription) {
+      alert("請至少選擇一個翻譯欄位");
+      return;
+    }
+    if (selectedCrawlerProducts.size === 0) {
+      alert("請先選擇商品");
+      return;
+    }
+
+    try {
+      setBatchTranslating(true);
+      const updated = [...crawlerProducts];
+      let successCount = 0;
+      let failedCount = 0;
+      let skippedCount = 0;
+
+      for (const filteredIdx of Array.from(selectedCrawlerProducts)) {
+        const target = crawlerFiltered[filteredIdx];
+        if (!target) {
+          skippedCount++;
+          continue;
+        }
+        const sourceIndex = updated.findIndex(
+          (x) => String(x.productCode || "") === String(target.productCode || "")
+        );
+        if (sourceIndex < 0) {
+          skippedCount++;
+          continue;
+        }
+
+        let changed = false;
+        try {
+          if (batchTranslateTitle) {
+            const title = String(updated[sourceIndex].title || "").trim();
+            if (title) {
+              const translatedTitle = await requestTranslateText(title);
+              if (translatedTitle) {
+                updated[sourceIndex].title = translatedTitle;
+                changed = true;
+              }
+            }
+          }
+
+          if (batchTranslateDescription) {
+            const description = String(updated[sourceIndex].description || "").trim();
+            if (description) {
+              const translatedDescription = await requestTranslateText(description);
+              if (translatedDescription) {
+                updated[sourceIndex].description = translatedDescription;
+                changed = true;
+              }
+            }
+          }
+
+          if (changed) successCount++;
+          else skippedCount++;
+        } catch {
+          failedCount++;
+        }
+      }
+
+      setCrawlerProducts(updated);
+      setCrawlerFiltered(applyFilterSort(updated));
+      setShowBatchTranslate(false);
+      alert(`批量翻譯完成\n成功：${successCount}\n失敗：${failedCount}\n略過：${skippedCount}`);
+    } finally {
+      setBatchTranslating(false);
+    }
+  };
+
+  const openBatchPriceAdjustModal = () => {
+    setBatchPriceAdjustMode("percentage");
+    setBatchPriceAdjustCost(0);
+    setBatchPriceAdjustWholesale(DEFAULT_WHOLESALE_ADJUST_PERCENT);
+    setBatchPriceAdjustRetail(DEFAULT_RETAIL_ADJUST_PERCENT);
+    setShowBatchPriceAdjust(true);
   };
 
   const batchPublish = async () => {
@@ -1981,7 +2082,7 @@ export default function CrawlerImport() {
             <>
               <div className="h-6 w-px bg-border-light"></div>
               <button
-                onClick={() => setShowBatchPriceAdjust(true)}
+                onClick={openBatchPriceAdjustModal}
                 className="inline-flex items-center gap-2 rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm font-medium text-text-primary-light hover:bg-primary/10"
               >
                 <span className="material-symbols-outlined text-base">price_change</span>
@@ -1993,6 +2094,14 @@ export default function CrawlerImport() {
               >
                 <span className="material-symbols-outlined text-base">collections</span>
                 批量圖片編輯
+              </button>
+              <button
+                onClick={() => setShowBatchTranslate(true)}
+                disabled={batchTranslating || isTranslating}
+                className="inline-flex items-center gap-2 rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm font-medium text-text-primary-light hover:bg-primary/10 disabled:opacity-50"
+              >
+                <span className="material-symbols-outlined text-base">translate</span>
+                批量翻譯
               </button>
               <button
                 onClick={batchPublish}
@@ -2543,6 +2652,63 @@ export default function CrawlerImport() {
         </div>
       )}
 
+      {showBatchTranslate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-xl border border-border-light bg-card-light p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-text-primary-light">批量翻譯（中文）</h3>
+              <button
+                className="text-text-secondary-light"
+                onClick={() => setShowBatchTranslate(false)}
+                disabled={batchTranslating}
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <div className="rounded-lg border border-border-light bg-background-light p-3 text-sm text-text-secondary-light">
+              會套用到目前全選商品（{selectedCrawlerProducts.size} 件）。
+            </div>
+
+            <div className="space-y-2 text-sm text-text-primary-light">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={batchTranslateTitle}
+                  onChange={(e) => setBatchTranslateTitle(e.target.checked)}
+                />
+                <span>翻譯標題</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={batchTranslateDescription}
+                  onChange={(e) => setBatchTranslateDescription(e.target.checked)}
+                />
+                <span>翻譯描述</span>
+              </label>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowBatchTranslate(false)}
+                disabled={batchTranslating}
+                className="rounded-lg border border-border-light px-4 py-2 text-sm"
+              >
+                取消
+              </button>
+              <button
+                onClick={applyBatchTranslate}
+                disabled={batchTranslating}
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              >
+                {batchTranslating ? "翻譯中..." : "開始翻譯"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showBatchPriceAdjust && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="w-full max-w-2xl rounded-xl border border-border-light bg-card-light p-6 max-h-[90vh] overflow-y-auto">
@@ -2554,6 +2720,36 @@ export default function CrawlerImport() {
             </div>
 
             <div className="space-y-4">
+              <div className="rounded-lg border border-border-light bg-background-light p-3 text-xs text-text-secondary-light">
+                會套用到目前全選商品。預設值為批發 +8%、零售 +12%，可依品類再調整。
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBatchPriceAdjustMode("percentage");
+                    setBatchPriceAdjustCost(0);
+                    setBatchPriceAdjustWholesale(DEFAULT_WHOLESALE_ADJUST_PERCENT);
+                    setBatchPriceAdjustRetail(DEFAULT_RETAIL_ADJUST_PERCENT);
+                  }}
+                  className="rounded-lg border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20"
+                >
+                  套用預設（批發 8%、零售 12%）
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBatchPriceAdjustCost(0);
+                    setBatchPriceAdjustWholesale(0);
+                    setBatchPriceAdjustRetail(0);
+                  }}
+                  className="rounded-lg border border-border-light bg-white px-3 py-1.5 text-xs font-medium text-text-secondary-light hover:bg-gray-50"
+                >
+                  清空調整
+                </button>
+              </div>
+
               {/* 調整方式 */}
               <div>
                 <label className="block text-sm font-medium text-text-primary-light mb-2">調整方式</label>
