@@ -515,9 +515,16 @@ export default function ProductManager() {
     setShowProductEdit(true);
   };
 
+  const getTranslateSourceText = (field: "title" | "description") => {
+    if (field === "title") {
+      return String(productEditForm.title_original || productEditForm.title_zh || "").trim();
+    }
+    return String(productEditForm.desc_original || productEditForm.desc_zh || "").trim();
+  };
+
   const handleTranslate = async (field: "title" | "description") => {
-    const text = field === "title" ? productEditForm.title_original : productEditForm.desc_original;
-    if (!text) return alert("無原文內容可翻譯");
+    const text = getTranslateSourceText(field);
+    if (!text) return alert("請先填寫原文或現有內容，再執行翻譯");
 
     try {
       setIsTranslating(true);
@@ -966,7 +973,7 @@ export default function ProductManager() {
                   <input value={productEditForm.title_zh} onChange={(e) => setProductEditForm({ ...productEditForm, title_zh: e.target.value })} className="mt-1 flex-1 rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm" />
                   <button 
                     onClick={() => handleTranslate("title")} 
-                    disabled={isTranslating || !productEditForm.title_original}
+                    disabled={isTranslating || !getTranslateSourceText("title")}
                     className="mt-1 px-3 rounded-lg border border-primary text-primary text-xs hover:bg-primary/10 disabled:opacity-50"
                   >
                     翻譯
@@ -983,7 +990,7 @@ export default function ProductManager() {
                   <textarea value={productEditForm.desc_zh} onChange={(e) => setProductEditForm({ ...productEditForm, desc_zh: e.target.value })} className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm min-h-20" />
                   <button 
                     onClick={() => handleTranslate("description")} 
-                    disabled={isTranslating || !productEditForm.desc_original}
+                    disabled={isTranslating || !getTranslateSourceText("description")}
                     className="self-end px-3 py-1 rounded-lg border border-primary text-primary text-xs hover:bg-primary/10 disabled:opacity-50"
                   >
                     從原文翻譯
