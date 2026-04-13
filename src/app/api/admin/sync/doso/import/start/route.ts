@@ -16,12 +16,6 @@ import type {
 
 export const runtime = "nodejs";
 
-const toToyboxMaxPages = (value: unknown) => {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return 30;
-  return Math.min(100, Math.max(1, Math.floor(n)));
-};
-
 const isToyboxTarget = (value: string) => {
   try {
     const u = new URL(value);
@@ -87,7 +81,6 @@ export async function POST(request: NextRequest) {
 
     const requestUsername = typeof body?.username === "string" ? body.username.trim() : "";
     const requestPassword = typeof body?.password === "string" ? body.password : "";
-    const toyboxMaxPages = toToyboxMaxPages(body?.toybox_max_pages ?? body?.toyboxMaxPages);
     const parsedTargetFromSnake = parseSingleTarget(body?.target_url);
     const parsedTargetFromCamel = parseSingleTarget(body?.targetUrl);
     const targetUrl = parsedTargetFromSnake || parsedTargetFromCamel;
@@ -131,7 +124,6 @@ export async function POST(request: NextRequest) {
       password: credentials.password,
       targets: [targetUrl],
       includeDetails: false,
-      toyboxMaxPages,
     });
 
     if (!preview.login_ok) {

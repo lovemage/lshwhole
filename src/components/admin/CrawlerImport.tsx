@@ -141,7 +141,6 @@ export default function CrawlerImport() {
   const [importSession, setImportSession] = useState<DosoImportSessionProgress | null>(null);
   const [importSessions, setImportSessions] = useState<DosoImportSessionProgress[]>([]);
   const [runBatchSize, setRunBatchSize] = useState(20);
-  const [toyboxMaxPages, setToyboxMaxPages] = useState(30);
   const [importStorageKey, setImportStorageKey] = useState("dosoImport:anon");
 
   useEffect(() => {
@@ -715,7 +714,6 @@ export default function CrawlerImport() {
           username: username || undefined,
           password: password || undefined,
           target_url: targetUrl,
-          toybox_max_pages: toyboxMaxPages,
         }),
       });
 
@@ -1964,75 +1962,72 @@ export default function CrawlerImport() {
           </select>
         </div>
 
-        <div className="rounded-lg border border-border-light bg-background-light p-3 space-y-3">
-          <div className="text-sm font-medium text-text-primary-light">DOSO 帳密（可儲存）</div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-text-primary-light mb-1">DOSO 帳號</label>
-              <input
-                type="text"
-                value={dosoUsername}
-                onChange={(e) => setDosoUsername(e.target.value)}
-                className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-                placeholder="例如：陳奕如"
-              />
+        <div className="rounded-lg border border-border-light bg-background-light p-3 space-y-4">
+          <div className="text-sm font-medium text-text-primary-light">同步站帳密（分開儲存）</div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="space-y-3">
+              <div className="text-xs font-semibold text-text-secondary-light">DOSO</div>
+              <div>
+                <label className="block text-sm font-medium text-text-primary-light mb-1">帳號</label>
+                <input
+                  type="text"
+                  value={dosoUsername}
+                  onChange={(e) => setDosoUsername(e.target.value)}
+                  className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                  placeholder="例如：陳奕如"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-text-primary-light mb-1">密碼</label>
+                <input
+                  type="password"
+                  value={dosoPassword}
+                  onChange={(e) => setDosoPassword(e.target.value)}
+                  className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                  placeholder={dosoHasSavedPassword ? "已儲存密碼（留空不更新）" : "輸入密碼"}
+                />
+                <p className="mt-1 text-xs text-text-secondary-light">{dosoHasSavedPassword ? "目前已有已儲存密碼" : "目前尚未儲存密碼"}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => saveSourceCredentials("doso")}
+                className="rounded border border-border-light px-3 py-1.5 text-xs text-text-primary-light hover:bg-primary/10"
+              >
+                儲存 DOSO 帳密
+              </button>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-text-primary-light mb-1">DOSO 密碼</label>
-              <input
-                type="password"
-                value={dosoPassword}
-                onChange={(e) => setDosoPassword(e.target.value)}
-                className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-                placeholder={dosoHasSavedPassword ? "已儲存密碼（留空不更新）" : "輸入密碼"}
-              />
-              <p className="mt-1 text-xs text-text-secondary-light">{dosoHasSavedPassword ? "目前已有已儲存密碼" : "目前尚未儲存密碼"}</p>
-            </div>
-          </div>
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={() => saveSourceCredentials("doso")}
-              className="rounded border border-border-light px-3 py-1.5 text-xs text-text-primary-light hover:bg-primary/10"
-            >
-              儲存 DOSO 帳密
-            </button>
-          </div>
-        </div>
 
-        <div className="rounded-lg border border-border-light bg-background-light p-3 space-y-3">
-          <div className="text-sm font-medium text-text-primary-light">Toybox 帳密（可儲存）</div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-text-primary-light mb-1">Toybox 帳號</label>
-              <input
-                type="text"
-                value={toyboxUsername}
-                onChange={(e) => setToyboxUsername(e.target.value)}
-                className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-                placeholder="例如：joytoy"
-              />
+            <div className="space-y-3">
+              <div className="text-xs font-semibold text-text-secondary-light">Toybox</div>
+              <div>
+                <label className="block text-sm font-medium text-text-primary-light mb-1">帳號</label>
+                <input
+                  type="text"
+                  value={toyboxUsername}
+                  onChange={(e) => setToyboxUsername(e.target.value)}
+                  className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                  placeholder="例如：joytoy"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-text-primary-light mb-1">密碼</label>
+                <input
+                  type="password"
+                  value={toyboxPassword}
+                  onChange={(e) => setToyboxPassword(e.target.value)}
+                  className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                  placeholder={toyboxHasSavedPassword ? "已儲存密碼（留空不更新）" : "輸入密碼"}
+                />
+                <p className="mt-1 text-xs text-text-secondary-light">{toyboxHasSavedPassword ? "目前已有已儲存密碼" : "目前尚未儲存密碼"}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => saveSourceCredentials("toybox")}
+                className="rounded border border-border-light px-3 py-1.5 text-xs text-text-primary-light hover:bg-primary/10"
+              >
+                儲存 Toybox 帳密
+              </button>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-text-primary-light mb-1">Toybox 密碼</label>
-              <input
-                type="password"
-                value={toyboxPassword}
-                onChange={(e) => setToyboxPassword(e.target.value)}
-                className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-                placeholder={toyboxHasSavedPassword ? "已儲存密碼（留空不更新）" : "輸入密碼"}
-              />
-              <p className="mt-1 text-xs text-text-secondary-light">{toyboxHasSavedPassword ? "目前已有已儲存密碼" : "目前尚未儲存密碼"}</p>
-            </div>
-          </div>
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={() => saveSourceCredentials("toybox")}
-              className="rounded border border-border-light px-3 py-1.5 text-xs text-text-primary-light hover:bg-primary/10"
-            >
-              儲存 Toybox 帳密
-            </button>
           </div>
         </div>
 
@@ -2054,21 +2049,6 @@ export default function CrawlerImport() {
         )}
 
         <div className="text-xs text-text-secondary-light">已移除「載入目錄」功能，請直接使用目標網址欄位貼上要同步的分類網址。</div>
-
-        {isToyboxTargetUrl(selectedTargetPreset) && (
-          <div>
-          <label className="block text-sm font-medium text-text-primary-light mb-1">Toybox 分頁上限</label>
-          <input
-            type="number"
-            min={1}
-            max={100}
-            value={toyboxMaxPages}
-            onChange={(e) => setToyboxMaxPages(Math.min(100, Math.max(1, Number(e.target.value) || 1)))}
-            className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-          />
-          <p className="mt-1 text-xs text-text-secondary-light">僅對 Toybox 同步生效，預設 30 頁。</p>
-          </div>
-        )}
 
         <div className="rounded-lg border border-border-light bg-background-light p-3 space-y-3">
           <div className="text-sm font-bold text-text-primary-light">Step 1. 同步（建立/選擇同步任務）</div>

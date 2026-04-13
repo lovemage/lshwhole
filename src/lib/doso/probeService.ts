@@ -1182,8 +1182,6 @@ const loginToybox = async (page: any, username: string, password: string) => {
   return true;
 };
 
-const MAX_TOYBOX_PAGES_PER_TARGET = 30;
-
 const normalizeToyboxCategoryId = (input: { xcode?: string | null; mcode?: string | null; scode?: string | null }) => {
   const x = String(input.xcode || "").trim();
   const m = String(input.mcode || "").trim();
@@ -1201,68 +1199,6 @@ const parseWonNumber = (raw: string | null | undefined) => {
   const n = Number(normalized);
   if (!Number.isFinite(n) || n <= 0) return null;
   return Math.floor(n);
-};
-
-const getToyboxCategoryKey = (url: string) => {
-  try {
-    const u = new URL(url);
-    return [
-      u.searchParams.get("xcode") || "",
-      u.searchParams.get("mcode") || "",
-      u.searchParams.get("scode") || "",
-      u.searchParams.get("type") || "",
-    ].join("|");
-  } catch {
-    return "";
-  }
-};
-
-const extractToyboxPageUrls = async (page: any, currentUrl: string, maxPages: number) => {
-  const rawLinks = (await page.evaluate(() => {
-    const links = Array.from(document.querySelectorAll('a[href*="shopbrand.html"]')).map((a) =>
-      (a as HTMLAnchorElement).href
-    );
-    return Array.from(new Set(links));
-  })) as string[];
-
-  const currentKey = getToyboxCategoryKey(currentUrl);
-  const candidates = rawLinks
-    .filter((link) => getToyboxCategoryKey(link) === currentKey)
-    .filter((link) => {
-      try {
-        const u = new URL(link);
-        return Number(u.searchParams.get("page") || "1") >= 1;
-      } catch {
-        return false;
-      }
-    });
-
-  const map = new Map<number, string>();
-  for (const link of candidates) {
-    try {
-      const u = new URL(link);
-      const pageNum = Number(u.searchParams.get("page") || "1");
-      if (!Number.isFinite(pageNum) || pageNum < 1) continue;
-      if (!map.has(pageNum)) map.set(pageNum, u.toString());
-    } catch {
-      // noop
-    }
-  }
-
-  if (!map.has(1)) {
-    map.set(1, currentUrl);
-  }
-
-  return Array.from(map.entries())
-    .sort((a, b) => a[0] - b[0])
-    .slice(0, maxPages)
-    .map(([, url]) => url);
-};
-
-const toToyboxPageLimit = (value: unknown) => {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return MAX_TOYBOX_PAGES_PER_TARGET;
-  return Math.min(100, Math.max(1, Math.floor(n)));
 };
 
 const collectToyboxListRowsFromCurrentPage = async (page: any) => {
@@ -1319,22 +1255,15 @@ const collectToyboxListRowsFromCurrentPage = async (page: any) => {
   return mapped;
 };
 
-const collectToyboxListRows = async (page: any, targetUrl: string, toyboxMaxPages: number) => {
+const collectToyboxListRows = async (page: any, targetUrl: string) => {
   await page.goto(targetUrl, { waitUntil: "networkidle", timeout: 45000 });
   await page.waitForTimeout(1200);
-
-  const pageUrls = await extractToyboxPageUrls(page, page.url(), toToyboxPageLimit(toyboxMaxPages));
   const dedup = new Map<string, { detailUrl: string; title: string; image: string; wholesalePriceTWD: number | null; sourceCategoryId: string | null }>();
 
-  for (const pageUrl of pageUrls) {
-    await page.goto(pageUrl, { waitUntil: "networkidle", timeout: 45000 });
-    await page.waitForTimeout(700);
-    const rows = await collectToyboxListRowsFromCurrentPage(page);
-    for (const row of rows) {
-      if (!dedup.has(row.detailUrl)) {
-        dedup.set(row.detailUrl, row);
-      }
-      if (dedup.size >= MAX_IMPORT_ROWS_PER_TARGET) break;
+  const rows = await collectToyboxListRowsFromCurrentPage(page);
+  for (const row of rows) {
+    if (!dedup.has(row.detailUrl)) {
+      dedup.set(row.detailUrl, row);
     }
     if (dedup.size >= MAX_IMPORT_ROWS_PER_TARGET) break;
   }
@@ -1405,8 +1334,7 @@ const scrapeToyboxDetail = async (page: any, detailUrl: string) => {
 
 const probeSingleToyboxTarget = async (
   page: any,
-  targetUrl: string,
-  toyboxMaxPages: number
+  targetUrl: string
 ): Promise<DosoProbeTargetResult> => {
   const base: DosoProbeTargetResult = {
     url: targetUrl,
@@ -1428,7 +1356,7 @@ const probeSingleToyboxTarget = async (
   try {
     await page.goto(targetUrl, { waitUntil: "networkidle", timeout: 45000 });
     const title = await page.title();
-    const rows = await collectToyboxListRows(page, targetUrl, toyboxMaxPages);
+    const rows = await collectToyboxListRows(page, targetUrl);
     const sampleRows = rows.slice(0, 5);
 
     let detailPresence = {
@@ -1475,15 +1403,14 @@ const probeSingleToyboxTarget = async (
 const runToyboxImportPreview = async (
   page: any,
   targets: string[],
-  includeDetails: boolean,
-  toyboxMaxPages: number
+  includeDetails: boolean
 ) => {
   const products: DosoImportProduct[] = [];
   const targetResults: DosoImportTargetResult[] = [];
 
   for (const target of targets) {
     try {
-      const rows = await collectToyboxListRows(page, target, toyboxMaxPages);
+      const rows = await collectToyboxListRows(page, target);
       const mapped: DosoImportProduct[] = [];
 
       for (let i = 0; i < rows.length; i += 1) {
@@ -1552,7 +1479,6 @@ export async function runDosoProbe(input: {
   username: string;
   password: string;
   targets?: string[];
-  toyboxMaxPages?: number;
 }): Promise<DosoProbeResponse> {
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext();
@@ -1573,7 +1499,6 @@ export async function runDosoProbe(input: {
 
   try {
     const targets = (input.targets && input.targets.length > 0 ? input.targets : DEFAULT_DOSO_TARGETS).slice(0, 20);
-    const toyboxMaxPages = toToyboxPageLimit(input.toyboxMaxPages);
     const allToybox = targets.length > 0 && targets.every((target) => isToyboxUrl(target));
 
     if (allToybox) {
@@ -1588,7 +1513,7 @@ export async function runDosoProbe(input: {
 
       const results: DosoProbeTargetResult[] = [];
       for (const target of targets) {
-        results.push(await probeSingleToyboxTarget(page, target, toyboxMaxPages));
+        results.push(await probeSingleToyboxTarget(page, target));
       }
 
       return {
@@ -1640,7 +1565,6 @@ export async function runDosoImportPreview(input: {
   password: string;
   targets?: string[];
   includeDetails?: boolean;
-  toyboxMaxPages?: number;
 }): Promise<DosoImportResponse> {
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext();
@@ -1662,7 +1586,6 @@ export async function runDosoImportPreview(input: {
   try {
     const targets = (input.targets && input.targets.length > 0 ? input.targets : DEFAULT_DOSO_TARGETS).slice(0, 20);
     const includeDetails = input.includeDetails !== false;
-    const toyboxMaxPages = toToyboxPageLimit(input.toyboxMaxPages);
     const allToybox = targets.length > 0 && targets.every((target) => isToyboxUrl(target));
 
     if (allToybox) {
@@ -1676,7 +1599,7 @@ export async function runDosoImportPreview(input: {
         };
       }
 
-      return await runToyboxImportPreview(page, targets, includeDetails, toyboxMaxPages);
+      return await runToyboxImportPreview(page, targets, includeDetails);
     }
 
     await page.goto(LOGIN_URL, { waitUntil: "networkidle", timeout: 45000 });

@@ -87,8 +87,6 @@ export interface DosoImportStartRequest {
   password?: string;
   target_url: string;
   targetUrl?: string;
-  toybox_max_pages?: number;
-  toyboxMaxPages?: number;
 }
 
 export interface DosoImportStartResponse {
