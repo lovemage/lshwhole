@@ -16,12 +16,45 @@ interface CapturedResponse {
 }
 
 const LOGIN_URL = "https://www.doso.net/auth/login";
+const TOYBOX_LOGIN_URL = "https://www.toybox.kr/shop/member.html?type=login";
 const MAX_IMPORT_ROWS_PER_TARGET = 20000;
 const IMPORT_BATCH_SIZE = 20;
 const CATALOG_API_TIMEOUT_MS = 45000;
 const CATALOG_API_RETRY_TIMES = 2;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const isToyboxUrl = (value: string) => {
+  try {
+    const u = new URL(value);
+    return u.hostname === "www.toybox.kr" || u.hostname === "toybox.kr";
+  } catch {
+    return false;
+  }
+};
+
+const toAbsoluteUrl = (baseUrl: string, href: string) => {
+  try {
+    return new URL(href, baseUrl).toString();
+  } catch {
+    return null;
+  }
+};
+
+const extractToyboxCodeFromUrl = (rawUrl: string, fallback?: string) => {
+  try {
+    const u = new URL(rawUrl);
+    const branduid = u.searchParams.get("branduid");
+    if (branduid && /^\d+$/.test(branduid)) return `toybox-${branduid}`;
+    const uid = u.searchParams.get("uid");
+    if (uid && /^\d+$/.test(uid)) return `toybox-${uid}`;
+    const productNo = u.searchParams.get("product_no");
+    if (productNo && /^\d+$/.test(productNo)) return `toybox-${productNo}`;
+  } catch {
+    // noop
+  }
+  return fallback || `toybox-${Date.now()}`;
+};
 
 const isRequestTimeoutError = (err: unknown) => {
   const message = err instanceof Error ? err.message : String(err || "");
@@ -1130,10 +1163,396 @@ const probeSingleTarget = async (
   }
 };
 
+const loginToybox = async (page: any, username: string, password: string) => {
+  await page.goto(TOYBOX_LOGIN_URL, { waitUntil: "domcontentloaded", timeout: 45000 });
+  await page.locator('input[name="id"]').first().fill(username);
+  await page.locator('input[name="passwd"]').first().fill(password);
+
+  const submitByLink = page.locator('a[href*="check_log"]');
+  if ((await submitByLink.count()) > 0) {
+    await submitByLink.first().click();
+  } else {
+    await page.keyboard.press("Enter");
+  }
+
+  await page.waitForTimeout(2500);
+  if (page.url().includes("member.html?type=login")) {
+    return false;
+  }
+  return true;
+};
+
+const MAX_TOYBOX_PAGES_PER_TARGET = 30;
+
+const normalizeToyboxCategoryId = (input: { xcode?: string | null; mcode?: string | null; scode?: string | null }) => {
+  const x = String(input.xcode || "").trim();
+  const m = String(input.mcode || "").trim();
+  const s = String(input.scode || "").trim();
+  if (!x) return null;
+  if (s) return `toybox:x${x}:m${m || "0"}:s${s}`;
+  if (m) return `toybox:x${x}:m${m}`;
+  return `toybox:x${x}`;
+};
+
+const parseWonNumber = (raw: string | null | undefined) => {
+  if (!raw) return null;
+  const normalized = raw.replace(/[^\d]/g, "");
+  if (!normalized) return null;
+  const n = Number(normalized);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.floor(n);
+};
+
+const getToyboxCategoryKey = (url: string) => {
+  try {
+    const u = new URL(url);
+    return [
+      u.searchParams.get("xcode") || "",
+      u.searchParams.get("mcode") || "",
+      u.searchParams.get("scode") || "",
+      u.searchParams.get("type") || "",
+    ].join("|");
+  } catch {
+    return "";
+  }
+};
+
+const extractToyboxPageUrls = async (page: any, currentUrl: string, maxPages: number) => {
+  const rawLinks = (await page.evaluate(() => {
+    const links = Array.from(document.querySelectorAll('a[href*="shopbrand.html"]')).map((a) =>
+      (a as HTMLAnchorElement).href
+    );
+    return Array.from(new Set(links));
+  })) as string[];
+
+  const currentKey = getToyboxCategoryKey(currentUrl);
+  const candidates = rawLinks
+    .filter((link) => getToyboxCategoryKey(link) === currentKey)
+    .filter((link) => {
+      try {
+        const u = new URL(link);
+        return Number(u.searchParams.get("page") || "1") >= 1;
+      } catch {
+        return false;
+      }
+    });
+
+  const map = new Map<number, string>();
+  for (const link of candidates) {
+    try {
+      const u = new URL(link);
+      const pageNum = Number(u.searchParams.get("page") || "1");
+      if (!Number.isFinite(pageNum) || pageNum < 1) continue;
+      if (!map.has(pageNum)) map.set(pageNum, u.toString());
+    } catch {
+      // noop
+    }
+  }
+
+  if (!map.has(1)) {
+    map.set(1, currentUrl);
+  }
+
+  return Array.from(map.entries())
+    .sort((a, b) => a[0] - b[0])
+    .slice(0, maxPages)
+    .map(([, url]) => url);
+};
+
+const toToyboxPageLimit = (value: unknown) => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return MAX_TOYBOX_PAGES_PER_TARGET;
+  return Math.min(100, Math.max(1, Math.floor(n)));
+};
+
+const collectToyboxListRowsFromCurrentPage = async (page: any) => {
+  const rawRows = (await page.evaluate(() => {
+    const anchors = Array.from(document.querySelectorAll('a[href*="/shop/shopdetail.html"]'));
+    return anchors.map((anchor) => {
+      const a = anchor as HTMLAnchorElement;
+      const href = a.getAttribute("href") || "";
+      const img = a.querySelector("img") as HTMLImageElement | null;
+      const card = a.closest("li, td, div") as HTMLElement | null;
+      const cardText = (card?.textContent || a.textContent || "").replace(/\s+/g, " ").trim();
+      return {
+        href,
+        title: (img?.alt || a.getAttribute("title") || "").trim(),
+        image: img?.src || "",
+        text: cardText,
+      };
+    });
+  })) as Array<{ href: string; title: string; image: string; text: string }>;
+
+  const currentUrl = page.url();
+  const mapped = rawRows
+    .map((row) => {
+      const detailUrl = toAbsoluteUrl(currentUrl, row.href);
+      if (!detailUrl) return null;
+      const fallbackTitle = row.text.split("입수량")[0]?.trim() || row.text.slice(0, 80);
+      const amounts = Array.from(row.text.matchAll(/([0-9][0-9,]{2,})\s*원/g)).map((m) => parseWonNumber(m[1]));
+      const validAmounts = amounts.filter((n): n is number => Boolean(n));
+      const wholesale = validAmounts.length >= 2 ? Math.min(validAmounts[0], validAmounts[1]) : validAmounts[0] || null;
+
+      const sourceCategoryId = (() => {
+        try {
+          const u = new URL(detailUrl);
+          return normalizeToyboxCategoryId({
+            xcode: u.searchParams.get("xcode"),
+            mcode: u.searchParams.get("mcode"),
+            scode: u.searchParams.get("scode"),
+          });
+        } catch {
+          return null;
+        }
+      })();
+
+      return {
+        detailUrl,
+        title: row.title || fallbackTitle || "",
+        image: row.image || "",
+        wholesalePriceTWD: wholesale,
+        sourceCategoryId,
+      };
+    })
+    .filter((x): x is { detailUrl: string; title: string; image: string; wholesalePriceTWD: number | null; sourceCategoryId: string | null } => Boolean(x));
+
+  return mapped;
+};
+
+const collectToyboxListRows = async (page: any, targetUrl: string, toyboxMaxPages: number) => {
+  await page.goto(targetUrl, { waitUntil: "networkidle", timeout: 45000 });
+  await page.waitForTimeout(1200);
+
+  const pageUrls = await extractToyboxPageUrls(page, page.url(), toToyboxPageLimit(toyboxMaxPages));
+  const dedup = new Map<string, { detailUrl: string; title: string; image: string; wholesalePriceTWD: number | null; sourceCategoryId: string | null }>();
+
+  for (const pageUrl of pageUrls) {
+    await page.goto(pageUrl, { waitUntil: "networkidle", timeout: 45000 });
+    await page.waitForTimeout(700);
+    const rows = await collectToyboxListRowsFromCurrentPage(page);
+    for (const row of rows) {
+      if (!dedup.has(row.detailUrl)) {
+        dedup.set(row.detailUrl, row);
+      }
+      if (dedup.size >= MAX_IMPORT_ROWS_PER_TARGET) break;
+    }
+    if (dedup.size >= MAX_IMPORT_ROWS_PER_TARGET) break;
+  }
+
+  return Array.from(dedup.values());
+};
+
+const scrapeToyboxDetail = async (page: any, detailUrl: string) => {
+  await page.goto(detailUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
+  await page.waitForTimeout(1000);
+
+  const detail = await page.evaluate(() => {
+    const pageTitle = document.title || "";
+    const title =
+      (document.querySelector("h2")?.textContent ||
+        document.querySelector("h3")?.textContent ||
+        document.querySelector(".name")?.textContent ||
+        document.querySelector(".headingArea h2")?.textContent ||
+        document.querySelector('meta[property="og:title"]')?.getAttribute("content") ||
+        pageTitle.replace(/^toytop\s*-\s*/i, "") ||
+        "")
+        .trim();
+
+    const descNode =
+      document.querySelector("#prdDetail") ||
+      document.querySelector("#productDetail") ||
+      document.querySelector(".MS_product_detail") ||
+      document.querySelector(".detail");
+
+    const description = (descNode?.textContent || "").trim();
+    const images = Array.from(
+      document.querySelectorAll('#objImg img, .productimg img, #prdDetail img, #productDetail img, img[src*="shopimages"]')
+    )
+      .map((img) => (img as HTMLImageElement).src)
+      .filter(Boolean);
+
+    const consumerPriceText =
+      document.querySelector(".table-opt td.price")?.textContent ||
+      document.querySelector("td.price")?.textContent ||
+      "";
+    const sellPriceText =
+      document.querySelector(".table-opt td.price.sell_price")?.textContent ||
+      document.querySelector("td.sell_price")?.textContent ||
+      "";
+
+    const breadcrumb = Array.from(document.querySelectorAll('a[href*="shopbrand.html"]'))
+      .map((a) => {
+        const link = a as HTMLAnchorElement;
+        return {
+          href: link.href,
+          text: (link.textContent || "").trim(),
+        };
+      })
+      .filter((x) => x.text);
+
+    return {
+      title,
+      description,
+      images: Array.from(new Set(images)),
+      consumerPriceText,
+      sellPriceText,
+      breadcrumb,
+    };
+  });
+
+  return detail;
+};
+
+const probeSingleToyboxTarget = async (
+  page: any,
+  targetUrl: string,
+  toyboxMaxPages: number
+): Promise<DosoProbeTargetResult> => {
+  const base: DosoProbeTargetResult = {
+    url: targetUrl,
+    title: "",
+    list_ok: false,
+    total_count: 0,
+    estimated_sessions: 0,
+    samples: [],
+    detail_ok: false,
+    detail_fields_presence: {
+      title: false,
+      price: false,
+      images: false,
+      description: false,
+      specs: false,
+    },
+  };
+
+  try {
+    await page.goto(targetUrl, { waitUntil: "networkidle", timeout: 45000 });
+    const title = await page.title();
+    const rows = await collectToyboxListRows(page, targetUrl, toyboxMaxPages);
+    const sampleRows = rows.slice(0, 5);
+
+    let detailPresence = {
+      title: false,
+      price: false,
+      images: false,
+      description: false,
+      specs: false,
+    };
+
+    if (sampleRows.length > 0) {
+      const detail = await scrapeToyboxDetail(page, sampleRows[0].detailUrl);
+      detailPresence = {
+        title: Boolean(detail.title),
+        price: Boolean(parseWonNumber(detail.sellPriceText) || parseWonNumber(detail.consumerPriceText)),
+        images: Array.isArray(detail.images) && detail.images.length > 0,
+        description: Boolean(detail.description),
+        specs: false,
+      };
+    }
+
+    return {
+      ...base,
+      title,
+      list_ok: rows.length > 0,
+      total_count: rows.length,
+      estimated_sessions: rows.length > 0 ? Math.ceil(rows.length / IMPORT_BATCH_SIZE) : 0,
+      samples: sampleRows.map((row, idx) => ({
+        id: extractToyboxCodeFromUrl(row.detailUrl, `toybox-sample-${idx + 1}`),
+        title: row.title || "",
+        detail_url: row.detailUrl,
+      })),
+      detail_ok: sampleRows.length > 0,
+      detail_fields_presence: detailPresence,
+    };
+  } catch (err) {
+    return {
+      ...base,
+      error: err instanceof Error ? err.message : "probe target failed",
+    };
+  }
+};
+
+const runToyboxImportPreview = async (
+  page: any,
+  targets: string[],
+  includeDetails: boolean,
+  toyboxMaxPages: number
+) => {
+  const products: DosoImportProduct[] = [];
+  const targetResults: DosoImportTargetResult[] = [];
+
+  for (const target of targets) {
+    try {
+      const rows = await collectToyboxListRows(page, target, toyboxMaxPages);
+      const mapped: DosoImportProduct[] = [];
+
+      for (let i = 0; i < rows.length; i += 1) {
+        const row = rows[i];
+        const code = extractToyboxCodeFromUrl(row.detailUrl, `toybox-${i + 1}`);
+
+        let title = row.title || code;
+        let description = "";
+        let images: string[] = row.image ? [row.image] : [];
+        let wholesalePriceTWD = row.wholesalePriceTWD;
+        let sourceCategoryName: string | null = null;
+
+        if (includeDetails) {
+          const detail = await scrapeToyboxDetail(page, row.detailUrl);
+          title = detail.title || title;
+          description = detail.description || "";
+          images = detail.images.length > 0 ? detail.images : images;
+          const sellPrice = parseWonNumber(detail.sellPriceText);
+          wholesalePriceTWD = sellPrice || wholesalePriceTWD;
+          const categoryTrail = detail.breadcrumb
+            ?.map((item: { text: string }) => item.text)
+            .filter(Boolean)
+            .slice(-2)
+            .join(" > ");
+          sourceCategoryName = categoryTrail || null;
+        }
+
+        mapped.push({
+          productCode: code,
+          title,
+          description,
+          url: row.detailUrl,
+          images,
+          wholesalePriceTWD,
+          sourceDirectoryUrl: target,
+          sourceCategoryId: row.sourceCategoryId,
+          sourceCategoryName,
+        });
+      }
+
+      products.push(...mapped);
+      targetResults.push({ url: target, title: await page.title(), count: mapped.length });
+    } catch (err) {
+      targetResults.push({
+        url: target,
+        title: "",
+        count: 0,
+        error: err instanceof Error ? err.message : "target import preview failed",
+      });
+    }
+  }
+
+  const dedup = new Map<string, DosoImportProduct>();
+  for (const p of products) {
+    dedup.set(p.productCode, p);
+  }
+
+  return {
+    login_ok: true,
+    products: Array.from(dedup.values()),
+    targets: targetResults,
+  } satisfies DosoImportResponse;
+};
+
 export async function runDosoProbe(input: {
   username: string;
   password: string;
   targets?: string[];
+  toyboxMaxPages?: number;
 }): Promise<DosoProbeResponse> {
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext();
@@ -1153,6 +1572,31 @@ export async function runDosoProbe(input: {
   });
 
   try {
+    const targets = (input.targets && input.targets.length > 0 ? input.targets : DEFAULT_DOSO_TARGETS).slice(0, 20);
+    const toyboxMaxPages = toToyboxPageLimit(input.toyboxMaxPages);
+    const allToybox = targets.length > 0 && targets.every((target) => isToyboxUrl(target));
+
+    if (allToybox) {
+      const loginOk = await loginToybox(page, input.username, input.password);
+      if (!loginOk) {
+        return {
+          login_ok: false,
+          targets: [],
+          error: "登入失敗，用戶名稱或密碼錯誤",
+        };
+      }
+
+      const results: DosoProbeTargetResult[] = [];
+      for (const target of targets) {
+        results.push(await probeSingleToyboxTarget(page, target, toyboxMaxPages));
+      }
+
+      return {
+        login_ok: true,
+        targets: results,
+      };
+    }
+
     await page.goto(LOGIN_URL, { waitUntil: "networkidle", timeout: 45000 });
     await page.getByPlaceholder("請輸入用戶名").fill(input.username);
     await page.getByPlaceholder("密碼").fill(input.password);
@@ -1168,7 +1612,6 @@ export async function runDosoProbe(input: {
       };
     }
 
-    const targets = (input.targets && input.targets.length > 0 ? input.targets : DEFAULT_DOSO_TARGETS).slice(0, 20);
     const results: DosoProbeTargetResult[] = [];
 
     for (const target of targets) {
@@ -1197,6 +1640,7 @@ export async function runDosoImportPreview(input: {
   password: string;
   targets?: string[];
   includeDetails?: boolean;
+  toyboxMaxPages?: number;
 }): Promise<DosoImportResponse> {
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext();
@@ -1216,6 +1660,25 @@ export async function runDosoImportPreview(input: {
   });
 
   try {
+    const targets = (input.targets && input.targets.length > 0 ? input.targets : DEFAULT_DOSO_TARGETS).slice(0, 20);
+    const includeDetails = input.includeDetails !== false;
+    const toyboxMaxPages = toToyboxPageLimit(input.toyboxMaxPages);
+    const allToybox = targets.length > 0 && targets.every((target) => isToyboxUrl(target));
+
+    if (allToybox) {
+      const loginOk = await loginToybox(page, input.username, input.password);
+      if (!loginOk) {
+        return {
+          login_ok: false,
+          products: [],
+          targets: [],
+          error: "登入失敗，用戶名稱或密碼錯誤",
+        };
+      }
+
+      return await runToyboxImportPreview(page, targets, includeDetails, toyboxMaxPages);
+    }
+
     await page.goto(LOGIN_URL, { waitUntil: "networkidle", timeout: 45000 });
     await page.getByPlaceholder("請輸入用戶名").fill(input.username);
     await page.getByPlaceholder("密碼").fill(input.password);
@@ -1231,8 +1694,6 @@ export async function runDosoImportPreview(input: {
       };
     }
 
-    const targets = (input.targets && input.targets.length > 0 ? input.targets : DEFAULT_DOSO_TARGETS).slice(0, 20);
-    const includeDetails = input.includeDetails !== false;
     const products: DosoImportProduct[] = [];
     const targetResults: DosoImportTargetResult[] = [];
 
@@ -1420,6 +1881,54 @@ const extractSourceCategoriesFromSessionStorage = async (page: any, directoryUrl
   return dedupCategoryNodes(nodes);
 };
 
+const extractToyboxSourceCategories = async (page: any, directoryUrl: string) => {
+  const rows = (await page.evaluate(() => {
+    return Array.from(document.querySelectorAll('a[href*="shopbrand.html"]')).map((anchor) => {
+      const a = anchor as HTMLAnchorElement;
+      return {
+        href: a.href,
+        text: (a.textContent || "").replace(/\s+/g, " ").trim(),
+      };
+    });
+  })) as Array<{ href: string; text: string }>;
+
+  const nodes: DosoSourceCategoryNode[] = [];
+  const seen = new Set<string>();
+
+  for (const row of rows) {
+    if (!row.text || !row.href) continue;
+    try {
+      const u = new URL(row.href);
+      if (!/shopbrand\.html/i.test(u.pathname)) continue;
+      const x = u.searchParams.get("xcode");
+      const m = u.searchParams.get("mcode");
+      const s = u.searchParams.get("scode");
+      const sourceId = normalizeToyboxCategoryId({ xcode: x, mcode: m, scode: s });
+      if (!sourceId) continue;
+      const level = s ? 3 : m ? 2 : 1;
+      const parentId = s
+        ? normalizeToyboxCategoryId({ xcode: x, mcode: m })
+        : m
+          ? normalizeToyboxCategoryId({ xcode: x })
+          : null;
+      const key = `${directoryUrl}::${sourceId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      nodes.push({
+        source_category_id: sourceId,
+        name: row.text,
+        parent_id: parentId,
+        level,
+        directory_url: directoryUrl,
+      });
+    } catch {
+      // noop
+    }
+  }
+
+  return nodes;
+};
+
 export async function runDosoSourceCategoryRefresh(input: {
   username: string;
   password: string;
@@ -1430,6 +1939,36 @@ export async function runDosoSourceCategoryRefresh(input: {
   const page = await context.newPage();
 
   try {
+    const targets = (input.targets && input.targets.length > 0 ? input.targets : DEFAULT_DOSO_TARGETS).slice(0, 20);
+    const allToybox = targets.length > 0 && targets.every((target) => isToyboxUrl(target));
+
+    if (allToybox) {
+      const loginOk = await loginToybox(page, input.username, input.password);
+      if (!loginOk) {
+        return {
+          login_ok: false,
+          directories: {},
+          error: "登入失敗，用戶名稱或密碼錯誤",
+        };
+      }
+
+      const directories: Record<string, DosoSourceCategoryNode[]> = {};
+      for (const target of targets) {
+        try {
+          await page.goto(target, { waitUntil: "networkidle", timeout: 45000 });
+          await page.waitForTimeout(1200);
+          directories[target] = await extractToyboxSourceCategories(page, target);
+        } catch {
+          directories[target] = [];
+        }
+      }
+
+      return {
+        login_ok: true,
+        directories,
+      };
+    }
+
     await page.goto(LOGIN_URL, { waitUntil: "networkidle", timeout: 45000 });
     await page.getByPlaceholder("請輸入用戶名").fill(input.username);
     await page.getByPlaceholder("密碼").fill(input.password);
@@ -1444,7 +1983,6 @@ export async function runDosoSourceCategoryRefresh(input: {
       };
     }
 
-    const targets = (input.targets && input.targets.length > 0 ? input.targets : DEFAULT_DOSO_TARGETS).slice(0, 20);
     const directories: Record<string, DosoSourceCategoryNode[]> = {};
 
     for (const target of targets) {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/adminAuth";
 import { runDosoProbe } from "@/lib/doso/probeService";
-import { DEFAULT_DOSO_TARGETS } from "@/lib/doso/targets";
+import { DEFAULT_DOSO_TARGETS, DOSO_TARGET_OPTIONS } from "@/lib/doso/targets";
 import { getSavedDosoCredentialsForLogin } from "@/lib/doso/credentialStore";
 import type { DosoProbeRequestBody } from "@/lib/doso/types";
 
@@ -41,8 +41,20 @@ export async function POST(request: NextRequest) {
       .map((x) => x.trim())
       .filter((x) => {
         try {
-          const u = new URL(x);
-          return u.protocol === "https:" && u.hostname === "www.doso.net";
+          const inputUrl = new URL(x);
+          if (inputUrl.protocol !== "https:" && inputUrl.protocol !== "http:") return false;
+          return DOSO_TARGET_OPTIONS.some((option) => {
+            try {
+              const allowed = new URL(option.url);
+              const allowedPath = allowed.pathname.replace(/\/$/, "");
+              const inputPath = inputUrl.pathname.replace(/\/$/, "");
+              if (inputUrl.hostname !== allowed.hostname) return false;
+              if (!allowedPath) return true;
+              return inputPath.startsWith(allowedPath);
+            } catch {
+              return false;
+            }
+          });
         } catch {
           return false;
         }

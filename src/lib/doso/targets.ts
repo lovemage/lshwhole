@@ -8,6 +8,7 @@ export const DEFAULT_DOSO_TARGETS = [
   "https://www.doso.net/onlineMall/dabansinei",
   "https://www.doso.net/onlineMall/shineiRanking",
   "https://www.doso.net/onlineMall/gomen",
+  "https://www.toybox.kr/",
 ];
 
 export interface DosoTargetOption {
@@ -25,4 +26,5 @@ export const DOSO_TARGET_OPTIONS: DosoTargetOption[] = [
   { url: "https://www.doso.net/onlineMall/dabansinei", label: "寺內" },
   { url: "https://www.doso.net/onlineMall/shineiRanking", label: "寺內熱賣" },
   { url: "https://www.doso.net/onlineMall/gomen", label: "江錦" },
+  { url: "https://www.toybox.kr/", label: "Toybox" },
 ];

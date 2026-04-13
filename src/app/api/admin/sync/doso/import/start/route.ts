@@ -8,6 +8,7 @@ import {
   updateSessionCounters,
 } from "@/lib/doso/importSessionService";
 import { getSavedDosoCredentialsForLogin } from "@/lib/doso/credentialStore";
+import { DOSO_TARGET_OPTIONS } from "@/lib/doso/targets";
 import type {
   DosoImportStartApiResponse,
   DosoImportStartRequest,
@@ -15,7 +16,13 @@ import type {
 
 export const runtime = "nodejs";
 
-const parseSingleDosoTarget = (input: unknown) => {
+const toToyboxMaxPages = (value: unknown) => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 30;
+  return Math.min(100, Math.max(1, Math.floor(n)));
+};
+
+const parseSingleTarget = (input: unknown) => {
   if (typeof input !== "string") return null;
   const trimmed = input.trim();
   const tokens = trimmed.split(/\s+/).filter(Boolean);
@@ -23,9 +30,27 @@ const parseSingleDosoTarget = (input: unknown) => {
 
   try {
     const url = new URL(tokens[0]);
-    if (url.protocol !== "https:" || url.hostname !== "www.doso.net") {
+    if (url.protocol !== "https:" && url.protocol !== "http:") {
       return null;
     }
+
+    const isAllowed = DOSO_TARGET_OPTIONS.some((option) => {
+      try {
+        const allowed = new URL(option.url);
+        const allowedPath = allowed.pathname.replace(/\/$/, "");
+        const inputPath = url.pathname.replace(/\/$/, "");
+        if (url.hostname !== allowed.hostname) return false;
+        if (!allowedPath) return true;
+        return inputPath.startsWith(allowedPath);
+      } catch {
+        return false;
+      }
+    });
+
+    if (!isAllowed) {
+      return null;
+    }
+
     return url.toString();
   } catch {
     return null;
@@ -53,8 +78,9 @@ export async function POST(request: NextRequest) {
 
     const requestUsername = typeof body?.username === "string" ? body.username.trim() : "";
     const requestPassword = typeof body?.password === "string" ? body.password : "";
-    const parsedTargetFromSnake = parseSingleDosoTarget(body?.target_url);
-    const parsedTargetFromCamel = parseSingleDosoTarget(body?.targetUrl);
+    const toyboxMaxPages = toToyboxMaxPages(body?.toybox_max_pages ?? body?.toyboxMaxPages);
+    const parsedTargetFromSnake = parseSingleTarget(body?.target_url);
+    const parsedTargetFromCamel = parseSingleTarget(body?.targetUrl);
     const targetUrl = parsedTargetFromSnake || parsedTargetFromCamel;
 
     if (!requestUsername && requestPassword) {
@@ -85,7 +111,7 @@ export async function POST(request: NextRequest) {
 
     if (!targetUrl) {
       return NextResponse.json(
-        { ok: false, error: "目錄 URL 格式錯誤，請輸入單一 DOSO 網址" } satisfies DosoImportStartApiResponse,
+        { ok: false, error: "目錄 URL 格式錯誤，請輸入已支援的同步來源網址" } satisfies DosoImportStartApiResponse,
         { status: 400 }
       );
     }
@@ -95,6 +121,7 @@ export async function POST(request: NextRequest) {
       password: credentials.password,
       targets: [targetUrl],
       includeDetails: false,
+      toyboxMaxPages,
     });
 
     if (!preview.login_ok) {

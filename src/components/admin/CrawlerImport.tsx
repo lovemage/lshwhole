@@ -136,6 +136,7 @@ export default function CrawlerImport() {
   const [importSession, setImportSession] = useState<DosoImportSessionProgress | null>(null);
   const [importSessions, setImportSessions] = useState<DosoImportSessionProgress[]>([]);
   const [runBatchSize, setRunBatchSize] = useState(20);
+  const [toyboxMaxPages, setToyboxMaxPages] = useState(30);
   const [importStorageKey, setImportStorageKey] = useState("dosoImport:anon");
 
   useEffect(() => {
@@ -500,28 +501,64 @@ export default function CrawlerImport() {
     const candidate = String(p?.sourceDirectoryUrl || "").trim();
     if (candidate) return candidate;
 
-    const origin = String(p?.url || p?.original_url || "");
+    const origin = String(p?.url || p?.original_url || "").trim();
     if (!origin) return null;
 
-    const found = DOSO_TARGET_OPTIONS.find((opt) => origin.includes(opt.url.replace("https://www.doso.net", "")));
-    return found?.url || null;
+    try {
+      const sourceUrl = new URL(origin);
+      const found = DOSO_TARGET_OPTIONS.find((opt) => {
+        try {
+          const optionUrl = new URL(opt.url);
+          const optionPath = optionUrl.pathname.replace(/\/$/, "");
+          const sourcePath = sourceUrl.pathname.replace(/\/$/, "");
+          if (sourceUrl.hostname !== optionUrl.hostname) return false;
+          if (!optionPath) return true;
+          return sourcePath.startsWith(optionPath);
+        } catch {
+          return false;
+        }
+      });
+      return found?.url || null;
+    } catch {
+      return null;
+    }
   };
 
   const getTargetLabelByUrl = (url?: string | null) => {
     const raw = String(url || "").trim();
     if (!raw) return "未知目錄";
-    for (const option of DOSO_TARGET_OPTIONS) {
-      const path = option.url.replace("https://www.doso.net", "");
-      if (raw.includes(path)) return option.label;
+    try {
+      const rawUrl = new URL(raw);
+      for (const option of DOSO_TARGET_OPTIONS) {
+        const optionUrl = new URL(option.url);
+        const optionPath = optionUrl.pathname.replace(/\/$/, "");
+        const rawPath = rawUrl.pathname.replace(/\/$/, "");
+        if (rawUrl.hostname !== optionUrl.hostname) continue;
+        if (!optionPath || rawPath.startsWith(optionPath)) return option.label;
+      }
+    } catch {
+      // noop
     }
     return "未知目錄";
   };
 
 
-  const isValidDosoTargetUrl = (value: string) => {
+  const isValidSyncTargetUrl = (value: string) => {
     try {
       const u = new URL(value);
-      return u.protocol === "https:" && u.hostname === "www.doso.net";
+      if (u.protocol !== "https:" && u.protocol !== "http:") return false;
+      return DOSO_TARGET_OPTIONS.some((opt) => {
+        try {
+          const allowed = new URL(opt.url);
+          const allowedPath = allowed.pathname.replace(/\/$/, "");
+          const inputPath = u.pathname.replace(/\/$/, "");
+          if (u.hostname !== allowed.hostname) return false;
+          if (!allowedPath) return true;
+          return inputPath.startsWith(allowedPath);
+        } catch {
+          return false;
+        }
+      });
     } catch {
       return false;
     }
@@ -552,8 +589,8 @@ export default function CrawlerImport() {
     const username = dosoUsername.trim();
 
     const targetUrl = dosoTargetUrl.trim();
-    if (!targetUrl || !isValidDosoTargetUrl(targetUrl)) {
-      alert("請輸入單一 DOSO 目錄網址");
+    if (!targetUrl || !isValidSyncTargetUrl(targetUrl)) {
+      alert("請輸入已支援的同步來源網址");
       return;
     }
 
@@ -583,6 +620,7 @@ export default function CrawlerImport() {
           username: username || undefined,
           password: dosoPassword || undefined,
           target_url: targetUrl,
+          toybox_max_pages: toyboxMaxPages,
         }),
       });
 
@@ -1859,6 +1897,19 @@ export default function CrawlerImport() {
               </option>
             ))}
           </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-text-primary-light mb-1">Toybox 分頁上限</label>
+          <input
+            type="number"
+            min={1}
+            max={100}
+            value={toyboxMaxPages}
+            onChange={(e) => setToyboxMaxPages(Math.min(100, Math.max(1, Number(e.target.value) || 1)))}
+            className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+          />
+          <p className="mt-1 text-xs text-text-secondary-light">僅對 Toybox 同步生效，預設 30 頁。</p>
         </div>
 
         <div className="rounded-lg border border-border-light bg-background-light p-3 space-y-3">
