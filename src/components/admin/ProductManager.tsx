@@ -51,6 +51,10 @@ export default function ProductManager() {
   const [bulkDeleteMode, setBulkDeleteMode] = useState<"or" | "and">("or");
   const [bulkDeleteL1Id, setBulkDeleteL1Id] = useState<number | null>(null);
   const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
+  const [bulkCategoryL1Id, setBulkCategoryL1Id] = useState<number | null>(null);
+  const [bulkCategoryL2Id, setBulkCategoryL2Id] = useState<number | null>(null);
+  const [bulkCategoryL3Id, setBulkCategoryL3Id] = useState<number | null>(null);
+  const [bulkCategoryLoading, setBulkCategoryLoading] = useState(false);
   const [showProductEdit, setShowProductEdit] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
@@ -117,6 +121,15 @@ export default function ProductManager() {
     // 當 L2 改變時重置 L3（對齊 CrawlerImport）
     setProductEditForm((prev) => ({ ...prev, l3Id: null }));
   }, [productEditForm.l2Id]);
+
+  useEffect(() => {
+    setBulkCategoryL2Id(null);
+    setBulkCategoryL3Id(null);
+  }, [bulkCategoryL1Id]);
+
+  useEffect(() => {
+    setBulkCategoryL3Id(null);
+  }, [bulkCategoryL2Id]);
 
   const fetchSpecTemplates = async () => {
     try {
@@ -353,6 +366,52 @@ export default function ProductManager() {
     } else {
       const j = await res.json().catch(() => ({}));
       alert(j?.error || "刪除失敗");
+    }
+  };
+
+  const batchUpdateCategory = async () => {
+    if (selectedProductIds.length === 0) return alert("請先選擇商品");
+    if (!bulkCategoryL1Id) return alert("請先選擇 L1 分類");
+
+    const categoryIds = [bulkCategoryL1Id, bulkCategoryL2Id, bulkCategoryL3Id].filter(Boolean) as number[];
+    const l1Name = categories.find((c) => c.id === bulkCategoryL1Id)?.name || `#${bulkCategoryL1Id}`;
+    const l2Name = bulkCategoryL2Id
+      ? categories.find((c) => c.id === bulkCategoryL2Id)?.name || `#${bulkCategoryL2Id}`
+      : "未指定";
+    const l3Name = bulkCategoryL3Id
+      ? categories.find((c) => c.id === bulkCategoryL3Id)?.name || `#${bulkCategoryL3Id}`
+      : "未指定";
+
+    const summary = [
+      `確定要批量更新 ${selectedProductIds.length} 件商品分類嗎？`,
+      `- L1：${l1Name}`,
+      `- L2：${l2Name}`,
+      `- L3：${l3Name}`,
+    ].join("\n");
+
+    if (!confirm(summary)) return;
+
+    try {
+      setBulkCategoryLoading(true);
+      const res = await fetch("/api/products/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "category", ids: selectedProductIds, category_ids: categoryIds }),
+      });
+
+      if (res.ok) {
+        alert("批量分類更新完成");
+        setSelectedProductIds([]);
+        fetchProducts(productPage, selectedProductL1);
+      } else {
+        const j = await res.json().catch(() => ({}));
+        alert(j?.error || "批量分類更新失敗");
+      }
+    } catch (err) {
+      console.error("batch category update failed:", err);
+      alert("批量分類更新發生錯誤");
+    } finally {
+      setBulkCategoryLoading(false);
     }
   };
 
@@ -805,6 +864,89 @@ export default function ProductManager() {
           <button onClick={() => batchUpdateStatus('published')} className="px-3 py-1 rounded-lg border border-border-light text-sm hover:bg-background-light">批量上架</button>
           <button onClick={() => batchUpdateStatus('draft')} className="px-3 py-1 rounded-lg border border-border-light text-sm hover:bg-background-light">批量下架</button>
           <button onClick={batchDelete} className="px-3 py-1 rounded-lg border border-danger text-danger text-sm hover:bg-danger/10">批量刪除</button>
+        </div>
+      </div>
+
+      {/* 工具列：批量更新分類 */}
+      <div className="rounded-xl border border-border-light bg-card-light p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 flex-1">
+            <div>
+              <label className="text-xs text-text-secondary-light">L1</label>
+              <select
+                value={bulkCategoryL1Id ?? ""}
+                onChange={(e) => setBulkCategoryL1Id(e.target.value ? Number(e.target.value) : null)}
+                className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+              >
+                <option value="">請選擇</option>
+                {categories
+                  .filter((c) => c.level === 1)
+                  .sort((a, b) => a.sort - b.sort)
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-text-secondary-light">L2（可不選）</label>
+              <select
+                value={bulkCategoryL2Id ?? ""}
+                onChange={(e) => setBulkCategoryL2Id(e.target.value ? Number(e.target.value) : null)}
+                className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+              >
+                <option value="">未指定</option>
+                {categories
+                  .filter((c) => c.level === 2)
+                  .filter(
+                    (l2) =>
+                      !bulkCategoryL1Id ||
+                      categoryRelations.some(
+                        (r: any) => r.parent_category_id === bulkCategoryL1Id && r.child_category_id === l2.id
+                      )
+                  )
+                  .sort((a, b) => a.sort - b.sort)
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-text-secondary-light">L3（可不選）</label>
+              <select
+                value={bulkCategoryL3Id ?? ""}
+                onChange={(e) => setBulkCategoryL3Id(e.target.value ? Number(e.target.value) : null)}
+                className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+              >
+                <option value="">未指定</option>
+                {categories
+                  .filter((c) => c.level === 3)
+                  .filter(
+                    (l3) =>
+                      !bulkCategoryL2Id ||
+                      categoryRelations.some(
+                        (r: any) => r.parent_category_id === bulkCategoryL2Id && r.child_category_id === l3.id
+                      )
+                  )
+                  .sort((a, b) => a.sort - b.sort)
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          </div>
+          <button
+            onClick={batchUpdateCategory}
+            disabled={bulkCategoryLoading}
+            className="rounded-lg border border-primary bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {bulkCategoryLoading ? "更新中..." : "批量更新分類"}
+          </button>
         </div>
       </div>
 

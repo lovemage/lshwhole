@@ -84,6 +84,8 @@ export default function CrawlerImport() {
   const [batchReviewIndex, setBatchReviewIndex] = useState(0);
   const [batchReviewStats, setBatchReviewStats] = useState({ successCount: 0, failCount: 0, mappingMissCount: 0 });
   const [batchPublishedCodes, setBatchPublishedCodes] = useState<string[]>([]);
+  const [batchReviewHandledIndices, setBatchReviewHandledIndices] = useState<Set<number>>(new Set());
+  const [batchReviewSelectedIndices, setBatchReviewSelectedIndices] = useState<Set<number>>(new Set());
 
   interface Spec {
     name: string;
@@ -1212,7 +1214,7 @@ export default function CrawlerImport() {
   const confirmPublishWithAutoCategory = async () => {
     if (!pendingPublishPayload) return;
     if (isBatchReviewMode) {
-      await handleBatchReviewDecision(null);
+      await handleBatchReviewApplySelected(null);
       return;
     }
     try {
@@ -1233,7 +1235,7 @@ export default function CrawlerImport() {
 
     const manualMergeCategoryIds = [l1Id, mergeL2Id, mergeL3Id || null].filter(Boolean) as number[];
     if (isBatchReviewMode) {
-      await handleBatchReviewDecision(manualMergeCategoryIds);
+      await handleBatchReviewApplySelected(manualMergeCategoryIds);
       return;
     }
     try {
@@ -1266,6 +1268,8 @@ export default function CrawlerImport() {
     setBatchReviewIndex(0);
     setBatchReviewStats({ successCount: 0, failCount: 0, mappingMissCount: 0 });
     setBatchPublishedCodes([]);
+    setBatchReviewHandledIndices(new Set());
+    setBatchReviewSelectedIndices(new Set());
     setShowCategoryReview(false);
     setPendingPublishPayload(null);
     setPendingCategoryReview(null);
@@ -1273,16 +1277,41 @@ export default function CrawlerImport() {
     setMergeL3Id(null);
   };
 
-  const handleBatchReviewDecision = async (manualMergeCategoryIds: number[] | null) => {
-    const item = batchReviewQueue[batchReviewIndex];
+  const getNextBatchReviewIndex = (handled: Set<number>) => {
+    return batchReviewQueue.findIndex((_, idx) => !handled.has(idx));
+  };
+
+  const moveToBatchReviewIndex = (index: number) => {
+    const item = batchReviewQueue[index];
     if (!item) return;
+    setBatchReviewIndex(index);
+    setPendingPublishPayload(item.payload);
+    setPendingCategoryReview(item.review);
+    setMergeL2Id(null);
+    setMergeL3Id(null);
+  };
 
-    try {
-      setPublishing(true);
+  const processBatchReviewIndexes = async (
+    reviewIndexes: number[],
+    manualMergeCategoryIds: number[] | null
+  ) => {
+    const validIndexes = Array.from(new Set(reviewIndexes))
+      .filter((idx) => idx >= 0 && idx < batchReviewQueue.length)
+      .filter((idx) => !batchReviewHandledIndices.has(idx));
+
+    if (validIndexes.length === 0) {
+      return;
+    }
+
+    const nextStats = { ...batchReviewStats };
+    const nextCodes = [...batchPublishedCodes];
+    const nextHandled = new Set(batchReviewHandledIndices);
+
+    for (const idx of validIndexes) {
+      const item = batchReviewQueue[idx];
+      if (!item) continue;
+
       const result = await requestPublishConfirm(item.payload, manualMergeCategoryIds);
-      const nextStats = { ...batchReviewStats };
-      const nextCodes = [...batchPublishedCodes];
-
       if (result.ok) {
         nextStats.successCount += 1;
         nextCodes.push(item.productCode);
@@ -1293,28 +1322,92 @@ export default function CrawlerImport() {
         }
       }
 
-      const nextIndex = batchReviewIndex + 1;
-      if (nextIndex >= batchReviewQueue.length) {
-        finalizeBatchPublish(
-          nextStats.successCount,
-          nextStats.failCount,
-          nextStats.mappingMissCount,
-          batchReviewQueue.length,
-          nextCodes
-        );
+      nextHandled.add(idx);
+    }
+
+    if (nextHandled.size >= batchReviewQueue.length) {
+      finalizeBatchPublish(
+        nextStats.successCount,
+        nextStats.failCount,
+        nextStats.mappingMissCount,
+        batchReviewQueue.length,
+        nextCodes
+      );
+      return;
+    }
+
+    const nextIndex = getNextBatchReviewIndex(nextHandled);
+    if (nextIndex < 0) {
+      finalizeBatchPublish(
+        nextStats.successCount,
+        nextStats.failCount,
+        nextStats.mappingMissCount,
+        batchReviewQueue.length,
+        nextCodes
+      );
+      return;
+    }
+
+    setBatchReviewStats(nextStats);
+    setBatchPublishedCodes(nextCodes);
+    setBatchReviewHandledIndices(nextHandled);
+    setBatchReviewSelectedIndices(new Set([nextIndex]));
+    moveToBatchReviewIndex(nextIndex);
+  };
+
+  const handleBatchReviewApplySelected = async (manualMergeCategoryIds: number[] | null) => {
+    const selectedIndexes = Array.from(batchReviewSelectedIndices).filter(
+      (idx) => idx >= 0 && idx < batchReviewQueue.length && !batchReviewHandledIndices.has(idx)
+    );
+    if (selectedIndexes.length === 0) {
+      alert("請先在左側待確認清單勾選至少一筆");
+      return;
+    }
+
+    let targetIndexes = selectedIndexes;
+    if (manualMergeCategoryIds && manualMergeCategoryIds.length > 0) {
+      const selectedL1Id = manualMergeCategoryIds[0];
+      const compatible = selectedIndexes.filter((idx) => {
+        const itemL1 = Number(batchReviewQueue[idx]?.review?.proposed_category?.l1_id || 0);
+        return itemL1 === selectedL1Id;
+      });
+      const skipped = selectedIndexes.length - compatible.length;
+      if (compatible.length === 0) {
+        alert("已選項目與目前 L1 不一致，無法批量合併，請改選同一個 L1 的商品。");
         return;
       }
+      if (skipped > 0) {
+        alert(`已自動略過 ${skipped} 筆不同 L1 的商品，僅處理相同 L1。`);
+      }
+      targetIndexes = compatible;
+    }
 
-      setBatchReviewStats(nextStats);
-      setBatchPublishedCodes(nextCodes);
-      setBatchReviewIndex(nextIndex);
-      setPendingPublishPayload(batchReviewQueue[nextIndex].payload);
-      setPendingCategoryReview(batchReviewQueue[nextIndex].review);
-      setMergeL2Id(null);
-      setMergeL3Id(null);
+    try {
+      setPublishing(true);
+      await processBatchReviewIndexes(targetIndexes, manualMergeCategoryIds);
     } finally {
       setPublishing(false);
     }
+  };
+
+  const toggleBatchReviewSelection = (index: number) => {
+    setBatchReviewSelectedIndices((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  };
+
+  const selectAllPendingBatchReviews = () => {
+    const allPending = batchReviewQueue
+      .map((_, idx) => idx)
+      .filter((idx) => !batchReviewHandledIndices.has(idx));
+    setBatchReviewSelectedIndices(new Set(allPending));
+  };
+
+  const clearBatchReviewSelection = () => {
+    setBatchReviewSelectedIndices(new Set());
   };
 
   const toggleSelectProduct = (idx: number) => {
@@ -1591,6 +1684,8 @@ export default function CrawlerImport() {
       setBatchReviewIndex(0);
       setBatchReviewStats({ successCount, failCount, mappingMissCount });
       setBatchPublishedCodes(publishedCodes);
+      setBatchReviewHandledIndices(new Set());
+      setBatchReviewSelectedIndices(new Set([0]));
       setPendingPublishPayload(reviewQueue[0].payload);
       setPendingCategoryReview(reviewQueue[0].review);
       setMergeL2Id(null);
@@ -2491,24 +2586,56 @@ export default function CrawlerImport() {
             <div className={`grid gap-4 ${isBatchReviewMode ? "grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)]" : "grid-cols-1"}`}>
               {isBatchReviewMode && (
                 <div className="rounded-lg border border-border-light bg-background-light p-3">
-                  <div className="text-sm font-bold text-text-primary-light">待確認清單</div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-sm font-bold text-text-primary-light">待確認清單</div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        className="rounded border border-border-light px-2 py-0.5 text-[11px] text-text-secondary-light hover:bg-white"
+                        onClick={selectAllPendingBatchReviews}
+                      >
+                        全選待處理
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded border border-border-light px-2 py-0.5 text-[11px] text-text-secondary-light hover:bg-white"
+                        onClick={clearBatchReviewSelection}
+                      >
+                        清除
+                      </button>
+                    </div>
+                  </div>
                   <div className="mt-1 text-xs text-text-secondary-light">
-                    已完成 {batchReviewIndex} / {batchReviewQueue.length}
+                    已完成 {batchReviewHandledIndices.size} / {batchReviewQueue.length}，已選 {batchReviewSelectedIndices.size} 筆
                   </div>
                   <div className="mt-3 max-h-[56vh] space-y-2 overflow-y-auto pr-1">
                     {batchReviewQueue.map((item, idx) => {
-                      const status = idx < batchReviewIndex ? "done" : idx === batchReviewIndex ? "current" : "pending";
+                      const status = batchReviewHandledIndices.has(idx) ? "done" : idx === batchReviewIndex ? "current" : "pending";
                       return (
                         <div
                           key={`${item.productCode}-${idx}`}
+                          onClick={() => {
+                            if (batchReviewHandledIndices.has(idx)) return;
+                            moveToBatchReviewIndex(idx);
+                            setBatchReviewSelectedIndices(new Set([idx]));
+                          }}
                           className={`rounded border px-2 py-2 text-xs ${
                             status === "done"
                               ? "border-emerald-200 bg-emerald-50"
                               : status === "current"
                               ? "border-primary bg-primary/10"
                               : "border-border-light bg-white"
-                          }`}
+                          } ${status === "done" ? "cursor-not-allowed" : "cursor-pointer"}`}
                         >
+                          <label className="mb-1 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={batchReviewSelectedIndices.has(idx)}
+                              disabled={batchReviewHandledIndices.has(idx)}
+                              onChange={() => toggleBatchReviewSelection(idx)}
+                            />
+                            <span className="text-[11px] text-text-secondary-light">加入批量處理</span>
+                          </label>
                           <div className="font-medium text-text-primary-light">#{idx + 1} {item.productCode || "無代碼"}</div>
                           <div className="mt-1 line-clamp-2 text-text-secondary-light">{item.payload?.title || "無標題"}</div>
                           <div className="mt-1 text-[11px] text-text-secondary-light">
@@ -2624,7 +2751,7 @@ export default function CrawlerImport() {
                 disabled={publishing}
                 className="rounded-lg border border-border-light px-4 py-2 text-sm text-text-primary-light"
               >
-                接受本次新增
+                {isBatchReviewMode ? `接受已選新增（${Math.max(batchReviewSelectedIndices.size, 1)}）` : "接受本次新增"}
               </button>
               <button
                 type="button"
@@ -2632,7 +2759,7 @@ export default function CrawlerImport() {
                 disabled={publishing}
                 className="rounded-lg bg-primary px-4 py-2 text-sm text-white"
               >
-                合併到既有分類
+                {isBatchReviewMode ? `合併到既有分類（${Math.max(batchReviewSelectedIndices.size, 1)}）` : "合併到既有分類"}
               </button>
             </div>
               </div>

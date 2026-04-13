@@ -148,10 +148,47 @@ export default function CategoryManager() {
       const response = await fetch(`/api/categories/${id}`, {
         method: "DELETE",
       });
+      const payload = await response.json().catch(() => ({}));
+
       if (response.ok) {
         alert("分類已刪除");
         fetchCategories();
+        fetchCategoryRelations();
+        return;
       }
+
+      if (payload?.reason === "category_has_dependencies") {
+        const dep = payload?.dependency || {};
+        const message = [
+          `${dep?.name || "此分類"} 目前無法直接刪除。`,
+          `父層關聯：${dep?.parent_relation_count || 0}`,
+          `子層關聯：${dep?.child_relation_count || 0}`,
+          `商品關聯：${dep?.product_mapping_count || 0}`,
+          "",
+          "是否要執行強制刪除？",
+          "（會先清掉以上關聯，再停用分類）",
+        ].join("\n");
+
+        const forceDelete = confirm(message);
+        if (!forceDelete) return;
+
+        const forceResp = await fetch(`/api/categories/${id}?force=1`, {
+          method: "DELETE",
+        });
+        const forcePayload = await forceResp.json().catch(() => ({}));
+
+        if (!forceResp.ok) {
+          alert(forcePayload?.error || "強制刪除失敗");
+          return;
+        }
+
+        alert("分類已強制刪除（關聯已清除）");
+        fetchCategories();
+        fetchCategoryRelations();
+        return;
+      }
+
+      alert(payload?.error || "刪除失敗");
     } catch (err) {
       console.error("Failed to delete category:", err);
       alert("刪除失敗");
@@ -187,25 +224,26 @@ export default function CategoryManager() {
     setSelectedSuspiciousIds(new Set(suspiciousCategories.map((c) => c.id)));
   };
 
-  const disableSelectedSuspicious = async () => {
+  const deleteSelectedSuspicious = async () => {
     if (selectedSuspiciousIds.size === 0) {
-      alert("請先選擇要停用的分類");
+      alert("請先選擇要刪除的分類");
       return;
     }
-    if (!confirm(`確定要停用 ${selectedSuspiciousIds.size} 個可疑分類嗎？`)) return;
+    if (!confirm(`確定要刪除 ${selectedSuspiciousIds.size} 個可疑分類嗎？\n（會先清除關聯，再刪除）`)) return;
 
     let okCount = 0;
     for (const id of Array.from(selectedSuspiciousIds)) {
       try {
-        const response = await fetch(`/api/categories/${id}`, { method: "DELETE" });
+        const response = await fetch(`/api/categories/${id}?force=1`, { method: "DELETE" });
         if (response.ok) okCount += 1;
       } catch {
         // noop
       }
     }
     await fetchCategories();
+    await fetchCategoryRelations();
     setSelectedSuspiciousIds(new Set());
-    alert(`已停用 ${okCount} 個分類`);
+    alert(`已刪除 ${okCount} 個分類`);
   };
 
 
@@ -526,10 +564,10 @@ export default function CategoryManager() {
               {selectedSuspiciousIds.size === suspiciousCategories.length && suspiciousCategories.length > 0 ? "取消全選" : "全選"}
             </button>
             <button
-              onClick={disableSelectedSuspicious}
+              onClick={deleteSelectedSuspicious}
               className="text-xs px-2 py-1 rounded bg-amber-600 text-white hover:bg-amber-700"
             >
-              批次停用
+              批次刪除
             </button>
           </div>
         </div>
