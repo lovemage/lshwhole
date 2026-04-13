@@ -131,6 +131,9 @@ export default function CrawlerImport() {
   const [dosoHasSavedPassword, setDosoHasSavedPassword] = useState(false);
   const [showDosoGuide, setShowDosoGuide] = useState(false);
   const [dosoTargetUrl, setDosoTargetUrl] = useState(DEFAULT_DOSO_TARGETS[0] || "");
+  const [toyboxSourceCategories, setToyboxSourceCategories] = useState<Array<{ source_category_id: string; name: string; level: number }>>([]);
+  const [toyboxCategoryLoading, setToyboxCategoryLoading] = useState(false);
+  const [toyboxSelectedCategoryId, setToyboxSelectedCategoryId] = useState("");
   const [probeError, setProbeError] = useState<string | null>(null);
   const [importLoading, setImportLoading] = useState(false);
   const [importSession, setImportSession] = useState<DosoImportSessionProgress | null>(null);
@@ -448,7 +451,14 @@ export default function CrawlerImport() {
     const {
       data: { session },
     } = await supabase.auth.getSession();
-    return session?.access_token || null;
+
+    const willExpireSoon = Boolean(session?.expires_at) && session!.expires_at! * 1000 < Date.now() + 60_000;
+    if (session?.access_token && !willExpireSoon) {
+      return session.access_token;
+    }
+
+    const { data: refreshed } = await supabase.auth.refreshSession();
+    return refreshed?.session?.access_token || session?.access_token || null;
   };
 
   const fetchImportSessions = async (keepCurrent = true) => {
@@ -562,6 +572,85 @@ export default function CrawlerImport() {
     } catch {
       return false;
     }
+  };
+
+  const isToyboxTargetUrl = (value: string) => {
+    try {
+      const u = new URL(value);
+      return u.hostname === "www.toybox.kr" || u.hostname === "toybox.kr";
+    } catch {
+      return false;
+    }
+  };
+
+  const getToyboxTargetUrlFromSourceCategoryId = (sourceCategoryId: string) => {
+    const matched = sourceCategoryId.match(/^toybox:x([^:]+)(:m([^:]+))?(:s([^:]+))?$/);
+    if (!matched) return null;
+    const xcode = matched[1];
+    const mcode = matched[3] || "";
+    const scode = matched[5] || "";
+    const params = new URLSearchParams();
+    params.set("xcode", xcode);
+    if (mcode) params.set("mcode", mcode);
+    if (scode) params.set("scode", scode);
+    return `https://www.toybox.kr/shop/shopbrand.html?${params.toString()}`;
+  };
+
+  const loadToyboxSourceCategories = async () => {
+    try {
+      setToyboxCategoryLoading(true);
+      const accessToken = await getAdminAccessToken();
+      if (!accessToken) {
+        alert("尚未登入管理員，請重新登入後再試");
+        return;
+      }
+
+      const username = dosoUsername.trim();
+      const response = await fetch("/api/admin/sync/doso/source-categories/refresh", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          username: username || undefined,
+          password: dosoPassword || undefined,
+        }),
+      });
+
+      const payload = await response.json().catch(() => null) as any;
+      if (!response.ok || !payload?.ok) {
+        alert(mapDosoError(payload?.error, `載入 Toybox 分類失敗 (${response.status})`));
+        return;
+      }
+
+      const directories = payload?.categories?.directories || {};
+      const toyboxKey = Object.keys(directories).find((k) => isToyboxTargetUrl(k));
+      const nodes = toyboxKey ? directories[toyboxKey] : [];
+
+      const categoryRows = (Array.isArray(nodes) ? nodes : [])
+        .filter((x: any) => typeof x?.source_category_id === "string" && typeof x?.name === "string")
+        .map((x: any) => ({
+          source_category_id: String(x.source_category_id),
+          name: String(x.name),
+          level: Number(x.level) || 1,
+        }))
+        .sort((a: any, b: any) => a.level - b.level || a.name.localeCompare(b.name, "zh-Hant"));
+
+      setToyboxSourceCategories(categoryRows);
+      alert(`Toybox 分類已載入（${categoryRows.length} 筆）`);
+    } catch (err) {
+      console.error("load toybox source categories failed:", err);
+      alert("載入 Toybox 分類發生錯誤");
+    } finally {
+      setToyboxCategoryLoading(false);
+    }
+  };
+
+  const handleToyboxCategoryPick = (sourceCategoryId: string) => {
+    setToyboxSelectedCategoryId(sourceCategoryId);
+    const target = getToyboxTargetUrlFromSourceCategoryId(sourceCategoryId);
+    if (target) setDosoTargetUrl(target);
   };
 
   const mapDosoError = (codeOrMessage: string | null | undefined, fallback: string) => {
@@ -1886,18 +1975,50 @@ export default function CrawlerImport() {
 
         <div>
           <label className="block text-sm font-medium text-text-primary-light mb-1">目錄（一次僅限一個）</label>
-          <select
+          <input
+            type="text"
+            list="sync-target-options"
             value={dosoTargetUrl}
             onChange={(e) => setDosoTargetUrl(e.target.value)}
             className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-          >
+            placeholder="請輸入或選擇同步來源網址"
+          />
+          <datalist id="sync-target-options">
             {DOSO_TARGET_OPTIONS.map((option) => (
-              <option key={option.url} value={option.url}>
-                {option.label}（{option.url}）
-              </option>
+              <option key={option.url} value={option.url}>{option.label}</option>
             ))}
-          </select>
+          </datalist>
+          <p className="mt-1 text-xs text-text-secondary-light">可直接貼上 Toybox 分類網址（shopbrand）。</p>
         </div>
+
+        {isToyboxTargetUrl(dosoTargetUrl) && (
+          <div className="rounded-lg border border-border-light bg-background-light p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-sm font-medium text-text-primary-light">Toybox 分類選擇（品牌/分類）</div>
+              <button
+                type="button"
+                onClick={loadToyboxSourceCategories}
+                disabled={toyboxCategoryLoading}
+                className="rounded border border-border-light px-2 py-1 text-xs text-text-primary-light hover:bg-primary/10 disabled:opacity-50"
+              >
+                {toyboxCategoryLoading ? "載入中..." : "載入分類"}
+              </button>
+            </div>
+            <select
+              value={toyboxSelectedCategoryId}
+              onChange={(e) => handleToyboxCategoryPick(e.target.value)}
+              className="w-full rounded-lg border border-border-light bg-white px-3 py-2 text-sm"
+            >
+              <option value="">請選擇要同步的品牌/分類</option>
+              {toyboxSourceCategories.map((row) => (
+                <option key={row.source_category_id} value={row.source_category_id}>
+                  {`${"  ".repeat(Math.max(0, row.level - 1))}${row.name}`}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-text-secondary-light">選擇後會自動套用對應的 Toybox `shopbrand` URL。</p>
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium text-text-primary-light mb-1">Toybox 分頁上限</label>
