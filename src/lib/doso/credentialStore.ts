@@ -1,7 +1,12 @@
 import { supabaseAdmin } from "@/lib/supabase";
 import { decryptDosoPassword, encryptDosoPassword } from "@/lib/doso/credentialCrypto";
 
-const DOSO_CREDENTIALS_KEY = "doso_credentials_v1";
+const CREDENTIALS_KEYS = {
+  doso: "doso_credentials_v1",
+  toybox: "toybox_credentials_v1",
+} as const;
+
+export type CredentialSource = keyof typeof CREDENTIALS_KEYS;
 
 interface StoredDosoCredentialsValue {
   username: string;
@@ -11,12 +16,12 @@ interface StoredDosoCredentialsValue {
   updated_at?: string;
 }
 
-const readStoredValue = async (): Promise<StoredDosoCredentialsValue | null> => {
+const readStoredValue = async (source: CredentialSource): Promise<StoredDosoCredentialsValue | null> => {
   const admin = supabaseAdmin();
   const { data, error } = await admin
     .from("system_settings")
     .select("value")
-    .eq("key", DOSO_CREDENTIALS_KEY)
+    .eq("key", CREDENTIALS_KEYS[source])
     .maybeSingle<{ value: StoredDosoCredentialsValue }>();
 
   if (error) {
@@ -32,7 +37,15 @@ const readStoredValue = async (): Promise<StoredDosoCredentialsValue | null> => 
 };
 
 export const getSavedDosoCredentialStatus = async () => {
-  const value = await readStoredValue();
+  const value = await readStoredValue("doso");
+  return {
+    username: value?.username || "",
+    has_password: Boolean(value?.password_encrypted && value?.iv && value?.tag),
+  };
+};
+
+export const getSavedCredentialStatus = async (source: CredentialSource) => {
+  const value = await readStoredValue(source);
   return {
     username: value?.username || "",
     has_password: Boolean(value?.password_encrypted && value?.iv && value?.tag),
@@ -43,12 +56,22 @@ export const saveDosoCredentials = async (input: {
   username: string;
   password?: string;
 }) => {
+  return saveCredentials("doso", input);
+};
+
+export const saveCredentials = async (
+  source: CredentialSource,
+  input: {
+    username: string;
+    password?: string;
+  }
+) => {
   const username = input.username.trim();
   if (!username) {
     throw new Error("missing_username");
   }
 
-  const current = await readStoredValue();
+  const current = await readStoredValue(source);
   const hasIncomingPassword = typeof input.password === "string" && input.password.length > 0;
   const usernameChanged = Boolean(current?.username && current.username !== username);
 
@@ -81,7 +104,7 @@ export const saveDosoCredentials = async (input: {
     .from("system_settings")
     .upsert(
       {
-        key: DOSO_CREDENTIALS_KEY,
+        key: CREDENTIALS_KEYS[source],
         value,
         updated_at: new Date().toISOString(),
       },
@@ -99,7 +122,11 @@ export const saveDosoCredentials = async (input: {
 };
 
 export const getSavedDosoCredentialsForLogin = async () => {
-  const value = await readStoredValue();
+  return getSavedCredentialsForLogin("doso");
+};
+
+export const getSavedCredentialsForLogin = async (source: CredentialSource) => {
+  const value = await readStoredValue(source);
   if (!value?.username || !value.password_encrypted || !value.iv || !value.tag) {
     return null;
   }

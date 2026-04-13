@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/adminAuth";
-import { getSavedDosoCredentialsForLogin } from "@/lib/doso/credentialStore";
+import { getSavedCredentialsForLogin } from "@/lib/doso/credentialStore";
 import { runDosoSourceCategoryRefresh } from "@/lib/doso/probeService";
 import { DOSO_TARGET_OPTIONS } from "@/lib/doso/targets";
 import { saveDosoSourceCategoryCache } from "@/lib/doso/sourceCategoryStore";
@@ -15,9 +15,10 @@ export async function POST(request: NextRequest) {
     }
 
     const body = (await request.json().catch(() => null)) as
-      | { username?: string; password?: string }
+      | { username?: string; password?: string; source?: "doso" | "toybox" }
       | null;
 
+    const source = body?.source === "toybox" ? "toybox" : "doso";
     const requestUsername = typeof body?.username === "string" ? body.username.trim() : "";
     const requestPassword = typeof body?.password === "string" ? body.password : "";
 
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const savedCredentials = await getSavedDosoCredentialsForLogin();
+    const savedCredentials = await getSavedCredentialsForLogin(source);
     const credentials = requestUsername && requestPassword
       ? { username: requestUsername, password: requestPassword }
       : requestUsername && !requestPassword

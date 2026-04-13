@@ -129,13 +129,13 @@ export default function CrawlerImport() {
   const [dosoUsername, setDosoUsername] = useState("");
   const [dosoPassword, setDosoPassword] = useState("");
   const [dosoHasSavedPassword, setDosoHasSavedPassword] = useState(false);
+  const [toyboxUsername, setToyboxUsername] = useState("");
+  const [toyboxPassword, setToyboxPassword] = useState("");
+  const [toyboxHasSavedPassword, setToyboxHasSavedPassword] = useState(false);
   const [showDosoGuide, setShowDosoGuide] = useState(false);
   const [selectedTargetPreset, setSelectedTargetPreset] = useState(DEFAULT_DOSO_TARGETS[0] || "");
   const [dosoTargetUrl, setDosoTargetUrl] = useState(DEFAULT_DOSO_TARGETS[0] || "");
   const [toyboxManualTargetUrl, setToyboxManualTargetUrl] = useState("");
-  const [toyboxSourceCategories, setToyboxSourceCategories] = useState<Array<{ source_category_id: string; name: string; level: number }>>([]);
-  const [toyboxCategoryLoading, setToyboxCategoryLoading] = useState(false);
-  const [toyboxSelectedCategoryId, setToyboxSelectedCategoryId] = useState("");
   const [probeError, setProbeError] = useState<string | null>(null);
   const [importLoading, setImportLoading] = useState(false);
   const [importSession, setImportSession] = useState<DosoImportSessionProgress | null>(null);
@@ -212,13 +212,26 @@ export default function CrawlerImport() {
       try {
         const accessToken = await getAdminAccessToken();
         if (!accessToken) return;
-        const res = await fetch("/api/admin/sync/doso/credentials", {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-        const data = (await res.json().catch(() => null)) as DosoCredentialsApiResponse | null;
-        if (!res.ok || !data || !data.ok) return;
-        setDosoUsername(data.username || "");
-        setDosoHasSavedPassword(Boolean(data.has_password));
+        const [dosoRes, toyboxRes] = await Promise.all([
+          fetch("/api/admin/sync/doso/credentials?source=doso", {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          }),
+          fetch("/api/admin/sync/doso/credentials?source=toybox", {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          }),
+        ]);
+
+        const dosoData = (await dosoRes.json().catch(() => null)) as DosoCredentialsApiResponse | null;
+        if (dosoRes.ok && dosoData && dosoData.ok) {
+          setDosoUsername(dosoData.username || "");
+          setDosoHasSavedPassword(Boolean(dosoData.has_password));
+        }
+
+        const toyboxData = (await toyboxRes.json().catch(() => null)) as DosoCredentialsApiResponse | null;
+        if (toyboxRes.ok && toyboxData && toyboxData.ok) {
+          setToyboxUsername(toyboxData.username || "");
+          setToyboxHasSavedPassword(Boolean(toyboxData.has_password));
+        }
       } catch {
         // noop
       }
@@ -227,6 +240,48 @@ export default function CrawlerImport() {
     fetchSavedCredentials();
     fetchImportSessions(true);
   }, []);
+
+  const saveSourceCredentials = async (source: "doso" | "toybox") => {
+    const username = (source === "doso" ? dosoUsername : toyboxUsername).trim();
+    const password = source === "doso" ? dosoPassword : toyboxPassword;
+    if (!username) {
+      alert(`請先輸入${source === "doso" ? " DOSO" : " Toybox"} 帳號`);
+      return;
+    }
+
+    try {
+      const accessToken = await getAdminAccessToken();
+      if (!accessToken) {
+        alert("尚未登入管理員，請重新登入後再試");
+        return;
+      }
+
+      const res = await fetch("/api/admin/sync/doso/credentials", {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({
+          source,
+          username,
+          password: password || undefined,
+        }),
+      });
+
+      const data = (await res.json().catch(() => null)) as DosoCredentialsApiResponse | null;
+      if (!res.ok || !data || !data.ok) {
+        alert(mapDosoError((data as any)?.error, "儲存帳密失敗"));
+        return;
+      }
+
+      if (source === "doso") {
+        setDosoHasSavedPassword(Boolean(data.has_password));
+      } else {
+        setToyboxHasSavedPassword(Boolean(data.has_password));
+      }
+      alert(`${source === "doso" ? "DOSO" : "Toybox"} 帳密已儲存`);
+    } catch {
+      alert("儲存帳密失敗");
+    }
+  };
 
   useEffect(() => {
     try {
@@ -585,94 +640,12 @@ export default function CrawlerImport() {
     }
   };
 
-  const getToyboxTargetUrlFromSourceCategoryId = (sourceCategoryId: string) => {
-    const matched = sourceCategoryId.match(/^toybox:x([^:]+)(:m([^:]+))?(:s([^:]+))?$/);
-    if (!matched) return null;
-    const xcode = matched[1];
-    const mcode = matched[3] || "";
-    const scode = matched[5] || "";
-    const params = new URLSearchParams();
-    params.set("xcode", xcode);
-    if (mcode) params.set("mcode", mcode);
-    if (scode) params.set("scode", scode);
-    return `https://www.toybox.kr/shop/shopbrand.html?${params.toString()}`;
-  };
-
-  const loadToyboxSourceCategories = async () => {
-    try {
-      setToyboxCategoryLoading(true);
-
-      const username = dosoUsername.trim();
-      const password = dosoPassword.trim();
-      if (!username || !password) {
-        alert("選擇 Toybox 時，請先輸入帳號與密碼");
-        return;
-      }
-
-      const accessToken = await getAdminAccessToken();
-      if (!accessToken) {
-        alert("尚未登入管理員，請重新登入後再試");
-        return;
-      }
-
-      const response = await fetch("/api/admin/sync/doso/source-categories/refresh", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          username,
-          password,
-        }),
-      });
-
-      const payload = await response.json().catch(() => null) as any;
-      if (!response.ok || !payload?.ok) {
-        alert(mapDosoError(payload?.error, `載入 Toybox 分類失敗 (${response.status})`));
-        return;
-      }
-
-      const directories = payload?.categories?.directories || {};
-      const toyboxKey = Object.keys(directories).find((k) => isToyboxTargetUrl(k));
-      const nodes = toyboxKey ? directories[toyboxKey] : [];
-
-      const categoryRows = (Array.isArray(nodes) ? nodes : [])
-        .filter((x: any) => typeof x?.source_category_id === "string" && typeof x?.name === "string")
-        .map((x: any) => ({
-          source_category_id: String(x.source_category_id),
-          name: String(x.name),
-          level: Number(x.level) || 1,
-        }))
-        .sort((a: any, b: any) => a.level - b.level || a.name.localeCompare(b.name, "zh-Hant"));
-
-      setToyboxSourceCategories(categoryRows);
-      alert(`Toybox 分類已載入（${categoryRows.length} 筆）`);
-    } catch (err) {
-      console.error("load toybox source categories failed:", err);
-      alert("載入 Toybox 分類發生錯誤");
-    } finally {
-      setToyboxCategoryLoading(false);
-    }
-  };
-
-  const handleToyboxCategoryPick = (sourceCategoryId: string) => {
-    setToyboxSelectedCategoryId(sourceCategoryId);
-    const target = getToyboxTargetUrlFromSourceCategoryId(sourceCategoryId);
-    if (target) {
-      setToyboxManualTargetUrl(target);
-      setDosoTargetUrl(target);
-    }
-  };
-
   const handleTargetPresetChange = (value: string) => {
     setSelectedTargetPreset(value);
     setDosoTargetUrl(value);
 
     if (!isToyboxTargetUrl(value)) {
       setToyboxManualTargetUrl("");
-      setToyboxSelectedCategoryId("");
-      setToyboxSourceCategories([]);
     }
   };
 
@@ -699,8 +672,8 @@ export default function CrawlerImport() {
 
   const handleDosoImport = async () => {
     const isToyboxPreset = isToyboxTargetUrl(selectedTargetPreset);
-    const username = dosoUsername.trim();
-    const password = dosoPassword.trim();
+    const username = (isToyboxPreset ? toyboxUsername : dosoUsername).trim();
+    const password = (isToyboxPreset ? toyboxPassword : dosoPassword).trim();
 
     const targetUrl = isToyboxPreset
       ? (toyboxManualTargetUrl.trim() || dosoTargetUrl.trim())
@@ -1991,14 +1964,51 @@ export default function CrawlerImport() {
           </select>
         </div>
 
-        {isToyboxTargetUrl(selectedTargetPreset) && (
+        <div className="rounded-lg border border-border-light bg-background-light p-3 space-y-3">
+          <div className="text-sm font-medium text-text-primary-light">DOSO 帳密（可儲存）</div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-text-primary-light mb-1">DOSO 帳號</label>
+              <input
+                type="text"
+                value={dosoUsername}
+                onChange={(e) => setDosoUsername(e.target.value)}
+                className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                placeholder="例如：陳奕如"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-text-primary-light mb-1">DOSO 密碼</label>
+              <input
+                type="password"
+                value={dosoPassword}
+                onChange={(e) => setDosoPassword(e.target.value)}
+                className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                placeholder={dosoHasSavedPassword ? "已儲存密碼（留空不更新）" : "輸入密碼"}
+              />
+              <p className="mt-1 text-xs text-text-secondary-light">{dosoHasSavedPassword ? "目前已有已儲存密碼" : "目前尚未儲存密碼"}</p>
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => saveSourceCredentials("doso")}
+              className="rounded border border-border-light px-3 py-1.5 text-xs text-text-primary-light hover:bg-primary/10"
+            >
+              儲存 DOSO 帳密
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-border-light bg-background-light p-3 space-y-3">
+          <div className="text-sm font-medium text-text-primary-light">Toybox 帳密（可儲存）</div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-text-primary-light mb-1">Toybox 帳號</label>
               <input
                 type="text"
-                value={dosoUsername}
-                onChange={(e) => setDosoUsername(e.target.value)}
+                value={toyboxUsername}
+                onChange={(e) => setToyboxUsername(e.target.value)}
                 className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
                 placeholder="例如：joytoy"
               />
@@ -2007,17 +2017,24 @@ export default function CrawlerImport() {
               <label className="block text-sm font-medium text-text-primary-light mb-1">Toybox 密碼</label>
               <input
                 type="password"
-                value={dosoPassword}
-                onChange={(e) => setDosoPassword(e.target.value)}
+                value={toyboxPassword}
+                onChange={(e) => setToyboxPassword(e.target.value)}
                 className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-                placeholder={dosoHasSavedPassword ? "已儲存密碼（留空不更新）" : "輸入密碼"}
+                placeholder={toyboxHasSavedPassword ? "已儲存密碼（留空不更新）" : "輸入密碼"}
               />
-              <p className="mt-1 text-xs text-text-secondary-light">
-                {dosoHasSavedPassword ? "目前已有已儲存密碼" : "目前尚未儲存密碼"}
-              </p>
+              <p className="mt-1 text-xs text-text-secondary-light">{toyboxHasSavedPassword ? "目前已有已儲存密碼" : "目前尚未儲存密碼"}</p>
             </div>
           </div>
-        )}
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => saveSourceCredentials("toybox")}
+              className="rounded border border-border-light px-3 py-1.5 text-xs text-text-primary-light hover:bg-primary/10"
+            >
+              儲存 Toybox 帳密
+            </button>
+          </div>
+        </div>
 
         {isToyboxTargetUrl(selectedTargetPreset) && (
           <div>
@@ -2036,34 +2053,7 @@ export default function CrawlerImport() {
           </div>
         )}
 
-        {isToyboxTargetUrl(selectedTargetPreset) && (
-          <div className="rounded-lg border border-border-light bg-background-light p-3 space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-sm font-medium text-text-primary-light">Toybox 分類選擇（品牌/分類）</div>
-              <button
-                type="button"
-                onClick={loadToyboxSourceCategories}
-                disabled={toyboxCategoryLoading}
-                className="rounded border border-border-light px-2 py-1 text-xs text-text-primary-light hover:bg-primary/10 disabled:opacity-50"
-              >
-                {toyboxCategoryLoading ? "載入中..." : "載入分類"}
-              </button>
-            </div>
-            <select
-              value={toyboxSelectedCategoryId}
-              onChange={(e) => handleToyboxCategoryPick(e.target.value)}
-              className="w-full rounded-lg border border-border-light bg-white px-3 py-2 text-sm"
-            >
-              <option value="">請選擇要同步的品牌/分類</option>
-              {toyboxSourceCategories.map((row) => (
-                <option key={row.source_category_id} value={row.source_category_id}>
-                  {`${"  ".repeat(Math.max(0, row.level - 1))}${row.name}`}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-text-secondary-light">選擇後會自動套用對應的 Toybox `shopbrand` URL。</p>
-          </div>
-        )}
+        <div className="text-xs text-text-secondary-light">已移除「載入目錄」功能，請直接使用目標網址欄位貼上要同步的分類網址。</div>
 
         {isToyboxTargetUrl(selectedTargetPreset) && (
           <div>

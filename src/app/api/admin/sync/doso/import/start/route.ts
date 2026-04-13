@@ -7,7 +7,7 @@ import {
   markSessionStatus,
   updateSessionCounters,
 } from "@/lib/doso/importSessionService";
-import { getSavedDosoCredentialsForLogin } from "@/lib/doso/credentialStore";
+import { getSavedCredentialsForLogin } from "@/lib/doso/credentialStore";
 import { DOSO_TARGET_OPTIONS } from "@/lib/doso/targets";
 import type {
   DosoImportStartApiResponse,
@@ -20,6 +20,15 @@ const toToyboxMaxPages = (value: unknown) => {
   const n = Number(value);
   if (!Number.isFinite(n)) return 30;
   return Math.min(100, Math.max(1, Math.floor(n)));
+};
+
+const isToyboxTarget = (value: string) => {
+  try {
+    const u = new URL(value);
+    return u.hostname === "www.toybox.kr" || u.hostname === "toybox.kr";
+  } catch {
+    return false;
+  }
 };
 
 const parseSingleTarget = (input: unknown) => {
@@ -93,7 +102,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const savedCredentials = await getSavedDosoCredentialsForLogin();
+    const source = targetUrl && isToyboxTarget(targetUrl) ? "toybox" : "doso";
+    const savedCredentials = await getSavedCredentialsForLogin(source);
     const credentials = requestUsername && requestPassword
       ? { username: requestUsername, password: requestPassword }
       : requestUsername && !requestPassword

@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/adminAuth";
 import {
-  getSavedDosoCredentialStatus,
-  saveDosoCredentials,
+  getSavedCredentialStatus,
+  saveCredentials,
+  type CredentialSource,
 } from "@/lib/doso/credentialStore";
 import type { DosoCredentialsApiResponse } from "@/lib/doso/types";
 
 export const runtime = "nodejs";
+
+const parseCredentialSource = (request: NextRequest, bodySource?: unknown): CredentialSource => {
+  const sourceFromQuery = request.nextUrl.searchParams.get("source");
+  const raw = (typeof bodySource === "string" ? bodySource : sourceFromQuery || "doso").toLowerCase();
+  return raw === "toybox" ? "toybox" : "doso";
+};
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,7 +24,8 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const status = await getSavedDosoCredentialStatus();
+    const source = parseCredentialSource(request);
+    const status = await getSavedCredentialStatus(source);
     return NextResponse.json({ ok: true, ...status } satisfies DosoCredentialsApiResponse);
   } catch {
     return NextResponse.json(
@@ -37,20 +45,22 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = (await request.json().catch(() => null)) as
-      | { username?: unknown; password?: unknown }
+      | { username?: unknown; password?: unknown; source?: unknown }
       | null;
+
+    const source = parseCredentialSource(request, body?.source);
 
     const username = typeof body?.username === "string" ? body.username : "";
     const password = typeof body?.password === "string" ? body.password : undefined;
 
     if (!username.trim()) {
       return NextResponse.json(
-        { ok: false, error: "缺少 DOSO 帳號" } satisfies DosoCredentialsApiResponse,
+        { ok: false, error: `缺少 ${source === "toybox" ? "Toybox" : "DOSO"} 帳號` } satisfies DosoCredentialsApiResponse,
         { status: 400 }
       );
     }
 
-    const saved = await saveDosoCredentials({ username, password });
+    const saved = await saveCredentials(source, { username, password });
     return NextResponse.json({ ok: true, ...saved } satisfies DosoCredentialsApiResponse);
   } catch (err) {
     const message = err instanceof Error ? err.message : "儲存帳密失敗";
