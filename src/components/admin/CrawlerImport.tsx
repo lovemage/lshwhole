@@ -130,7 +130,9 @@ export default function CrawlerImport() {
   const [dosoPassword, setDosoPassword] = useState("");
   const [dosoHasSavedPassword, setDosoHasSavedPassword] = useState(false);
   const [showDosoGuide, setShowDosoGuide] = useState(false);
+  const [selectedTargetPreset, setSelectedTargetPreset] = useState(DEFAULT_DOSO_TARGETS[0] || "");
   const [dosoTargetUrl, setDosoTargetUrl] = useState(DEFAULT_DOSO_TARGETS[0] || "");
+  const [toyboxManualTargetUrl, setToyboxManualTargetUrl] = useState("");
   const [toyboxSourceCategories, setToyboxSourceCategories] = useState<Array<{ source_category_id: string; name: string; level: number }>>([]);
   const [toyboxCategoryLoading, setToyboxCategoryLoading] = useState(false);
   const [toyboxSelectedCategoryId, setToyboxSelectedCategoryId] = useState("");
@@ -599,13 +601,20 @@ export default function CrawlerImport() {
   const loadToyboxSourceCategories = async () => {
     try {
       setToyboxCategoryLoading(true);
+
+      const username = dosoUsername.trim();
+      const password = dosoPassword.trim();
+      if (!username || !password) {
+        alert("選擇 Toybox 時，請先輸入帳號與密碼");
+        return;
+      }
+
       const accessToken = await getAdminAccessToken();
       if (!accessToken) {
         alert("尚未登入管理員，請重新登入後再試");
         return;
       }
 
-      const username = dosoUsername.trim();
       const response = await fetch("/api/admin/sync/doso/source-categories/refresh", {
         method: "POST",
         headers: {
@@ -613,8 +622,8 @@ export default function CrawlerImport() {
           Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
-          username: username || undefined,
-          password: dosoPassword || undefined,
+          username,
+          password,
         }),
       });
 
@@ -650,7 +659,21 @@ export default function CrawlerImport() {
   const handleToyboxCategoryPick = (sourceCategoryId: string) => {
     setToyboxSelectedCategoryId(sourceCategoryId);
     const target = getToyboxTargetUrlFromSourceCategoryId(sourceCategoryId);
-    if (target) setDosoTargetUrl(target);
+    if (target) {
+      setToyboxManualTargetUrl(target);
+      setDosoTargetUrl(target);
+    }
+  };
+
+  const handleTargetPresetChange = (value: string) => {
+    setSelectedTargetPreset(value);
+    setDosoTargetUrl(value);
+
+    if (!isToyboxTargetUrl(value)) {
+      setToyboxManualTargetUrl("");
+      setToyboxSelectedCategoryId("");
+      setToyboxSourceCategories([]);
+    }
   };
 
   const mapDosoError = (codeOrMessage: string | null | undefined, fallback: string) => {
@@ -675,9 +698,19 @@ export default function CrawlerImport() {
   };
 
   const handleDosoImport = async () => {
+    const isToyboxPreset = isToyboxTargetUrl(selectedTargetPreset);
     const username = dosoUsername.trim();
+    const password = dosoPassword.trim();
 
-    const targetUrl = dosoTargetUrl.trim();
+    const targetUrl = isToyboxPreset
+      ? (toyboxManualTargetUrl.trim() || dosoTargetUrl.trim())
+      : dosoTargetUrl.trim();
+
+    if (isToyboxPreset && (!username || !password)) {
+      alert("選擇 Toybox 時，請先輸入帳號與密碼");
+      return;
+    }
+
     if (!targetUrl || !isValidSyncTargetUrl(targetUrl)) {
       alert("請輸入已支援的同步來源網址");
       return;
@@ -707,7 +740,7 @@ export default function CrawlerImport() {
         },
         body: JSON.stringify({
           username: username || undefined,
-          password: dosoPassword || undefined,
+          password: password || undefined,
           target_url: targetUrl,
           toybox_max_pages: toyboxMaxPages,
         }),
@@ -1945,53 +1978,65 @@ export default function CrawlerImport() {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div>
-            <label className="block text-sm font-medium text-text-primary-light mb-1">DOSO 帳號</label>
-            <input
-              type="text"
-              value={dosoUsername}
-              onChange={(e) => setDosoUsername(e.target.value)}
-              className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-              placeholder="例如：陳奕如"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-text-primary-light mb-1">DOSO 密碼</label>
-            <input
-              type="password"
-              value={dosoPassword}
-              onChange={(e) => setDosoPassword(e.target.value)}
-              className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-              placeholder={dosoHasSavedPassword ? "已儲存密碼（留空不更新）" : "輸入密碼"}
-            />
-            <p className="mt-1 text-xs text-text-secondary-light">
-              {dosoHasSavedPassword ? "目前已有已儲存密碼" : "目前尚未儲存密碼"}
-            </p>
-          </div>
-        </div>
-
-        <div className="text-xs text-text-secondary-light">帳密可直接輸入使用，不會在本頁面自動清空密碼欄位。</div>
-
         <div>
           <label className="block text-sm font-medium text-text-primary-light mb-1">目錄（一次僅限一個）</label>
-          <input
-            type="text"
-            list="sync-target-options"
-            value={dosoTargetUrl}
-            onChange={(e) => setDosoTargetUrl(e.target.value)}
+          <select
+            value={selectedTargetPreset}
+            onChange={(e) => handleTargetPresetChange(e.target.value)}
             className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-            placeholder="請輸入或選擇同步來源網址"
-          />
-          <datalist id="sync-target-options">
+          >
             {DOSO_TARGET_OPTIONS.map((option) => (
-              <option key={option.url} value={option.url}>{option.label}</option>
+              <option key={option.url} value={option.url}>{option.label}（{option.url}）</option>
             ))}
-          </datalist>
-          <p className="mt-1 text-xs text-text-secondary-light">可直接貼上 Toybox 分類網址（shopbrand）。</p>
+          </select>
         </div>
 
-        {isToyboxTargetUrl(dosoTargetUrl) && (
+        {isToyboxTargetUrl(selectedTargetPreset) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-text-primary-light mb-1">Toybox 帳號</label>
+              <input
+                type="text"
+                value={dosoUsername}
+                onChange={(e) => setDosoUsername(e.target.value)}
+                className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                placeholder="例如：joytoy"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-text-primary-light mb-1">Toybox 密碼</label>
+              <input
+                type="password"
+                value={dosoPassword}
+                onChange={(e) => setDosoPassword(e.target.value)}
+                className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                placeholder={dosoHasSavedPassword ? "已儲存密碼（留空不更新）" : "輸入密碼"}
+              />
+              <p className="mt-1 text-xs text-text-secondary-light">
+                {dosoHasSavedPassword ? "目前已有已儲存密碼" : "目前尚未儲存密碼"}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {isToyboxTargetUrl(selectedTargetPreset) && (
+          <div>
+            <label className="block text-sm font-medium text-text-primary-light mb-1">Toybox 目標網址（可貼上）</label>
+            <input
+              type="text"
+              value={toyboxManualTargetUrl}
+              onChange={(e) => {
+                setToyboxManualTargetUrl(e.target.value);
+                setDosoTargetUrl(e.target.value);
+              }}
+              className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+              placeholder="https://www.toybox.kr/shop/shopbrand.html?xcode=..."
+            />
+            <p className="mt-1 text-xs text-text-secondary-light">可直接貼上想同步的品牌/分類網址。</p>
+          </div>
+        )}
+
+        {isToyboxTargetUrl(selectedTargetPreset) && (
           <div className="rounded-lg border border-border-light bg-background-light p-3 space-y-2">
             <div className="flex items-center justify-between gap-2">
               <div className="text-sm font-medium text-text-primary-light">Toybox 分類選擇（品牌/分類）</div>
@@ -2020,7 +2065,8 @@ export default function CrawlerImport() {
           </div>
         )}
 
-        <div>
+        {isToyboxTargetUrl(selectedTargetPreset) && (
+          <div>
           <label className="block text-sm font-medium text-text-primary-light mb-1">Toybox 分頁上限</label>
           <input
             type="number"
@@ -2031,7 +2077,8 @@ export default function CrawlerImport() {
             className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
           />
           <p className="mt-1 text-xs text-text-secondary-light">僅對 Toybox 同步生效，預設 30 頁。</p>
-        </div>
+          </div>
+        )}
 
         <div className="rounded-lg border border-border-light bg-background-light p-3 space-y-3">
           <div className="text-sm font-bold text-text-primary-light">Step 1. 同步（建立/選擇同步任務）</div>
