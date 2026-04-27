@@ -1576,16 +1576,19 @@ const scrapeKidsVillageDetail = async (page: any, detailUrl: string) => {
       })
       .find((row) => row.th === "공급가격");
     const price = Number(priceInput || "") || parsePrice(priceRowText?.td || bodyText);
-    const mainImages = Array.from(document.querySelectorAll<HTMLImageElement>('#sit_pvi img[src*="/data/item/"]'))
-      .map((img) => absolute(img.getAttribute("src")))
+    const readImageUrl = (img: HTMLImageElement) => {
+      const direct = img.getAttribute("src") || "";
+      const lazy = img.getAttribute("data-src") || img.getAttribute("data-original") || "";
+      return absolute(direct || lazy || null);
+    };
+    const mainImages = Array.from(document.querySelectorAll<HTMLImageElement>("#sit_pvi img"))
+      .map((img) => readImageUrl(img))
       .filter((src): src is string => {
         if (!src) return false;
         return isCurrentItemImage(src);
       });
-    const descriptionImages = Array.from(
-      document.querySelectorAll<HTMLImageElement>('#sit_inf_explan img[src*="/data/item/"]')
-    )
-      .map((img) => absolute(img.getAttribute("src")))
+    const descriptionImages = Array.from(document.querySelectorAll<HTMLImageElement>("#sit_inf_explan img"))
+      .map((img) => readImageUrl(img))
       .filter((src): src is string => {
         if (!src) return false;
         return isCurrentItemImage(src);
