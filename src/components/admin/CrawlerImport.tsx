@@ -1925,7 +1925,6 @@ export default function CrawlerImport() {
         <div className="flex items-start justify-between gap-3">
           <div>
             <h3 className="text-lg font-bold text-text-primary-light">DOSO 目錄導入</h3>
-            <p className="text-xs text-text-secondary-light mt-1">輸入 DOSO 帳密後可直接探測與同步，不會在本頁面自動清空密碼。</p>
           </div>
           <button
             type="button"
@@ -1955,10 +1954,7 @@ export default function CrawlerImport() {
             onClick={() => setShowCredentialPanel((value) => !value)}
             className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left"
           >
-            <div>
-              <div className="text-sm font-medium text-text-primary-light">同步站帳密</div>
-              <div className="text-xs text-text-secondary-light">目前來源：{selectedSourceLabel}，密碼以加密方式儲存，不寫死在程式碼。</div>
-            </div>
+            <div className="text-sm font-medium text-text-primary-light">同步站帳密</div>
             <span className="material-symbols-outlined text-base">{showCredentialPanel ? "expand_less" : "expand_more"}</span>
           </button>
           {showCredentialPanel && (
@@ -2032,11 +2028,8 @@ export default function CrawlerImport() {
               className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
               placeholder={selectedTargetOption.manualUrlPlaceholder}
             />
-            <p className="mt-1 text-xs text-text-secondary-light">{selectedTargetOption.manualUrlHelp}</p>
           </div>
         )}
-
-        <div className="text-xs text-text-secondary-light">已移除「載入目錄」功能，請直接使用目標網址欄位貼上要同步的分類網址。</div>
 
         <div className="rounded-lg border border-border-light bg-background-light p-3 space-y-3">
           <div className="text-sm font-bold text-text-primary-light">Step 1. 同步（建立/選擇同步任務）</div>
