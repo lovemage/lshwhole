@@ -117,11 +117,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const includeDetails = source === "kidsvillage";
+
     const preview = await runDosoImportPreview({
       username: credentials.username,
       password: credentials.password,
       targets: [targetUrl],
-      includeDetails: false,
+      includeDetails,
     });
 
     if (!preview.login_ok) {
