@@ -29,6 +29,15 @@ const toBatchSize = (value: unknown) => {
   return Math.min(100, Math.max(1, Math.floor(n)));
 };
 
+const hasUsableImage = (images: unknown) => {
+  if (!Array.isArray(images)) return false;
+  return images.some((raw) => {
+    const value = typeof raw === "string" ? raw.trim() : "";
+    if (!value) return false;
+    return !/\/shop\/img\/no_image\.gif$/i.test(value);
+  });
+};
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ sessionId: string }> }
@@ -154,6 +163,12 @@ export async function POST(
         if (!item.payload || !item.payload.productCode) {
           await markItemFailed({ itemId: item.id, reason: "invalid_payload" });
           failedInBatch += 1;
+          continue;
+        }
+
+        if (!hasUsableImage(item.payload.images)) {
+          await markItemSkipped({ itemId: item.id, reason: "missing_image" });
+          skippedInBatch += 1;
           continue;
         }
 

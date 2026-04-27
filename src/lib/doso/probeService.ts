@@ -1538,7 +1538,14 @@ const scrapeKidsVillageDetail = async (page: any, detailUrl: string) => {
     throw new Error("Kids Village 商品詳情需要登入後才能讀取");
   }
 
-  return await page.evaluate(() => {
+  let detailItemId = "";
+  try {
+    detailItemId = new URL(currentUrl).searchParams.get("it_id") || "";
+  } catch {
+    detailItemId = "";
+  }
+
+  return await page.evaluate((itemId: string) => {
     const clean = (value: string | null | undefined) => String(value || "").replace(/\s+/g, " ").trim();
     const absolute = (value: string | null | undefined) => {
       try {
@@ -1546,6 +1553,12 @@ const scrapeKidsVillageDetail = async (page: any, detailUrl: string) => {
       } catch {
         return null;
       }
+    };
+    const isCurrentItemImage = (url: string) => {
+      if (!url) return false;
+      if (/\/shop\/img\/no_image\.gif$/i.test(url)) return false;
+      if (!itemId) return true;
+      return url.includes(`/data/item/${itemId}/`) || url.includes(`/${itemId}/`);
     };
     const parsePrice = (text: string) => {
       const normalized = text.replace(/,/g, "");
@@ -1565,12 +1578,18 @@ const scrapeKidsVillageDetail = async (page: any, detailUrl: string) => {
     const price = Number(priceInput || "") || parsePrice(priceRowText?.td || bodyText);
     const mainImages = Array.from(document.querySelectorAll<HTMLImageElement>('#sit_pvi img[src*="/data/item/"]'))
       .map((img) => absolute(img.getAttribute("src")))
-      .filter((src): src is string => Boolean(src));
+      .filter((src): src is string => {
+        if (!src) return false;
+        return isCurrentItemImage(src);
+      });
     const descriptionImages = Array.from(
       document.querySelectorAll<HTMLImageElement>('#sit_inf_explan img[src*="/data/item/"]')
     )
       .map((img) => absolute(img.getAttribute("src")))
-      .filter((src): src is string => Boolean(src));
+      .filter((src): src is string => {
+        if (!src) return false;
+        return isCurrentItemImage(src);
+      });
     const descriptionRoot = document.querySelector<HTMLElement>("#sit_inf_explan");
     const descriptionText = clean(descriptionRoot?.innerText || "");
     const descriptionHtml = descriptionRoot?.innerHTML || "";
@@ -1589,7 +1608,7 @@ const scrapeKidsVillageDetail = async (page: any, detailUrl: string) => {
       description: descriptionText,
       descriptionHtml,
     };
-  });
+  }, detailItemId);
 };
 
 const probeSingleToyboxTarget = async (
