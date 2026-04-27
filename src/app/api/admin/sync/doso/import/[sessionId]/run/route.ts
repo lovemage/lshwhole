@@ -38,6 +38,71 @@ const hasUsableImage = (images: unknown) => {
   });
 };
 
+const normalizeImageUrls = (images: unknown) => {
+  if (!Array.isArray(images)) return [] as string[];
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  for (const raw of images) {
+    const value = typeof raw === "string" ? raw.trim() : "";
+    if (!value) continue;
+    if (/\/shop\/img\/no_image\.gif$/i.test(value)) continue;
+    if (seen.has(value)) continue;
+    seen.add(value);
+    normalized.push(value);
+  }
+  return normalized;
+};
+
+const requestWithTimeout = async (
+  url: string,
+  init: RequestInit,
+  timeoutMs = 8000
+) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+const isReachableImageUrl = async (url: string) => {
+  try {
+    const head = await requestWithTimeout(url, {
+      method: "HEAD",
+      redirect: "follow",
+      cache: "no-store",
+    });
+    if (head.ok) return true;
+    if (head.status !== 403 && head.status !== 405) return false;
+  } catch {
+    // fallback GET
+  }
+
+  try {
+    const get = await requestWithTimeout(url, {
+      method: "GET",
+      redirect: "follow",
+      cache: "no-store",
+      headers: { Range: "bytes=0-0" },
+    });
+    return get.ok;
+  } catch {
+    return false;
+  }
+};
+
+const filterReachableImages = async (images: unknown) => {
+  const candidates = normalizeImageUrls(images);
+  if (candidates.length === 0) return [] as string[];
+  const checks = await Promise.all(candidates.map(async (url) => ({
+    url,
+    ok: await isReachableImageUrl(url),
+  })));
+  return checks.filter((entry) => entry.ok).map((entry) => entry.url);
+};
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ sessionId: string }> }
@@ -172,8 +237,20 @@ export async function POST(
           continue;
         }
 
+        const reachableImages = await filterReachableImages(item.payload.images);
+        if (reachableImages.length === 0) {
+          await markItemSkipped({ itemId: item.id, reason: "missing_image" });
+          skippedInBatch += 1;
+          continue;
+        }
+
+        const nextPayload: DosoImportProduct = {
+          ...item.payload,
+          images: reachableImages,
+        };
+
         await markItemImported({ itemId: item.id });
-        importedProducts.push(item.payload);
+        importedProducts.push(nextPayload);
         importedInBatch += 1;
       } catch (err) {
         await markItemFailed({

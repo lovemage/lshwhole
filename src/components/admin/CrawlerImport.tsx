@@ -169,6 +169,10 @@ export default function CrawlerImport() {
     l1Categories.find((category) => category.name.includes("日本"))?.name ||
     l1Categories[0]?.name ||
     "-";
+  const importTotalCount = importSession?.total_count || 0;
+  const importProcessedCount = importSession?.processed_count || 0;
+  const importProgressPercent =
+    importTotalCount > 0 ? Math.min(100, Math.round((importProcessedCount / importTotalCount) * 100)) : 0;
 
   useEffect(() => {
     fetchCategories();
@@ -3010,6 +3014,23 @@ export default function CrawlerImport() {
             <div className="text-sm text-text-secondary-light">
               {importLoading ? "正在導入商品，請稍候..." : batchPublishing || publishing ? "正在上架商品，請稍候..." : "正在處理中..."}
             </div>
+            {importLoading && importSession && (
+              <div className="space-y-1 rounded-lg border border-border-light bg-background-light p-3 text-left">
+                <div className="flex items-center justify-between text-sm text-text-primary-light">
+                  <span>同步進度</span>
+                  <span className="font-semibold">{importProcessedCount} / {importTotalCount}</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded bg-border-light">
+                  <div
+                    className="h-full bg-primary transition-all"
+                    style={{ width: `${importProgressPercent}%` }}
+                  />
+                </div>
+                <div className="text-xs text-text-secondary-light">
+                  已導入 {importSession.imported_count} / 略過 {importSession.skipped_count} / 失敗 {importSession.failed_count}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
