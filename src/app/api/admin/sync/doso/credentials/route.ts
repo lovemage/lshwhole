@@ -9,10 +9,17 @@ import type { DosoCredentialsApiResponse } from "@/lib/doso/types";
 
 export const runtime = "nodejs";
 
+const CREDENTIAL_LABELS: Record<CredentialSource, string> = {
+  doso: "DOSO",
+  toybox: "Toybox",
+  kidsvillage: "Kids Village",
+};
+
 const parseCredentialSource = (request: NextRequest, bodySource?: unknown): CredentialSource => {
   const sourceFromQuery = request.nextUrl.searchParams.get("source");
   const raw = (typeof bodySource === "string" ? bodySource : sourceFromQuery || "doso").toLowerCase();
-  return raw === "toybox" ? "toybox" : "doso";
+  if (raw === "toybox" || raw === "kidsvillage") return raw;
+  return "doso";
 };
 
 export async function GET(request: NextRequest) {
@@ -55,7 +62,7 @@ export async function PUT(request: NextRequest) {
 
     if (!username.trim()) {
       return NextResponse.json(
-        { ok: false, error: `缺少 ${source === "toybox" ? "Toybox" : "DOSO"} 帳號` } satisfies DosoCredentialsApiResponse,
+        { ok: false, error: `缺少 ${CREDENTIAL_LABELS[source]} 帳號` } satisfies DosoCredentialsApiResponse,
         { status: 400 }
       );
     }

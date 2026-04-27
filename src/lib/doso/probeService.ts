@@ -17,6 +17,7 @@ interface CapturedResponse {
 
 const LOGIN_URL = "https://www.doso.net/auth/login";
 const TOYBOX_LOGIN_URL = "https://www.toybox.kr/shop/member.html?type=login";
+const KIDSVILLAGE_LOGIN_URL = "https://www.kidsvillage.co.kr/bbs/login.php?url=%2Fshop%2Fbrand.php";
 const MAX_IMPORT_ROWS_PER_TARGET = 20000;
 const IMPORT_BATCH_SIZE = 20;
 const CATALOG_API_TIMEOUT_MS = 45000;
@@ -32,6 +33,23 @@ const isToyboxUrl = (value: string) => {
     return false;
   }
 };
+
+const isKidsVillageUrl = (value: string) => {
+  try {
+    const u = new URL(value);
+    return u.hostname === "www.kidsvillage.co.kr" || u.hostname === "kidsvillage.co.kr";
+  } catch {
+    return false;
+  }
+};
+
+interface KidsVillageListRow {
+  title: string;
+  detailUrl: string;
+  image?: string | null;
+  sourceCategoryId?: string | null;
+  sourceCategoryName?: string | null;
+}
 
 const toAbsoluteUrl = (baseUrl: string, href: string) => {
   try {
@@ -1182,6 +1200,19 @@ const loginToybox = async (page: any, username: string, password: string) => {
   return true;
 };
 
+const loginKidsVillage = async (page: any, username: string, password: string) => {
+  await page.goto(KIDSVILLAGE_LOGIN_URL, { waitUntil: "networkidle", timeout: 45000 });
+  await page.locator('input[name="mb_id"]').first().fill(username);
+  await page.locator('input[name="mb_password"]').first().fill(password);
+  await Promise.all([
+    page.waitForLoadState("networkidle", { timeout: 45000 }).catch(() => null),
+    page.locator('input[type="submit"], button[type="submit"]').first().click(),
+  ]);
+  const currentUrl = page.url();
+  const bodyText = await page.locator("body").innerText({ timeout: 10000 }).catch(() => "");
+  return !/login\.php|register\.php/.test(currentUrl) && !/로그인\s*실패|회원가입약관/.test(bodyText);
+};
+
 const normalizeToyboxCategoryId = (input: { xcode?: string | null; mcode?: string | null; scode?: string | null }) => {
   const x = String(input.xcode || "").trim();
   const m = String(input.mcode || "").trim();
@@ -1199,6 +1230,106 @@ const parseWonNumber = (raw: string | null | undefined) => {
   const n = Number(normalized);
   if (!Number.isFinite(n) || n <= 0) return null;
   return Math.floor(n);
+};
+
+const extractKidsVillageCodeFromUrl = (rawUrl: string, fallback?: string) => {
+  try {
+    const u = new URL(rawUrl);
+    const itId = u.searchParams.get("it_id");
+    if (itId) return `kidsvillage-${itId}`;
+  } catch {
+    // noop
+  }
+  return fallback || `kidsvillage-${Date.now()}`;
+};
+
+const collectKidsVillageListRowsFromCurrentPage = async (page: any): Promise<KidsVillageListRow[]> => {
+  return await page.evaluate(() => {
+    const clean = (value: string | null | undefined) => String(value || "").replace(/\s+/g, " ").trim();
+    const absolute = (href: string | null | undefined) => {
+      try {
+        return href ? new URL(href, location.href).toString() : null;
+      } catch {
+        return null;
+      }
+    };
+    const sourceCategoryLink = Array.from(
+      document.querySelectorAll<HTMLAnchorElement>('a[href*="/shop/list.php?ca_id="]')
+    ).find((a) => a.classList.contains("on"));
+    const sourceBrandLink = Array.from(
+      document.querySelectorAll<HTMLAnchorElement>('a[href*="/shop/brand.php"][href*="br_id="]')
+    ).find((a) => a.classList.contains("on"));
+    const sourceCategoryId = sourceCategoryLink
+      ? new URL(sourceCategoryLink.href, location.href).searchParams.get("ca_id")
+      : new URL(location.href).searchParams.get("ca_id");
+    const sourceBrandId = sourceBrandLink
+      ? new URL(sourceBrandLink.href, location.href).searchParams.get("br_id")
+      : new URL(location.href).searchParams.get("br_id");
+    const seen = new Set<string>();
+
+    return Array.from(
+      document.querySelectorAll<HTMLAnchorElement>('[id^="cart_good_zone_"] a.sct_a[href*="/shop/item.php?it_id="]')
+    )
+      .map((a) => {
+        const card = a.closest('[id^="cart_good_zone_"]');
+        const titleLink = Array.from(
+          card?.querySelectorAll<HTMLAnchorElement>('.Bottom_Box a[href*="/shop/item.php?it_id="]') || []
+        ).find((link) => clean(link.textContent || ""));
+        const image = card?.querySelector<HTMLImageElement>('.sct_img img[src*="/data/item/"]');
+        const brandLink = card?.querySelector<HTMLAnchorElement>('.Top_Box li:first-child a[href*="/shop/brand.php"]');
+        const sourceName = clean(
+          sourceCategoryLink?.textContent ||
+            sourceBrandLink?.textContent ||
+            (sourceBrandId ? brandLink?.textContent : "") ||
+            document.querySelector("h2,h3")?.textContent ||
+            "Kids Village"
+        );
+        return {
+          title: clean(titleLink?.textContent || a.textContent || image?.alt || ""),
+          detailUrl: absolute(a.getAttribute("href")),
+          image: absolute(image?.getAttribute("src") || null),
+          sourceCategoryId: sourceCategoryId
+            ? `kidsvillage:category:${sourceCategoryId}`
+            : sourceBrandId
+              ? `kidsvillage:brand:${sourceBrandId}`
+              : null,
+          sourceCategoryName: sourceName,
+        };
+      })
+      .filter((row) => row.detailUrl && !seen.has(row.detailUrl) && seen.add(row.detailUrl));
+  });
+};
+
+const collectKidsVillageListRows = async (page: any, targetUrl: string): Promise<KidsVillageListRow[]> => {
+  const rows: KidsVillageListRow[] = [];
+  const visitedProducts = new Set<string>();
+  const visitedPages = new Set<string>();
+  let nextUrl: string | null = targetUrl;
+
+  while (nextUrl && rows.length < MAX_IMPORT_ROWS_PER_TARGET) {
+    if (visitedPages.has(nextUrl)) break;
+    visitedPages.add(nextUrl);
+
+    await page.goto(nextUrl, { waitUntil: "networkidle", timeout: 45000 });
+    const currentRows = await collectKidsVillageListRowsFromCurrentPage(page);
+    for (const row of currentRows) {
+      if (!row.detailUrl || visitedProducts.has(row.detailUrl)) continue;
+      visitedProducts.add(row.detailUrl);
+      rows.push(row);
+      if (rows.length >= MAX_IMPORT_ROWS_PER_TARGET) break;
+    }
+
+    if (rows.length >= MAX_IMPORT_ROWS_PER_TARGET) break;
+
+    nextUrl = await page.evaluate(() => {
+      const links = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href*="page="]'));
+      const next = links.find((a) => /다음/.test(a.textContent || ""));
+      if (!next?.href) return null;
+      return new URL(next.href, location.href).toString();
+    });
+  }
+
+  return rows;
 };
 
 const collectToyboxListRowsFromCurrentPage = async (page: any) => {
@@ -1332,6 +1463,67 @@ const scrapeToyboxDetail = async (page: any, detailUrl: string) => {
   return detail;
 };
 
+const scrapeKidsVillageDetail = async (page: any, detailUrl: string) => {
+  await page.goto(detailUrl, { waitUntil: "networkidle", timeout: 45000 });
+  const currentUrl = page.url();
+  if (/register\.php|login\.php/.test(currentUrl)) {
+    throw new Error("Kids Village 商品詳情需要登入後才能讀取");
+  }
+
+  return await page.evaluate(() => {
+    const clean = (value: string | null | undefined) => String(value || "").replace(/\s+/g, " ").trim();
+    const absolute = (value: string | null | undefined) => {
+      try {
+        return value ? new URL(value, location.href).toString() : null;
+      } catch {
+        return null;
+      }
+    };
+    const parsePrice = (text: string) => {
+      const normalized = text.replace(/,/g, "");
+      const match = normalized.match(/(\d{3,})\s*원/);
+      return match ? Number(match[1]) : null;
+    };
+    const title = clean(document.querySelector<HTMLElement>("#sit_title")?.textContent || "");
+    const bodyText = clean(document.body.textContent || "");
+    const priceInput = document.querySelector<HTMLInputElement>("#it_price")?.value || "";
+    const priceRowText = Array.from(document.querySelectorAll<HTMLTableRowElement>("#sit_ov .sit_ov_tbl tr"))
+      .map((row) => {
+        const th = clean(row.querySelector("th")?.textContent || "");
+        const td = clean(row.querySelector("td")?.textContent || "");
+        return { th, td };
+      })
+      .find((row) => row.th === "공급가격");
+    const price = Number(priceInput || "") || parsePrice(priceRowText?.td || bodyText);
+    const mainImages = Array.from(document.querySelectorAll<HTMLImageElement>('#sit_pvi img[src*="/data/item/"]'))
+      .map((img) => absolute(img.getAttribute("src")))
+      .filter((src): src is string => Boolean(src));
+    const descriptionImages = Array.from(
+      document.querySelectorAll<HTMLImageElement>('#sit_inf_explan img[src*="/data/item/"]')
+    )
+      .map((img) => absolute(img.getAttribute("src")))
+      .filter((src): src is string => Boolean(src));
+    const descriptionRoot = document.querySelector<HTMLElement>("#sit_inf_explan");
+    const descriptionText = clean(descriptionRoot?.innerText || "");
+    const descriptionHtml = descriptionRoot?.innerHTML || "";
+    const brandRow = Array.from(document.querySelectorAll<HTMLTableRowElement>("#sit_ov .sit_ov_tbl tr"))
+      .map((row) => ({
+        th: clean(row.querySelector("th")?.textContent || ""),
+        td: clean(row.querySelector("td")?.textContent || ""),
+      }))
+      .find((row) => row.th === "브랜드");
+
+    return {
+      title,
+      brand: brandRow?.td || "",
+      price_krw: typeof price === "number" && Number.isFinite(price) && price > 0 ? price : null,
+      images: Array.from(new Set([...mainImages, ...descriptionImages])),
+      description: descriptionText,
+      descriptionHtml,
+    };
+  });
+};
+
 const probeSingleToyboxTarget = async (
   page: any,
   targetUrl: string
@@ -1396,6 +1588,57 @@ const probeSingleToyboxTarget = async (
     return {
       ...base,
       error: err instanceof Error ? err.message : "probe target failed",
+    };
+  }
+};
+
+const probeSingleKidsVillageTarget = async (
+  page: any,
+  targetUrl: string
+): Promise<DosoProbeTargetResult> => {
+  try {
+    await page.goto(targetUrl, { waitUntil: "networkidle", timeout: 45000 });
+    const title = (await page.title().catch(() => "")) || "Kids Village";
+    const rows = await collectKidsVillageListRows(page, targetUrl);
+    const sampleRows = rows.slice(0, 3);
+    let detailFields = { title: false, price: false, images: false, description: false, specs: false };
+    if (sampleRows[0]?.detailUrl) {
+      const detail = await scrapeKidsVillageDetail(page, sampleRows[0].detailUrl);
+      detailFields = {
+        title: Boolean(detail.title),
+        price: Boolean(detail.price_krw),
+        images: detail.images.length > 0,
+        description: Boolean(detail.description || detail.descriptionHtml),
+        specs: false,
+      };
+    }
+    return {
+      url: targetUrl,
+      title,
+      list_ok: rows.length > 0,
+      total_count: rows.length,
+      estimated_sessions: rows.length > 0 ? Math.ceil(rows.length / IMPORT_BATCH_SIZE) : 0,
+      samples: sampleRows.map((row, idx) => ({
+        id: extractKidsVillageCodeFromUrl(row.detailUrl, `kidsvillage-sample-${idx + 1}`),
+        title: row.title,
+        price_twd: null,
+        price_jpy: null,
+        detail_url: row.detailUrl,
+      })),
+      detail_ok: detailFields.title && detailFields.price && detailFields.images,
+      detail_fields_presence: detailFields,
+    };
+  } catch (err) {
+    return {
+      url: targetUrl,
+      title: "Kids Village",
+      list_ok: false,
+      total_count: 0,
+      estimated_sessions: 0,
+      samples: [],
+      detail_ok: false,
+      detail_fields_presence: { title: false, price: false, images: false, description: false, specs: false },
+      error: err instanceof Error ? err.message : "Kids Village target probe failed",
     };
   }
 };
@@ -1475,6 +1718,75 @@ const runToyboxImportPreview = async (
   } satisfies DosoImportResponse;
 };
 
+const runKidsVillageImportPreview = async (
+  page: any,
+  targets: string[],
+  includeDetails: boolean
+) => {
+  const products: DosoImportProduct[] = [];
+  const targetResults: DosoImportTargetResult[] = [];
+
+  for (const target of targets) {
+    try {
+      await page.goto(target, { waitUntil: "networkidle", timeout: 45000 });
+      const title = (await page.title().catch(() => "")) || "Kids Village";
+      const rows = await collectKidsVillageListRows(page, target);
+      const mapped: DosoImportProduct[] = [];
+
+      for (let i = 0; i < rows.length; i += 1) {
+        const row = rows[i];
+        const code = extractKidsVillageCodeFromUrl(row.detailUrl, `kidsvillage-${i + 1}`);
+        let titleValue = row.title || code;
+        let description = "";
+        let images: string[] = row.image ? [row.image] : [];
+        let wholesalePriceTWD: number | null | undefined = undefined;
+
+        if (includeDetails) {
+          const detail = await scrapeKidsVillageDetail(page, row.detailUrl);
+          titleValue = detail.title || titleValue;
+          description = detail.descriptionHtml || detail.description || "";
+          images = detail.images.length > 0 ? detail.images : images;
+          const priceTwd = detail.price_krw ? Math.round(detail.price_krw * 0.024) : null;
+          wholesalePriceTWD = priceTwd;
+        }
+
+        mapped.push({
+          productCode: code,
+          title: titleValue,
+          description,
+          url: row.detailUrl,
+          images,
+          wholesalePriceTWD,
+          sourceDirectoryUrl: target,
+          sourceCategoryId: row.sourceCategoryId,
+          sourceCategoryName: row.sourceCategoryName || null,
+        });
+      }
+
+      products.push(...mapped);
+      targetResults.push({ url: target, title, count: mapped.length });
+    } catch (err) {
+      targetResults.push({
+        url: target,
+        title: "Kids Village",
+        count: 0,
+        error: err instanceof Error ? err.message : "Kids Village target import preview failed",
+      });
+    }
+  }
+
+  const dedup = new Map<string, DosoImportProduct>();
+  for (const p of products) {
+    dedup.set(p.productCode, p);
+  }
+
+  return {
+    login_ok: true,
+    products: Array.from(dedup.values()),
+    targets: targetResults,
+  } satisfies DosoImportResponse;
+};
+
 export async function runDosoProbe(input: {
   username: string;
   password: string;
@@ -1500,6 +1812,7 @@ export async function runDosoProbe(input: {
   try {
     const targets = (input.targets && input.targets.length > 0 ? input.targets : DEFAULT_DOSO_TARGETS).slice(0, 20);
     const allToybox = targets.length > 0 && targets.every((target) => isToyboxUrl(target));
+    const allKidsVillage = targets.length > 0 && targets.every((target) => isKidsVillageUrl(target));
 
     if (allToybox) {
       const loginOk = await loginToybox(page, input.username, input.password);
@@ -1514,6 +1827,27 @@ export async function runDosoProbe(input: {
       const results: DosoProbeTargetResult[] = [];
       for (const target of targets) {
         results.push(await probeSingleToyboxTarget(page, target));
+      }
+
+      return {
+        login_ok: true,
+        targets: results,
+      };
+    }
+
+    if (allKidsVillage) {
+      const loginOk = await loginKidsVillage(page, input.username, input.password);
+      if (!loginOk) {
+        return {
+          login_ok: false,
+          targets: [],
+          error: "Kids Village 登入失敗，用戶名稱或密碼錯誤",
+        };
+      }
+
+      const results: DosoProbeTargetResult[] = [];
+      for (const target of targets) {
+        results.push(await probeSingleKidsVillageTarget(page, target));
       }
 
       return {
@@ -1587,6 +1921,7 @@ export async function runDosoImportPreview(input: {
     const targets = (input.targets && input.targets.length > 0 ? input.targets : DEFAULT_DOSO_TARGETS).slice(0, 20);
     const includeDetails = input.includeDetails !== false;
     const allToybox = targets.length > 0 && targets.every((target) => isToyboxUrl(target));
+    const allKidsVillage = targets.length > 0 && targets.every((target) => isKidsVillageUrl(target));
 
     if (allToybox) {
       const loginOk = await loginToybox(page, input.username, input.password);
@@ -1600,6 +1935,20 @@ export async function runDosoImportPreview(input: {
       }
 
       return await runToyboxImportPreview(page, targets, includeDetails);
+    }
+
+    if (allKidsVillage) {
+      const loginOk = await loginKidsVillage(page, input.username, input.password);
+      if (!loginOk) {
+        return {
+          login_ok: false,
+          products: [],
+          targets: [],
+          error: "Kids Village 登入失敗，用戶名稱或密碼錯誤",
+        };
+      }
+
+      return await runKidsVillageImportPreview(page, targets, includeDetails);
     }
 
     await page.goto(LOGIN_URL, { waitUntil: "networkidle", timeout: 45000 });
@@ -1852,6 +2201,30 @@ const extractToyboxSourceCategories = async (page: any, directoryUrl: string) =>
   return nodes;
 };
 
+const extractKidsVillageSourceCategories = async (page: any, directoryUrl: string) => {
+  await page.goto(directoryUrl, { waitUntil: "networkidle", timeout: 45000 });
+  return await page.evaluate(() => {
+    const clean = (value: string | null | undefined) => String(value || "").replace(/\s+/g, " ").trim();
+    const links = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href*="/shop/list.php?ca_id="]'));
+    return links
+      .map((a) => {
+        const url = new URL(a.href, location.href);
+        const caId = url.searchParams.get("ca_id") || "";
+        const rawName = clean(a.textContent || "");
+        const level = rawName.startsWith("-") || caId.length > 2 ? 2 : 1;
+        const parentId = level === 2 ? `kidsvillage:category:${caId.slice(0, 2)}` : null;
+        return {
+          source_category_id: `kidsvillage:category:${caId}`,
+          name: rawName.replace(/^-\s*/, ""),
+          parent_id: parentId,
+          level,
+          directory_url: "https://www.kidsvillage.co.kr/shop/list.php",
+        };
+      })
+      .filter((node) => node.source_category_id && node.name);
+  });
+};
+
 export async function runDosoSourceCategoryRefresh(input: {
   username: string;
   password: string;
@@ -1864,6 +2237,7 @@ export async function runDosoSourceCategoryRefresh(input: {
   try {
     const targets = (input.targets && input.targets.length > 0 ? input.targets : DEFAULT_DOSO_TARGETS).slice(0, 20);
     const allToybox = targets.length > 0 && targets.every((target) => isToyboxUrl(target));
+    const allKidsVillage = targets.length > 0 && targets.every((target) => isKidsVillageUrl(target));
 
     if (allToybox) {
       const loginOk = await loginToybox(page, input.username, input.password);
@@ -1881,6 +2255,31 @@ export async function runDosoSourceCategoryRefresh(input: {
           await page.goto(target, { waitUntil: "networkidle", timeout: 45000 });
           await page.waitForTimeout(1200);
           directories[target] = await extractToyboxSourceCategories(page, target);
+        } catch {
+          directories[target] = [];
+        }
+      }
+
+      return {
+        login_ok: true,
+        directories,
+      };
+    }
+
+    if (allKidsVillage) {
+      const loginOk = await loginKidsVillage(page, input.username, input.password);
+      if (!loginOk) {
+        return {
+          login_ok: false,
+          directories: {},
+          error: "Kids Village 登入失敗，用戶名稱或密碼錯誤",
+        };
+      }
+
+      const directories: Record<string, DosoSourceCategoryNode[]> = {};
+      for (const target of targets) {
+        try {
+          directories[target] = await extractKidsVillageSourceCategories(page, target);
         } catch {
           directories[target] = [];
         }

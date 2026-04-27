@@ -1,7 +1,13 @@
 import { useState, useEffect } from "react";
 import Script from "next/script";
 import { supabase } from "@/lib/supabase";
-import { DEFAULT_DOSO_TARGETS, DOSO_TARGET_OPTIONS } from "@/lib/doso/targets";
+import {
+  DEFAULT_DOSO_TARGETS,
+  DOSO_SOURCE_OPTIONS,
+  DOSO_TARGET_OPTIONS,
+  getTargetOptionByUrl,
+} from "@/lib/doso/targets";
+import type { DosoCredentialSource } from "@/lib/doso/targets";
 import type {
   DosoCredentialsApiResponse,
   DosoImportProduct,
@@ -37,6 +43,18 @@ interface Tag {
 
 const DEFAULT_WHOLESALE_ADJUST_PERCENT = 8;
 const DEFAULT_RETAIL_ADJUST_PERCENT = 12;
+
+type CredentialFormState = {
+  username: string;
+  password: string;
+  hasSavedPassword: boolean;
+};
+
+const emptyCredentialForms = (): Record<DosoCredentialSource, CredentialFormState> => ({
+  doso: { username: "", password: "", hasSavedPassword: false },
+  toybox: { username: "", password: "", hasSavedPassword: false },
+  kidsvillage: { username: "", password: "", hasSavedPassword: false },
+});
 
 export default function CrawlerImport() {
   const [crawlerProducts, setCrawlerProducts] = useState<any[]>([]);
@@ -126,22 +144,21 @@ export default function CrawlerImport() {
   const [batchTranslateDescription, setBatchTranslateDescription] = useState(true);
   const [batchTranslating, setBatchTranslating] = useState(false);
 
-  const [dosoUsername, setDosoUsername] = useState("");
-  const [dosoPassword, setDosoPassword] = useState("");
-  const [dosoHasSavedPassword, setDosoHasSavedPassword] = useState(false);
-  const [toyboxUsername, setToyboxUsername] = useState("");
-  const [toyboxPassword, setToyboxPassword] = useState("");
-  const [toyboxHasSavedPassword, setToyboxHasSavedPassword] = useState(false);
+  const [credentialForms, setCredentialForms] = useState<Record<DosoCredentialSource, CredentialFormState>>(emptyCredentialForms);
+  const [showCredentialPanel, setShowCredentialPanel] = useState(false);
   const [showDosoGuide, setShowDosoGuide] = useState(false);
   const [selectedTargetPreset, setSelectedTargetPreset] = useState(DEFAULT_DOSO_TARGETS[0] || "");
   const [dosoTargetUrl, setDosoTargetUrl] = useState(DEFAULT_DOSO_TARGETS[0] || "");
-  const [toyboxManualTargetUrl, setToyboxManualTargetUrl] = useState("");
+  const [manualTargetUrl, setManualTargetUrl] = useState("");
   const [probeError, setProbeError] = useState<string | null>(null);
   const [importLoading, setImportLoading] = useState(false);
   const [importSession, setImportSession] = useState<DosoImportSessionProgress | null>(null);
   const [importSessions, setImportSessions] = useState<DosoImportSessionProgress[]>([]);
   const [runBatchSize, setRunBatchSize] = useState(20);
   const [importStorageKey, setImportStorageKey] = useState("dosoImport:anon");
+  const selectedTargetOption = getTargetOptionByUrl(selectedTargetPreset);
+  const selectedSource = selectedTargetOption?.source || "doso";
+  const selectedSourceLabel = DOSO_SOURCE_OPTIONS.find((x) => x.source === selectedSource)?.label || selectedSource;
 
   useEffect(() => {
     fetchCategories();
@@ -211,26 +228,29 @@ export default function CrawlerImport() {
       try {
         const accessToken = await getAdminAccessToken();
         if (!accessToken) return;
-        const [dosoRes, toyboxRes] = await Promise.all([
-          fetch("/api/admin/sync/doso/credentials?source=doso", {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          }),
-          fetch("/api/admin/sync/doso/credentials?source=toybox", {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          }),
-        ]);
+        const responses = await Promise.all(
+          DOSO_SOURCE_OPTIONS.map(async (sourceOption) => {
+            const res = await fetch(`/api/admin/sync/doso/credentials?source=${sourceOption.source}`, {
+              headers: { Authorization: `Bearer ${accessToken}` },
+            });
+            const data = (await res.json().catch(() => null)) as DosoCredentialsApiResponse | null;
+            return { source: sourceOption.source, res, data };
+          })
+        );
 
-        const dosoData = (await dosoRes.json().catch(() => null)) as DosoCredentialsApiResponse | null;
-        if (dosoRes.ok && dosoData && dosoData.ok) {
-          setDosoUsername(dosoData.username || "");
-          setDosoHasSavedPassword(Boolean(dosoData.has_password));
-        }
-
-        const toyboxData = (await toyboxRes.json().catch(() => null)) as DosoCredentialsApiResponse | null;
-        if (toyboxRes.ok && toyboxData && toyboxData.ok) {
-          setToyboxUsername(toyboxData.username || "");
-          setToyboxHasSavedPassword(Boolean(toyboxData.has_password));
-        }
+        setCredentialForms((prev) => {
+          const next = { ...prev };
+          for (const item of responses) {
+            if (item.res.ok && item.data && item.data.ok) {
+              next[item.source] = {
+                ...next[item.source],
+                username: item.data.username || "",
+                hasSavedPassword: Boolean(item.data.has_password),
+              };
+            }
+          }
+          return next;
+        });
       } catch {
         // noop
       }
@@ -240,11 +260,13 @@ export default function CrawlerImport() {
     fetchImportSessions(true);
   }, []);
 
-  const saveSourceCredentials = async (source: "doso" | "toybox") => {
-    const username = (source === "doso" ? dosoUsername : toyboxUsername).trim();
-    const password = source === "doso" ? dosoPassword : toyboxPassword;
+  const saveSourceCredentials = async (source: DosoCredentialSource) => {
+    const sourceLabel = DOSO_SOURCE_OPTIONS.find((x) => x.source === source)?.label || source;
+    const form = credentialForms[source];
+    const username = form.username.trim();
+    const password = form.password;
     if (!username) {
-      alert(`請先輸入${source === "doso" ? " DOSO" : " Toybox"} 帳號`);
+      alert(`請先輸入 ${sourceLabel} 帳號`);
       return;
     }
 
@@ -271,12 +293,15 @@ export default function CrawlerImport() {
         return;
       }
 
-      if (source === "doso") {
-        setDosoHasSavedPassword(Boolean(data.has_password));
-      } else {
-        setToyboxHasSavedPassword(Boolean(data.has_password));
-      }
-      alert(`${source === "doso" ? "DOSO" : "Toybox"} 帳密已儲存`);
+      setCredentialForms((prev) => ({
+        ...prev,
+        [source]: {
+          username: data.username || username,
+          password: "",
+          hasSavedPassword: Boolean(data.has_password),
+        },
+      }));
+      alert(`${sourceLabel} 帳密已儲存`);
     } catch {
       alert("儲存帳密失敗");
     }
@@ -569,43 +594,13 @@ export default function CrawlerImport() {
 
     const origin = String(p?.url || p?.original_url || "").trim();
     if (!origin) return null;
-
-    try {
-      const sourceUrl = new URL(origin);
-      const found = DOSO_TARGET_OPTIONS.find((opt) => {
-        try {
-          const optionUrl = new URL(opt.url);
-          const optionPath = optionUrl.pathname.replace(/\/$/, "");
-          const sourcePath = sourceUrl.pathname.replace(/\/$/, "");
-          if (sourceUrl.hostname !== optionUrl.hostname) return false;
-          if (!optionPath) return true;
-          return sourcePath.startsWith(optionPath);
-        } catch {
-          return false;
-        }
-      });
-      return found?.url || null;
-    } catch {
-      return null;
-    }
+    return getTargetOptionByUrl(origin)?.url || null;
   };
 
   const getTargetLabelByUrl = (url?: string | null) => {
     const raw = String(url || "").trim();
     if (!raw) return "未知目錄";
-    try {
-      const rawUrl = new URL(raw);
-      for (const option of DOSO_TARGET_OPTIONS) {
-        const optionUrl = new URL(option.url);
-        const optionPath = optionUrl.pathname.replace(/\/$/, "");
-        const rawPath = rawUrl.pathname.replace(/\/$/, "");
-        if (rawUrl.hostname !== optionUrl.hostname) continue;
-        if (!optionPath || rawPath.startsWith(optionPath)) return option.label;
-      }
-    } catch {
-      // noop
-    }
-    return "未知目錄";
+    return getTargetOptionByUrl(raw)?.label || "未知目錄";
   };
 
 
@@ -630,21 +625,11 @@ export default function CrawlerImport() {
     }
   };
 
-  const isToyboxTargetUrl = (value: string) => {
-    try {
-      const u = new URL(value);
-      return u.hostname === "www.toybox.kr" || u.hostname === "toybox.kr";
-    } catch {
-      return false;
-    }
-  };
-
   const handleTargetPresetChange = (value: string) => {
     setSelectedTargetPreset(value);
     setDosoTargetUrl(value);
-
-    if (!isToyboxTargetUrl(value)) {
-      setToyboxManualTargetUrl("");
+    if (!getTargetOptionByUrl(value)?.manualUrlPlaceholder) {
+      setManualTargetUrl("");
     }
   };
 
@@ -670,16 +655,18 @@ export default function CrawlerImport() {
   };
 
   const handleDosoImport = async () => {
-    const isToyboxPreset = isToyboxTargetUrl(selectedTargetPreset);
-    const username = (isToyboxPreset ? toyboxUsername : dosoUsername).trim();
-    const password = (isToyboxPreset ? toyboxPassword : dosoPassword).trim();
-
-    const targetUrl = isToyboxPreset
-      ? (toyboxManualTargetUrl.trim() || dosoTargetUrl.trim())
+    const selectedOption = getTargetOptionByUrl(selectedTargetPreset);
+    const source = selectedOption?.source || "doso";
+    const sourceLabel = DOSO_SOURCE_OPTIONS.find((x) => x.source === source)?.label || source;
+    const form = credentialForms[source];
+    const username = form.username.trim();
+    const password = form.password.trim();
+    const targetUrl = selectedOption?.manualUrlPlaceholder
+      ? (manualTargetUrl.trim() || dosoTargetUrl.trim())
       : dosoTargetUrl.trim();
 
-    if (isToyboxPreset && (!username || !password)) {
-      alert("選擇 Toybox 時，請先輸入帳號與密碼");
+    if (!username || (!password && !form.hasSavedPassword)) {
+      alert(`選擇 ${sourceLabel} 時，請先輸入或儲存帳號密碼`);
       return;
     }
 
@@ -1962,89 +1949,90 @@ export default function CrawlerImport() {
           </select>
         </div>
 
-        <div className="rounded-lg border border-border-light bg-background-light p-3 space-y-4">
-          <div className="text-sm font-medium text-text-primary-light">同步站帳密（分開儲存）</div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="space-y-3">
-              <div className="text-xs font-semibold text-text-secondary-light">DOSO</div>
-              <div>
-                <label className="block text-sm font-medium text-text-primary-light mb-1">帳號</label>
-                <input
-                  type="text"
-                  value={dosoUsername}
-                  onChange={(e) => setDosoUsername(e.target.value)}
-                  className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-                  placeholder="例如：陳奕如"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-text-primary-light mb-1">密碼</label>
-                <input
-                  type="password"
-                  value={dosoPassword}
-                  onChange={(e) => setDosoPassword(e.target.value)}
-                  className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-                  placeholder={dosoHasSavedPassword ? "已儲存密碼（留空不更新）" : "輸入密碼"}
-                />
-                <p className="mt-1 text-xs text-text-secondary-light">{dosoHasSavedPassword ? "目前已有已儲存密碼" : "目前尚未儲存密碼"}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => saveSourceCredentials("doso")}
-                className="rounded border border-border-light px-3 py-1.5 text-xs text-text-primary-light hover:bg-primary/10"
-              >
-                儲存 DOSO 帳密
-              </button>
+        <div className="rounded-lg border border-border-light bg-background-light">
+          <button
+            type="button"
+            onClick={() => setShowCredentialPanel((value) => !value)}
+            className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left"
+          >
+            <div>
+              <div className="text-sm font-medium text-text-primary-light">同步站帳密</div>
+              <div className="text-xs text-text-secondary-light">目前來源：{selectedSourceLabel}，密碼以加密方式儲存，不寫死在程式碼。</div>
             </div>
-
-            <div className="space-y-3">
-              <div className="text-xs font-semibold text-text-secondary-light">Toybox</div>
-              <div>
-                <label className="block text-sm font-medium text-text-primary-light mb-1">帳號</label>
-                <input
-                  type="text"
-                  value={toyboxUsername}
-                  onChange={(e) => setToyboxUsername(e.target.value)}
-                  className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-                  placeholder="例如：joytoy"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-text-primary-light mb-1">密碼</label>
-                <input
-                  type="password"
-                  value={toyboxPassword}
-                  onChange={(e) => setToyboxPassword(e.target.value)}
-                  className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-                  placeholder={toyboxHasSavedPassword ? "已儲存密碼（留空不更新）" : "輸入密碼"}
-                />
-                <p className="mt-1 text-xs text-text-secondary-light">{toyboxHasSavedPassword ? "目前已有已儲存密碼" : "目前尚未儲存密碼"}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => saveSourceCredentials("toybox")}
-                className="rounded border border-border-light px-3 py-1.5 text-xs text-text-primary-light hover:bg-primary/10"
-              >
-                儲存 Toybox 帳密
-              </button>
+            <span className="material-symbols-outlined text-base">{showCredentialPanel ? "expand_less" : "expand_more"}</span>
+          </button>
+          {showCredentialPanel && (
+            <div className="grid grid-cols-1 gap-4 border-t border-border-light px-3 py-3 lg:grid-cols-3">
+              {DOSO_SOURCE_OPTIONS.map((sourceOption) => {
+                const form = credentialForms[sourceOption.source];
+                return (
+                  <div key={sourceOption.source} className="space-y-3">
+                    <div className="text-xs font-semibold text-text-secondary-light">{sourceOption.label}</div>
+                    <div>
+                      <label className="block text-sm font-medium text-text-primary-light mb-1">帳號</label>
+                      <input
+                        type="text"
+                        value={form.username}
+                        onChange={(e) =>
+                          setCredentialForms((prev) => ({
+                            ...prev,
+                            [sourceOption.source]: {
+                              ...prev[sourceOption.source],
+                              username: e.target.value,
+                            },
+                          }))
+                        }
+                        className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                        placeholder={sourceOption.usernamePlaceholder}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-text-primary-light mb-1">密碼</label>
+                      <input
+                        type="password"
+                        value={form.password}
+                        onChange={(e) =>
+                          setCredentialForms((prev) => ({
+                            ...prev,
+                            [sourceOption.source]: {
+                              ...prev[sourceOption.source],
+                              password: e.target.value,
+                            },
+                          }))
+                        }
+                        className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                        placeholder={form.hasSavedPassword ? "已儲存密碼（留空不更新）" : "輸入密碼"}
+                      />
+                      <p className="mt-1 text-xs text-text-secondary-light">{form.hasSavedPassword ? "目前已有已儲存密碼" : "目前尚未儲存密碼"}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => saveSourceCredentials(sourceOption.source)}
+                      className="rounded border border-border-light px-3 py-1.5 text-xs text-text-primary-light hover:bg-primary/10"
+                    >
+                      儲存 {sourceOption.label} 帳密
+                    </button>
+                  </div>
+                );
+              })}
             </div>
-          </div>
+          )}
         </div>
 
-        {isToyboxTargetUrl(selectedTargetPreset) && (
+        {selectedTargetOption?.manualUrlPlaceholder && (
           <div>
-            <label className="block text-sm font-medium text-text-primary-light mb-1">Toybox 目標網址（可貼上）</label>
+            <label className="block text-sm font-medium text-text-primary-light mb-1">{selectedSourceLabel} 目標網址（可貼上）</label>
             <input
               type="text"
-              value={toyboxManualTargetUrl}
+              value={manualTargetUrl}
               onChange={(e) => {
-                setToyboxManualTargetUrl(e.target.value);
+                setManualTargetUrl(e.target.value);
                 setDosoTargetUrl(e.target.value);
               }}
               className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-              placeholder="https://www.toybox.kr/shop/shopbrand.html?xcode=..."
+              placeholder={selectedTargetOption.manualUrlPlaceholder}
             />
-            <p className="mt-1 text-xs text-text-secondary-light">可直接貼上想同步的品牌/分類網址。</p>
+            <p className="mt-1 text-xs text-text-secondary-light">{selectedTargetOption.manualUrlHelp}</p>
           </div>
         )}
 

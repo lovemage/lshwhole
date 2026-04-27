@@ -8,22 +8,13 @@ import {
   updateSessionCounters,
 } from "@/lib/doso/importSessionService";
 import { getSavedCredentialsForLogin } from "@/lib/doso/credentialStore";
-import { DOSO_TARGET_OPTIONS } from "@/lib/doso/targets";
+import { DOSO_TARGET_OPTIONS, getSourceByTargetUrl } from "@/lib/doso/targets";
 import type {
   DosoImportStartApiResponse,
   DosoImportStartRequest,
 } from "@/lib/doso/types";
 
 export const runtime = "nodejs";
-
-const isToyboxTarget = (value: string) => {
-  try {
-    const u = new URL(value);
-    return u.hostname === "www.toybox.kr" || u.hostname === "toybox.kr";
-  } catch {
-    return false;
-  }
-};
 
 const parseSingleTarget = (input: unknown) => {
   if (typeof input !== "string") return null;
@@ -95,7 +86,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const source = targetUrl && isToyboxTarget(targetUrl) ? "toybox" : "doso";
+    const source = targetUrl ? getSourceByTargetUrl(targetUrl) : null;
+    if (!source) {
+      return NextResponse.json(
+        { ok: false, error: "目錄 URL 格式錯誤，請輸入已支援的同步來源網址" } satisfies DosoImportStartApiResponse,
+        { status: 400 }
+      );
+    }
+
     const savedCredentials = await getSavedCredentialsForLogin(source);
     const credentials = requestUsername && requestPassword
       ? { username: requestUsername, password: requestPassword }
@@ -107,7 +105,7 @@ export async function POST(request: NextRequest) {
 
     if (!credentials?.username || !credentials?.password) {
       return NextResponse.json(
-        { ok: false, error: "缺少 DOSO 帳號或密碼，請先輸入或儲存帳密" } satisfies DosoImportStartApiResponse,
+        { ok: false, error: "缺少同步站帳號或密碼，請先輸入或儲存帳密" } satisfies DosoImportStartApiResponse,
         { status: 400 }
       );
     }

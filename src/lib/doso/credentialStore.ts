@@ -1,12 +1,14 @@
 import { supabaseAdmin } from "@/lib/supabase";
 import { decryptDosoPassword, encryptDosoPassword } from "@/lib/doso/credentialCrypto";
+import type { DosoCredentialSource } from "@/lib/doso/targets";
 
-const CREDENTIALS_KEYS = {
+const CREDENTIALS_KEYS: Record<DosoCredentialSource, string> = {
   doso: "doso_credentials_v1",
   toybox: "toybox_credentials_v1",
-} as const;
+  kidsvillage: "kidsvillage_credentials_v1",
+};
 
-export type CredentialSource = keyof typeof CREDENTIALS_KEYS;
+export type CredentialSource = DosoCredentialSource;
 
 interface StoredDosoCredentialsValue {
   username: string;
