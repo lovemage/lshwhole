@@ -1327,13 +1327,14 @@ const collectKidsVillageListRowsFromCurrentPage = async (page: any): Promise<Kid
 const collectKidsVillageListRows = async (
   page: any,
   targetUrl: string,
-  options?: { waitUntil?: "domcontentloaded" | "networkidle" }
+  options?: { waitUntil?: "domcontentloaded" | "networkidle"; includeNextPages?: boolean }
 ): Promise<KidsVillageListRow[]> => {
   const rows: KidsVillageListRow[] = [];
   const visitedProducts = new Set<string>();
   const visitedPages = new Set<string>();
   let nextUrl: string | null = targetUrl;
   const waitUntil = options?.waitUntil || "networkidle";
+  const includeNextPages = options?.includeNextPages ?? true;
 
   while (nextUrl && rows.length < MAX_IMPORT_ROWS_PER_TARGET) {
     if (visitedPages.has(nextUrl)) break;
@@ -1350,7 +1351,7 @@ const collectKidsVillageListRows = async (
 
     if (rows.length >= MAX_IMPORT_ROWS_PER_TARGET) break;
 
-    nextUrl = await getNextKidsVillagePageUrlFromCurrentPage(page);
+    nextUrl = includeNextPages ? await getNextKidsVillagePageUrlFromCurrentPage(page) : null;
   }
 
   return rows;
@@ -1828,6 +1829,7 @@ const runKidsVillageImportPreview = async (
         const title = (await activePage.title().catch(() => "")) || "Kids Village";
         const rows = await collectKidsVillageListRows(activePage, target, {
           waitUntil: "domcontentloaded",
+          includeNextPages: false,
         });
         const mapped: DosoImportProduct[] = [];
 

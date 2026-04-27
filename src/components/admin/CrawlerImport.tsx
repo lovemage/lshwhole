@@ -154,6 +154,7 @@ export default function CrawlerImport() {
   const [manualTargetUrl, setManualTargetUrl] = useState("");
   const [probeError, setProbeError] = useState<string | null>(null);
   const [importLoading, setImportLoading] = useState(false);
+  const [importLoadingMessage, setImportLoadingMessage] = useState<string>("");
   const [currentSyncTargetUrl, setCurrentSyncTargetUrl] = useState("");
   const [importSession, setImportSession] = useState<DosoImportSessionProgress | null>(null);
   const [importSessions, setImportSessions] = useState<DosoImportSessionProgress[]>([]);
@@ -731,6 +732,7 @@ export default function CrawlerImport() {
 
     setImportLoading(true);
     setProbeError(null);
+    setImportLoadingMessage("");
     setCurrentSyncTargetUrl(targetUrl);
 
     try {
@@ -784,6 +786,7 @@ export default function CrawlerImport() {
       setProbeError(err instanceof Error ? err.message : "導入時發生錯誤");
     } finally {
       setImportLoading(false);
+      setImportLoadingMessage("");
       setCurrentSyncTargetUrl("");
     }
   };
@@ -796,6 +799,7 @@ export default function CrawlerImport() {
 
     setImportLoading(true);
     setProbeError(null);
+    setImportLoadingMessage("");
     setCurrentSyncTargetUrl(importSession.target_url || "");
 
     try {
@@ -837,6 +841,7 @@ export default function CrawlerImport() {
       setProbeError(err instanceof Error ? err.message : "續傳時發生錯誤");
     } finally {
       setImportLoading(false);
+      setImportLoadingMessage("");
       setCurrentSyncTargetUrl("");
     }
   };
@@ -864,11 +869,12 @@ export default function CrawlerImport() {
   };
 
   const handleResetSingleImportSession = async (sessionId: number) => {
-    const ok = confirm(`確定要重置同步任務 Session #${sessionId} 嗎？`);
+    const ok = confirm(`確定要刪除同步任務 Session #${sessionId} 嗎？`);
     if (!ok) return;
 
     setImportLoading(true);
     setProbeError(null);
+    setImportLoadingMessage("刪除session請稍後");
     try {
       const accessToken = await getAdminAccessToken();
       if (!accessToken) {
@@ -882,7 +888,7 @@ export default function CrawlerImport() {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.ok) {
-        setProbeError(mapDosoError(data?.error, "重置同步任務失敗"));
+        setProbeError(mapDosoError(data?.error, "刪除同步任務失敗"));
         return;
       }
 
@@ -892,9 +898,10 @@ export default function CrawlerImport() {
       }
       await fetchImportSessions(false);
     } catch (err) {
-      setProbeError(err instanceof Error ? err.message : "重置同步任務失敗");
+      setProbeError(err instanceof Error ? err.message : "刪除同步任務失敗");
     } finally {
       setImportLoading(false);
+      setImportLoadingMessage("");
     }
   };
 
@@ -945,11 +952,12 @@ export default function CrawlerImport() {
       return;
     }
 
-    const ok = confirm("確定要重置目前導入 session 嗎？此動作不會刪除已導入商品清單。");
+    const ok = confirm("確定要刪除目前導入 session 嗎？此動作不會刪除已導入商品清單。");
     if (!ok) return;
 
     setImportLoading(true);
     setProbeError(null);
+    setImportLoadingMessage("刪除session請稍後");
 
     try {
       if (
@@ -974,7 +982,8 @@ export default function CrawlerImport() {
       localStorage.removeItem(`${importStorageKey}:sessionId`);
       clearAllLocalSessionBindings();
       setImportLoading(false);
-      alert("已重置 Session，請按「同步商品」建立新 Session。");
+      setImportLoadingMessage("");
+      alert("已刪除 Session，請按「同步商品」建立新 Session。");
     }
   };
 
@@ -2142,7 +2151,7 @@ export default function CrawlerImport() {
                       disabled={importLoading}
                       className="rounded border border-border-light px-2 py-1 text-[11px] text-red-600 hover:bg-red-50 disabled:opacity-50"
                     >
-                      重置
+                      刪除
                     </button>
                   </div>
                 </div>
@@ -2194,7 +2203,7 @@ export default function CrawlerImport() {
         </div>
 
         <p className="text-xs text-text-secondary-light">
-          使用摘要：Step 1 先「同步商品」建立任務（可保留近 3 筆並切換／重置）；Step 2 再對目前 Session 按「導入網站」。導入可中斷續跑，且會自動跳過已存在 SKU。
+          使用摘要：Step 1 先「同步商品」建立任務（可保留近 3 筆並切換／刪除）；Step 2 再對目前 Session 按「導入網站」。導入可中斷續跑，且會自動跳過已存在 SKU。
         </p>
 
         {importSession && (
@@ -2241,7 +2250,7 @@ export default function CrawlerImport() {
             </ol>
             <div className="rounded-lg border border-border-light bg-background-light p-3 text-xs text-text-secondary-light leading-5">
               <div className="font-semibold text-text-primary-light mb-1">使用方式摘要</div>
-              <div>1) 先同步：建立或選擇一個 Session（可重置）。</div>
+              <div>1) 先同步：建立或選擇一個 Session（可刪除）。</div>
               <div>2) 再導入：用目前 Session 分批導入（可調整批次大小）。</div>
               <div>3) 若中斷：回到此頁選同一個 Session，直接續傳。</div>
             </div>
@@ -3017,7 +3026,7 @@ export default function CrawlerImport() {
             <div className="text-lg font-bold text-text-primary-light">處理中, 請勿關閉視窗</div>
             <div className="text-sm text-text-secondary-light">
               {importLoading
-                ? `正在同步目錄:${currentSyncTargetUrl || importSession?.target_url || dosoTargetUrl.trim() || "-"}`
+                ? importLoadingMessage || `正在同步目錄:${currentSyncTargetUrl || importSession?.target_url || dosoTargetUrl.trim() || "-"}`
                 : batchPublishing || publishing
                   ? "正在上架商品，請稍候..."
                   : "正在處理中..."}
