@@ -1532,7 +1532,7 @@ const scrapeToyboxDetail = async (page: any, detailUrl: string) => {
 };
 
 const scrapeKidsVillageDetail = async (page: any, detailUrl: string) => {
-  await page.goto(detailUrl, { waitUntil: "networkidle", timeout: 45000 });
+  await page.goto(detailUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
   const currentUrl = page.url();
   if (/register\.php|login\.php/.test(currentUrl)) {
     throw new Error("Kids Village 商品詳情需要登入後才能讀取");
@@ -1822,12 +1822,12 @@ const runKidsVillageImportPreview = async (
       try {
         const activePage = listPage || page;
         await activePage.goto(target, {
-          waitUntil: includeDetails ? "networkidle" : "domcontentloaded",
+          waitUntil: "domcontentloaded",
           timeout: 45000,
         });
         const title = (await activePage.title().catch(() => "")) || "Kids Village";
         const rows = await collectKidsVillageListRows(activePage, target, {
-          waitUntil: includeDetails ? "networkidle" : "domcontentloaded",
+          waitUntil: "domcontentloaded",
         });
         const mapped: DosoImportProduct[] = [];
 

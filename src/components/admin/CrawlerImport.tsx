@@ -154,6 +154,7 @@ export default function CrawlerImport() {
   const [manualTargetUrl, setManualTargetUrl] = useState("");
   const [probeError, setProbeError] = useState<string | null>(null);
   const [importLoading, setImportLoading] = useState(false);
+  const [currentSyncTargetUrl, setCurrentSyncTargetUrl] = useState("");
   const [importSession, setImportSession] = useState<DosoImportSessionProgress | null>(null);
   const [importSessions, setImportSessions] = useState<DosoImportSessionProgress[]>([]);
   const [runBatchSize, setRunBatchSize] = useState(20);
@@ -169,10 +170,6 @@ export default function CrawlerImport() {
     l1Categories.find((category) => category.name.includes("日本"))?.name ||
     l1Categories[0]?.name ||
     "-";
-  const importTotalCount = importSession?.total_count || 0;
-  const importProcessedCount = importSession?.processed_count || 0;
-  const importProgressPercent =
-    importTotalCount > 0 ? Math.min(100, Math.round((importProcessedCount / importTotalCount) * 100)) : 0;
 
   useEffect(() => {
     fetchCategories();
@@ -734,6 +731,7 @@ export default function CrawlerImport() {
 
     setImportLoading(true);
     setProbeError(null);
+    setCurrentSyncTargetUrl(targetUrl);
 
     try {
       const accessToken = await getAdminAccessToken();
@@ -786,6 +784,7 @@ export default function CrawlerImport() {
       setProbeError(err instanceof Error ? err.message : "導入時發生錯誤");
     } finally {
       setImportLoading(false);
+      setCurrentSyncTargetUrl("");
     }
   };
 
@@ -797,6 +796,7 @@ export default function CrawlerImport() {
 
     setImportLoading(true);
     setProbeError(null);
+    setCurrentSyncTargetUrl(importSession.target_url || "");
 
     try {
       const accessToken = await getAdminAccessToken();
@@ -837,6 +837,7 @@ export default function CrawlerImport() {
       setProbeError(err instanceof Error ? err.message : "續傳時發生錯誤");
     } finally {
       setImportLoading(false);
+      setCurrentSyncTargetUrl("");
     }
   };
 
@@ -2084,6 +2085,9 @@ export default function CrawlerImport() {
               className="w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
               placeholder={selectedTargetOption.manualUrlPlaceholder}
             />
+            <div className="mt-1 text-xs text-text-secondary-light">
+              {selectedTargetOption.manualUrlHelp || "建議直接貼上分類或品牌網址進行同步。"}
+            </div>
           </div>
         )}
 
@@ -3010,27 +3014,14 @@ export default function CrawlerImport() {
       {(importLoading || batchPublishing || publishing) && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 p-4">
           <div className="w-full max-w-md rounded-xl border border-border-light bg-card-light p-5 text-center space-y-3">
-            <div className="text-lg font-bold text-text-primary-light">處理中，請勿關閉視窗</div>
+            <div className="text-lg font-bold text-text-primary-light">處理中, 請勿關閉視窗</div>
             <div className="text-sm text-text-secondary-light">
-              {importLoading ? "正在導入商品，請稍候..." : batchPublishing || publishing ? "正在上架商品，請稍候..." : "正在處理中..."}
+              {importLoading
+                ? `正在同步目錄:${currentSyncTargetUrl || importSession?.target_url || dosoTargetUrl.trim() || "-"}`
+                : batchPublishing || publishing
+                  ? "正在上架商品，請稍候..."
+                  : "正在處理中..."}
             </div>
-            {importLoading && importSession && (
-              <div className="space-y-1 rounded-lg border border-border-light bg-background-light p-3 text-left">
-                <div className="flex items-center justify-between text-sm text-text-primary-light">
-                  <span>同步進度</span>
-                  <span className="font-semibold">{importProcessedCount} / {importTotalCount}</span>
-                </div>
-                <div className="h-2 overflow-hidden rounded bg-border-light">
-                  <div
-                    className="h-full bg-primary transition-all"
-                    style={{ width: `${importProgressPercent}%` }}
-                  />
-                </div>
-                <div className="text-xs text-text-secondary-light">
-                  已導入 {importSession.imported_count} / 略過 {importSession.skipped_count} / 失敗 {importSession.failed_count}
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}

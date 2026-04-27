@@ -68,18 +68,11 @@ export const DOSO_TARGET_OPTIONS: DosoTargetOption[] = [
     manualUrlHelp: "可直接貼上 Toybox 品牌/分類網址。",
   },
   {
-    url: "https://www.kidsvillage.co.kr/shop/list.php",
-    label: "Kids Village 分類",
+    url: "https://www.kidsvillage.co.kr/shop/",
+    label: "Kids Village",
     source: "kidsvillage",
-    manualUrlPlaceholder: "https://www.kidsvillage.co.kr/shop/list.php?ca_id=10",
-    manualUrlHelp: "建議使用分類網址同步，分類較適合對應站內 L2/L3。",
-  },
-  {
-    url: "https://www.kidsvillage.co.kr/shop/brand.php",
-    label: "Kids Village 品牌",
-    source: "kidsvillage",
-    manualUrlPlaceholder: "https://www.kidsvillage.co.kr/shop/brand.php?sort_id=&br_id=418",
-    manualUrlHelp: "品牌適合指定廠商補抓；分類對應仍以商品分類優先。",
+    manualUrlPlaceholder: "https://www.kidsvillage.co.kr/shop/brand.php?sort_id=&br_id=346",
+    manualUrlHelp: "建議直接貼上 Kids Village 分類或品牌網址進行同步。",
   },
 ];
 
