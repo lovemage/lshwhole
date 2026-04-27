@@ -26,7 +26,7 @@ const toSessionId = (value: string) => {
 const toBatchSize = (value: unknown) => {
   const n = Number(value);
   if (!Number.isFinite(n)) return 20;
-  return Math.min(100, Math.max(1, Math.floor(n)));
+  return Math.max(1, Math.floor(n));
 };
 
 const hasUsableImage = (images: unknown) => {

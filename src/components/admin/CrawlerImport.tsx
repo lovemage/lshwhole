@@ -171,6 +171,9 @@ export default function CrawlerImport() {
     l1Categories.find((category) => category.name.includes("日本"))?.name ||
     l1Categories[0]?.name ||
     "-";
+  const maxBatchSize = importSession
+    ? Math.max(1, (importSession.total_count || 0) - (importSession.processed_count || 0))
+    : 100;
 
   useEffect(() => {
     fetchCategories();
@@ -2168,11 +2171,19 @@ export default function CrawlerImport() {
               <input
                 type="number"
                 min={1}
-                max={100}
+                max={maxBatchSize}
                 value={runBatchSize}
-                onChange={(e) => setRunBatchSize(Math.min(100, Math.max(1, Number(e.target.value) || 20)))}
+                onChange={(e) => setRunBatchSize(Math.min(maxBatchSize, Math.max(1, Number(e.target.value) || 20)))}
                 className="w-20 rounded border border-border-light bg-card-light px-2 py-1 text-xs"
               />
+              <button
+                type="button"
+                onClick={() => setRunBatchSize(maxBatchSize)}
+                disabled={!importSession || importLoading}
+                className="rounded border border-border-light bg-card-light px-2 py-1 text-[11px] text-text-primary-light hover:bg-primary/10 disabled:opacity-50"
+              >
+                max
+              </button>
             </div>
             <button
               onClick={handleDosoRun}
