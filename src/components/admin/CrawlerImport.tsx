@@ -16,6 +16,7 @@ import type {
   DosoImportSessionsListApiResponse,
   DosoImportStartApiResponse,
   DosoImportSessionProgress,
+  DosoSourceCategoryMappingApiResponse,
 } from "@/lib/doso/types";
 
 interface Category {
@@ -70,6 +71,7 @@ export default function CrawlerImport() {
   const [categoryRelations, setCategoryRelations] = useState<any[]>([]);
   const [selectedCrawlerTags, setSelectedCrawlerTags] = useState<number[]>([]);
   const [tagSearchTerm, setTagSearchTerm] = useState("");
+  const [publishL1Id, setPublishL1Id] = useState<number | null>(null);
 
   const [showPublish, setShowPublish] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -159,6 +161,14 @@ export default function CrawlerImport() {
   const selectedTargetOption = getTargetOptionByUrl(selectedTargetPreset);
   const selectedSource = selectedTargetOption?.source || "doso";
   const selectedSourceLabel = DOSO_SOURCE_OPTIONS.find((x) => x.source === selectedSource)?.label || selectedSource;
+  const l1Categories = categories
+    .filter((category) => category.level === 1 && category.active)
+    .sort((a, b) => a.sort - b.sort);
+  const selectedPublishL1Name =
+    l1Categories.find((category) => category.id === publishL1Id)?.name ||
+    l1Categories.find((category) => category.name.includes("日本"))?.name ||
+    l1Categories[0]?.name ||
+    "-";
 
   useEffect(() => {
     fetchCategories();
@@ -175,6 +185,12 @@ export default function CrawlerImport() {
       }
     } catch { }
   }, []);
+
+  useEffect(() => {
+    if (publishL1Id || l1Categories.length === 0) return;
+    const japanL1 = l1Categories.find((category) => category.name.includes("日本"));
+    setPublishL1Id(japanL1?.id || l1Categories[0]?.id || null);
+  }, [l1Categories, publishL1Id]);
 
   useEffect(() => {
     const restoreImportSession = async () => {
@@ -251,6 +267,17 @@ export default function CrawlerImport() {
           }
           return next;
         });
+
+        const mappingRes = await fetch("/api/admin/sync/doso/source-category-mapping", {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        const mappingData = (await mappingRes.json().catch(() => null)) as DosoSourceCategoryMappingApiResponse | null;
+        if (mappingRes.ok && mappingData?.ok) {
+          const mappedL1Id = Number(mappingData.mapping.l1_japan_id) || null;
+          if (mappedL1Id) {
+            setPublishL1Id((prev) => prev || mappedL1Id);
+          }
+        }
       } catch {
         // noop
       }
@@ -542,7 +569,7 @@ export default function CrawlerImport() {
     return refreshed?.session?.access_token || session?.access_token || null;
   };
 
-  const fetchImportSessions = async (keepCurrent = true) => {
+  const fetchImportSessions = async (keepCurrent = true, preferredSessionId?: number | null) => {
     try {
       const accessToken = await getAdminAccessToken();
       if (!accessToken) return;
@@ -559,6 +586,14 @@ export default function CrawlerImport() {
       if (!keepCurrent) {
         setImportSession(sessions[0] || null);
         return;
+      }
+
+      if (Number.isInteger(preferredSessionId) && Number(preferredSessionId) > 0) {
+        const matchedPreferred = sessions.find((x) => x.session_id === preferredSessionId);
+        if (matchedPreferred) {
+          setImportSession(matchedPreferred);
+          return;
+        }
       }
 
       if (importSession) {
@@ -649,9 +684,21 @@ export default function CrawlerImport() {
       invalid_category_mapping: "來源分類映射包含無效分類，請重新選擇",
       invalid_category_mapping_hierarchy: "來源分類映射層級不正確，請確認 L2/L3 階層",
       missing_category_mapping: "部分商品沒有可用分類映射，請先補齊來源分類對應",
+      invalid_l1_override: "指定的 L1 分類無效，請重新選擇",
+      invalid_l1_override_hierarchy: "目前選擇的 L1 與來源自動判定分類不相容，請改用分類確認合併",
       unauthorized: "管理員登入已過期，請重新登入後再試",
     };
     return map[code] || code;
+  };
+
+  const formatCategoryRiskFlag = (flag: string) => {
+    const map: Record<string, string> = {
+      numeric_name: "來源分類名稱疑似數字",
+      auto_create: "將自動建立新分類",
+      missing_mapping: "缺少來源分類映射",
+      override_l1_hierarchy_mismatch: "目前 L1 與自動分類階層不相容",
+    };
+    return map[flag] || flag;
   };
 
   const handleDosoImport = async () => {
@@ -804,7 +851,8 @@ export default function CrawlerImport() {
       const data = (await res.json().catch(() => null)) as DosoImportProgressApiResponse | null;
       if (!res.ok || !data || !data.ok) return;
       setImportSession(data.session);
-      await fetchImportSessions(true);
+      localStorage.setItem(`${importStorageKey}:sessionId`, String(data.session.session_id));
+      await fetchImportSessions(true, data.session.session_id);
     } catch {
       // noop
     }
@@ -1222,7 +1270,7 @@ export default function CrawlerImport() {
         alert("尚未登入管理員，請重新登入後再試");
         return;
       }
-      alert(result.error || "上架失敗");
+      alert(mapDosoError(result.error, "上架失敗"));
       return;
     }
 
@@ -1260,6 +1308,7 @@ export default function CrawlerImport() {
         source_category_id: publishTarget?.sourceCategoryId || null,
         source_category_name: publishTarget?.sourceCategoryName || null,
         source_directory_url: getDirectoryUrlFromProduct(publishTarget),
+        category_l1_id_override: publishL1Id,
         specs,
         variants: variants.map(v => ({
           name: Object.values(v.options).join(" / "),
@@ -1304,13 +1353,14 @@ export default function CrawlerImport() {
           source_category_name: payload.source_category_name,
           source_directory_url: payload.source_directory_url,
           original_url: payload.original_url,
+          category_l1_id_override: publishL1Id,
           category_review_mode: "preview",
         }),
       });
 
       const previewData = await previewRes.json().catch(() => null);
       if (!previewRes.ok) {
-        alert(previewData?.error || "分類預檢失敗");
+        alert(mapDosoError(previewData?.error, "分類預檢失敗"));
         return;
       }
       const needsReview = Boolean(previewData?.category_review?.needs_review);
@@ -1735,20 +1785,21 @@ export default function CrawlerImport() {
       }
 
       const payload = {
-          sku: String(p.productCode || ""),
-          title: String(p.title || ""),
+        sku: String(p.productCode || ""),
+        title: String(p.title || ""),
         description: description,
         cost_twd: toInt(cost),
         wholesale_price_twd: toInt(wholesale),
         retail_price_twd: toInt(retail),
         status: "published",
         tag_ids: selectedCrawlerTags,
-          image_urls: image_urls,
-          original_url: p.url || null,
-          source_category_id: p.sourceCategoryId || null,
-          source_category_name: p.sourceCategoryName || null,
-          source_directory_url: getDirectoryUrlFromProduct(p),
-        };
+        image_urls: image_urls,
+        original_url: p.url || null,
+        source_category_id: p.sourceCategoryId || null,
+        source_category_name: p.sourceCategoryName || null,
+        source_directory_url: getDirectoryUrlFromProduct(p),
+        category_l1_id_override: publishL1Id,
+      };
 
       try {
         const previewRes = await fetch("/api/publish-product", {
@@ -1764,6 +1815,7 @@ export default function CrawlerImport() {
             source_category_name: payload.source_category_name,
             source_directory_url: payload.source_directory_url,
             original_url: payload.original_url,
+            category_l1_id_override: publishL1Id,
             category_review_mode: "preview",
           }),
         });
@@ -2207,8 +2259,21 @@ export default function CrawlerImport() {
         </div>
         <div className="rounded-lg border border-border-light bg-background-light p-3 text-sm text-text-secondary-light">
           <div className="font-medium text-text-primary-light">分類模式：來源自動判定</div>
-          <div className="mt-1">L1：日本（系統預設）</div>
-          <div className="mt-1">L2/L3：由來源分類與目錄推導，若有疑慮會在上架時彈窗確認是否合併。</div>
+          <div className="mt-3 grid gap-2 md:grid-cols-[100px_minmax(0,220px)] md:items-center">
+            <label className="text-text-primary-light">L1</label>
+            <select
+              value={publishL1Id ?? ""}
+              onChange={(e) => setPublishL1Id(e.target.value ? Number(e.target.value) : null)}
+              className="rounded border border-border-light bg-white px-3 py-2 text-sm text-text-primary-light"
+            >
+              {l1Categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="mt-2 text-xs">L2/L3 仍由來源分類與目錄推導，若需調整會在上架時進行分類確認。</div>
         </div>
         <div className="mt-3">
           <div className="flex items-center justify-between mb-2">
@@ -2709,7 +2774,7 @@ export default function CrawlerImport() {
                 </div>
                 {/* 分類選擇 */}
                 <div className="rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm text-text-secondary-light">
-                  分類將依來源資料自動判定（L1 日本）。若系統判斷需確認，按「確認上架」後會跳出合併彈窗。
+                  分類將依來源資料自動判定（L1 {selectedPublishL1Name}）。若系統判斷需確認，按「確認上架」後會跳出合併彈窗。
                 </div>
                 {/* 標籤選擇（共用選擇狀態） */}
                 <div>
@@ -2846,7 +2911,7 @@ export default function CrawlerImport() {
               <div>系統判定此商品分類需要確認。</div>
               <div className="mt-1 text-xs">
                 風險標記：{Array.isArray(pendingCategoryReview.risk_flags) && pendingCategoryReview.risk_flags.length > 0
-                  ? pendingCategoryReview.risk_flags.join(", ")
+                  ? pendingCategoryReview.risk_flags.map((flag: string) => formatCategoryRiskFlag(flag)).join(", ")
                   : "無"}
               </div>
             </div>

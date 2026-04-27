@@ -108,6 +108,26 @@ const validateManualMergeCategoryIds = async (
   };
 };
 
+const validateL1CategoryId = async (
+  admin: ReturnType<typeof supabaseAdmin>,
+  l1Id: number
+) => {
+  const { data, error } = await admin
+    .from("categories")
+    .select("id, level, active")
+    .eq("id", l1Id)
+    .limit(1)
+    .maybeSingle<{ id: number; level: number; active: boolean }>();
+
+  if (error) {
+    return { ok: false as const, error: error.message };
+  }
+  if (!data || !data.active || data.level !== 1) {
+    return { ok: false as const, error: "invalid_l1_override" };
+  }
+  return { ok: true as const };
+};
+
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAdmin(request);
@@ -140,13 +160,25 @@ export async function POST(request: NextRequest) {
           .map((x: any) => Number(x))
           .filter((x: number) => Number.isInteger(x) && x > 0)
       : [];
+    const categoryL1IdOverride = Number.isInteger(Number(body?.category_l1_id_override))
+      && Number(body?.category_l1_id_override) > 0
+      ? Number(body.category_l1_id_override)
+      : null;
 
     if (!sku || !title) {
       return NextResponse.json({ error: "缺少必要欄位：sku, title" }, { status: 400 });
     }
 
+    if (categoryL1IdOverride) {
+      const l1Validation = await validateL1CategoryId(admin, categoryL1IdOverride);
+      if (!l1Validation.ok) {
+        return NextResponse.json({ error: l1Validation.error }, { status: 400 });
+      }
+    }
+
     // 保證 TWD 為整數
     const toInt = (v: any) => (v === null || v === undefined || v === "" ? null : Math.floor(Number(v)));
+    const mappingConfig = await getDosoSourceCategoryMapping();
 
     let resolvedCategoryIds = (Array.isArray(category_ids) ? category_ids.filter((x: any) => !!x) : []) as number[];
     const directoryUrl =
@@ -192,9 +224,25 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const previewL1Id =
+      categoryL1IdOverride ||
+      Number(mappingConfig.l1_japan_id) ||
+      previewMapping?.l1_id ||
+      null;
+    const previewL2Id = previewMapping?.l2_id || null;
+    const previewL3Id = previewMapping?.l3_id || null;
+
+    if (previewL1Id && previewL2Id) {
+      const hierarchyValidation = await validateManualMergeCategoryIds(
+        admin,
+        [previewL1Id, previewL2Id, previewL3Id || null].filter(Boolean) as number[]
+      );
+      if (!hierarchyValidation.ok) {
+        riskFlags.push("override_l1_hierarchy_mismatch");
+      }
+    }
+
     if (categoryReviewMode === "preview") {
-      const mappingConfig = await getDosoSourceCategoryMapping();
-      const l1Id = Number(mappingConfig.l1_japan_id) || previewMapping?.l1_id || null;
       const needsReview = riskFlags.length > 0;
       return NextResponse.json({
         ok: true,
@@ -203,9 +251,9 @@ export async function POST(request: NextRequest) {
           would_auto_create: previewWouldAutoCreate,
           risk_flags: riskFlags,
           proposed_category: {
-            l1_id: l1Id,
-            l2_id: previewMapping?.l2_id || null,
-            l3_id: previewMapping?.l3_id || null,
+            l1_id: previewL1Id,
+            l2_id: previewL2Id,
+            l3_id: previewL3Id,
             l2_name: previewWouldAutoCreate ? sourceCategoryName || sourceCategoryId || null : null,
             l3_name: null,
           },
@@ -219,8 +267,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (manualMergeCategoryIds.length > 0) {
-      const mappingConfig = await getDosoSourceCategoryMapping();
-      const expectedL1Id = Number(mappingConfig.l1_japan_id) || null;
+      const expectedL1Id = categoryL1IdOverride || Number(mappingConfig.l1_japan_id) || null;
       const mergeValidation = await validateManualMergeCategoryIds(
         admin,
         manualMergeCategoryIds,
@@ -248,7 +295,17 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: "missing_category_mapping" }, { status: 400 });
         }
       } else {
-        resolvedCategoryIds = [finalMapping.l1_id, finalMapping.l2_id, finalMapping.l3_id || null].filter(Boolean) as number[];
+        const resolvedL1Id = categoryL1IdOverride || finalMapping.l1_id;
+        if (categoryL1IdOverride) {
+          const hierarchyValidation = await validateManualMergeCategoryIds(
+            admin,
+            [resolvedL1Id, finalMapping.l2_id, finalMapping.l3_id || null].filter(Boolean) as number[]
+          );
+          if (!hierarchyValidation.ok) {
+            return NextResponse.json({ error: "invalid_l1_override_hierarchy" }, { status: 400 });
+          }
+        }
+        resolvedCategoryIds = [resolvedL1Id, finalMapping.l2_id, finalMapping.l3_id || null].filter(Boolean) as number[];
       }
     }
 

@@ -1253,6 +1253,14 @@ const collectKidsVillageListRowsFromCurrentPage = async (page: any): Promise<Kid
         return null;
       }
     };
+    const getQueryParam = (rawUrl: string | null | undefined, key: string) => {
+      if (!rawUrl) return null;
+      try {
+        return new URL(rawUrl, location.href).searchParams.get(key);
+      } catch {
+        return null;
+      }
+    };
     const sourceCategoryLink = Array.from(
       document.querySelectorAll<HTMLAnchorElement>('a[href*="/shop/list.php?ca_id="]')
     ).find((a) => a.classList.contains("on"));
@@ -1267,16 +1275,30 @@ const collectKidsVillageListRowsFromCurrentPage = async (page: any): Promise<Kid
       : new URL(location.href).searchParams.get("br_id");
     const seen = new Set<string>();
 
-    return Array.from(
-      document.querySelectorAll<HTMLAnchorElement>('[id^="cart_good_zone_"] a.sct_a[href*="/shop/item.php?it_id="]')
-    )
-      .map((a) => {
-        const card = a.closest('[id^="cart_good_zone_"]');
-        const titleLink = Array.from(
-          card?.querySelectorAll<HTMLAnchorElement>('.Bottom_Box a[href*="/shop/item.php?it_id="]') || []
-        ).find((link) => clean(link.textContent || ""));
-        const image = card?.querySelector<HTMLImageElement>('.sct_img img[src*="/data/item/"]');
-        const brandLink = card?.querySelector<HTMLAnchorElement>('.Top_Box li:first-child a[href*="/shop/brand.php"]');
+    return Array.from(document.querySelectorAll<HTMLElement>('[id^="cart_good_zone_"]'))
+      .flatMap((card) => {
+        const titleLink = Array.from(card.querySelectorAll<HTMLAnchorElement>('.Bottom_Box a[href*="/shop/item.php?it_id="]')).find(
+          (link) => clean(link.textContent || "")
+        );
+        const detailLink =
+          titleLink ||
+          card.querySelector<HTMLAnchorElement>('a.sct_a[href*="/shop/item.php?it_id="]') ||
+          card.querySelector<HTMLAnchorElement>('a[href*="/shop/item.php?it_id="]');
+        const detailUrl = absolute(detailLink?.getAttribute("href") || null);
+        const image = card.querySelector<HTMLImageElement>('.sct_img img[src*="/data/item/"]');
+        const brandLink = card.querySelector<HTMLAnchorElement>('.Top_Box li:first-child a[href*="/shop/brand.php"]');
+        const detailBrandId = getQueryParam(detailUrl, "br_id");
+        const cardBrandId = getQueryParam(brandLink?.getAttribute("href") || brandLink?.href || null, "br_id");
+        const detailCategoryId = getQueryParam(detailUrl, "ca_id");
+
+        if (sourceBrandId && detailBrandId !== sourceBrandId && cardBrandId !== sourceBrandId) {
+          return [];
+        }
+
+        if (!sourceBrandId && sourceCategoryId && detailCategoryId && detailCategoryId !== sourceCategoryId) {
+          return [];
+        }
+
         const sourceName = clean(
           sourceCategoryLink?.textContent ||
             sourceBrandLink?.textContent ||
@@ -1284,33 +1306,40 @@ const collectKidsVillageListRowsFromCurrentPage = async (page: any): Promise<Kid
             document.querySelector("h2,h3")?.textContent ||
             "Kids Village"
         );
-        return {
-          title: clean(titleLink?.textContent || a.textContent || image?.alt || ""),
-          detailUrl: absolute(a.getAttribute("href")),
-          image: absolute(image?.getAttribute("src") || null),
-          sourceCategoryId: sourceCategoryId
-            ? `kidsvillage:category:${sourceCategoryId}`
-            : sourceBrandId
-              ? `kidsvillage:brand:${sourceBrandId}`
-              : null,
-          sourceCategoryName: sourceName,
-        };
+        return [
+          {
+            title: clean(titleLink?.textContent || detailLink?.textContent || image?.alt || ""),
+            detailUrl,
+            image: absolute(image?.getAttribute("src") || null),
+            sourceCategoryId: sourceCategoryId
+              ? `kidsvillage:category:${sourceCategoryId}`
+              : sourceBrandId
+                ? `kidsvillage:brand:${sourceBrandId}`
+                : null,
+            sourceCategoryName: sourceName,
+          },
+        ];
       })
       .filter((row) => row.detailUrl && !seen.has(row.detailUrl) && seen.add(row.detailUrl));
   });
 };
 
-const collectKidsVillageListRows = async (page: any, targetUrl: string): Promise<KidsVillageListRow[]> => {
+const collectKidsVillageListRows = async (
+  page: any,
+  targetUrl: string,
+  options?: { waitUntil?: "domcontentloaded" | "networkidle" }
+): Promise<KidsVillageListRow[]> => {
   const rows: KidsVillageListRow[] = [];
   const visitedProducts = new Set<string>();
   const visitedPages = new Set<string>();
   let nextUrl: string | null = targetUrl;
+  const waitUntil = options?.waitUntil || "networkidle";
 
   while (nextUrl && rows.length < MAX_IMPORT_ROWS_PER_TARGET) {
     if (visitedPages.has(nextUrl)) break;
     visitedPages.add(nextUrl);
 
-    await page.goto(nextUrl, { waitUntil: "networkidle", timeout: 45000 });
+    await page.goto(nextUrl, { waitUntil, timeout: 45000 });
     const currentRows = await collectKidsVillageListRowsFromCurrentPage(page);
     for (const row of currentRows) {
       if (!row.detailUrl || visitedProducts.has(row.detailUrl)) continue;
@@ -1321,15 +1350,54 @@ const collectKidsVillageListRows = async (page: any, targetUrl: string): Promise
 
     if (rows.length >= MAX_IMPORT_ROWS_PER_TARGET) break;
 
-    nextUrl = await page.evaluate(() => {
-      const links = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href*="page="]'));
-      const next = links.find((a) => /다음/.test(a.textContent || ""));
-      if (!next?.href) return null;
-      return new URL(next.href, location.href).toString();
-    });
+    nextUrl = await getNextKidsVillagePageUrlFromCurrentPage(page);
   }
 
   return rows;
+};
+
+const prepareKidsVillageListPage = async (context: any) => {
+  const listPage = await context.newPage();
+  await listPage.route("**/*", async (route: any) => {
+    const type = route.request().resourceType();
+    if (type === "image" || type === "media" || type === "font" || type === "stylesheet") {
+      await route.abort();
+      return;
+    }
+    await route.continue();
+  });
+  return listPage;
+};
+
+const getNextKidsVillagePageUrlFromCurrentPage = async (page: any): Promise<string | null> => {
+  return await page.evaluate(() => {
+    const current = new URL(location.href);
+    const currentPage = Number(current.searchParams.get("page") || "1");
+    const candidates = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href*="page="]'))
+      .map((a) => {
+        try {
+          const url = new URL(a.href, location.href);
+          const pageNo = Number(url.searchParams.get("page") || "");
+          const text = String(a.textContent || "").replace(/\s+/g, " ").trim();
+          return Number.isFinite(pageNo) && pageNo > currentPage
+            ? { href: url.toString(), pageNo, text }
+            : null;
+        } catch {
+          return null;
+        }
+      })
+      .filter((item): item is { href: string; pageNo: number; text: string } => Boolean(item));
+
+    if (candidates.length === 0) {
+      return null;
+    }
+
+    const prioritized = candidates
+      .sort((a, b) => a.pageNo - b.pageNo)
+      .find((item) => /다음|next|페이지|page/i.test(item.text));
+
+    return (prioritized || candidates[0])?.href || null;
+  });
 };
 
 const collectToyboxListRowsFromCurrentPage = async (page: any) => {
@@ -1725,66 +1793,79 @@ const runKidsVillageImportPreview = async (
 ) => {
   const products: DosoImportProduct[] = [];
   const targetResults: DosoImportTargetResult[] = [];
+  const listPage = includeDetails ? null : await prepareKidsVillageListPage(page.context());
 
-  for (const target of targets) {
-    try {
-      await page.goto(target, { waitUntil: "networkidle", timeout: 45000 });
-      const title = (await page.title().catch(() => "")) || "Kids Village";
-      const rows = await collectKidsVillageListRows(page, target);
-      const mapped: DosoImportProduct[] = [];
+  try {
+    for (const target of targets) {
+      try {
+        const activePage = listPage || page;
+        await activePage.goto(target, {
+          waitUntil: includeDetails ? "networkidle" : "domcontentloaded",
+          timeout: 45000,
+        });
+        const title = (await activePage.title().catch(() => "")) || "Kids Village";
+        const rows = await collectKidsVillageListRows(activePage, target, {
+          waitUntil: includeDetails ? "networkidle" : "domcontentloaded",
+        });
+        const mapped: DosoImportProduct[] = [];
 
-      for (let i = 0; i < rows.length; i += 1) {
-        const row = rows[i];
-        const code = extractKidsVillageCodeFromUrl(row.detailUrl, `kidsvillage-${i + 1}`);
-        let titleValue = row.title || code;
-        let description = "";
-        let images: string[] = row.image ? [row.image] : [];
-        let wholesalePriceTWD: number | null | undefined = undefined;
+        for (let i = 0; i < rows.length; i += 1) {
+          const row = rows[i];
+          const code = extractKidsVillageCodeFromUrl(row.detailUrl, `kidsvillage-${i + 1}`);
+          let titleValue = row.title || code;
+          let description = "";
+          let images: string[] = row.image ? [row.image] : [];
+          let wholesalePriceTWD: number | null | undefined = undefined;
 
-        if (includeDetails) {
-          const detail = await scrapeKidsVillageDetail(page, row.detailUrl);
-          titleValue = detail.title || titleValue;
-          description = detail.descriptionHtml || detail.description || "";
-          images = detail.images.length > 0 ? detail.images : images;
-          const priceTwd = detail.price_krw ? Math.round(detail.price_krw * 0.024) : null;
-          wholesalePriceTWD = priceTwd;
+          if (includeDetails) {
+            const detail = await scrapeKidsVillageDetail(page, row.detailUrl);
+            titleValue = detail.title || titleValue;
+            description = detail.descriptionHtml || detail.description || "";
+            images = detail.images.length > 0 ? detail.images : images;
+            const priceTwd = detail.price_krw ? Math.round(detail.price_krw * 0.024) : null;
+            wholesalePriceTWD = priceTwd;
+          }
+
+          mapped.push({
+            productCode: code,
+            title: titleValue,
+            description,
+            url: row.detailUrl,
+            images,
+            wholesalePriceTWD,
+            sourceDirectoryUrl: target,
+            sourceCategoryId: row.sourceCategoryId,
+            sourceCategoryName: row.sourceCategoryName || null,
+          });
         }
 
-        mapped.push({
-          productCode: code,
-          title: titleValue,
-          description,
-          url: row.detailUrl,
-          images,
-          wholesalePriceTWD,
-          sourceDirectoryUrl: target,
-          sourceCategoryId: row.sourceCategoryId,
-          sourceCategoryName: row.sourceCategoryName || null,
+        products.push(...mapped);
+        targetResults.push({ url: target, title, count: mapped.length });
+      } catch (err) {
+        targetResults.push({
+          url: target,
+          title: "Kids Village",
+          count: 0,
+          error: err instanceof Error ? err.message : "Kids Village target import preview failed",
         });
       }
+    }
 
-      products.push(...mapped);
-      targetResults.push({ url: target, title, count: mapped.length });
-    } catch (err) {
-      targetResults.push({
-        url: target,
-        title: "Kids Village",
-        count: 0,
-        error: err instanceof Error ? err.message : "Kids Village target import preview failed",
-      });
+    const dedup = new Map<string, DosoImportProduct>();
+    for (const p of products) {
+      dedup.set(p.productCode, p);
+    }
+
+    return {
+      login_ok: true,
+      products: Array.from(dedup.values()),
+      targets: targetResults,
+    } satisfies DosoImportResponse;
+  } finally {
+    if (listPage) {
+      await listPage.close().catch(() => null);
     }
   }
-
-  const dedup = new Map<string, DosoImportProduct>();
-  for (const p of products) {
-    dedup.set(p.productCode, p);
-  }
-
-  return {
-    login_ok: true,
-    products: Array.from(dedup.values()),
-    targets: targetResults,
-  } satisfies DosoImportResponse;
 };
 
 export async function runDosoProbe(input: {
