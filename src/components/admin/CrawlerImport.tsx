@@ -181,7 +181,7 @@ export default function CrawlerImport() {
     ? Math.max(1, (importSession.total_count || 0) - (importSession.processed_count || 0))
     : 100;
   const currentSessionName = importSession
-    ? `${getTargetLabelByUrl(importSession.target_url)} Session #${importSession.session_id}`
+    ? `${getTargetOptionByUrl(importSession.target_url || "")?.label || "未知來源"} Session #${importSession.session_id}`
     : "-";
 
   useEffect(() => {
