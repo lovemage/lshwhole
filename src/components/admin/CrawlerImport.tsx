@@ -141,6 +141,7 @@ export default function CrawlerImport() {
 
   // Batch image editor
   const [showBatchImageEditor, setShowBatchImageEditor] = useState(false);
+  const [showBatchPublishModal, setShowBatchPublishModal] = useState(false);
   const [showBatchTranslate, setShowBatchTranslate] = useState(false);
   const [batchTranslateTitle, setBatchTranslateTitle] = useState(true);
   const [batchTranslateDescription, setBatchTranslateDescription] = useState(true);
@@ -155,6 +156,7 @@ export default function CrawlerImport() {
   const [probeError, setProbeError] = useState<string | null>(null);
   const [importLoading, setImportLoading] = useState(false);
   const [importLoadingMessage, setImportLoadingMessage] = useState<string>("");
+  const [importLoadingMode, setImportLoadingMode] = useState<"sync" | "import" | null>(null);
   const [currentSyncTargetUrl, setCurrentSyncTargetUrl] = useState("");
   const [importSession, setImportSession] = useState<DosoImportSessionProgress | null>(null);
   const [importSessions, setImportSessions] = useState<DosoImportSessionProgress[]>([]);
@@ -163,6 +165,10 @@ export default function CrawlerImport() {
   const selectedTargetOption = getTargetOptionByUrl(selectedTargetPreset);
   const selectedSource = selectedTargetOption?.source || "doso";
   const selectedSourceLabel = DOSO_SOURCE_OPTIONS.find((x) => x.source === selectedSource)?.label || selectedSource;
+  const manualUrlLabel =
+    selectedSource === "kidsvillage"
+      ? "Kids Village 目標網址 - 貼上頁面抓取 (不支援自動翻頁)"
+      : `${selectedSourceLabel} 目標網址（可貼上）`;
   const l1Categories = categories
     .filter((category) => category.level === 1 && category.active)
     .sort((a, b) => a.sort - b.sort);
@@ -174,6 +180,9 @@ export default function CrawlerImport() {
   const maxBatchSize = importSession
     ? Math.max(1, (importSession.total_count || 0) - (importSession.processed_count || 0))
     : 100;
+  const currentSessionName = importSession
+    ? `${getTargetLabelByUrl(importSession.target_url)} Session #${importSession.session_id}`
+    : "-";
 
   useEffect(() => {
     fetchCategories();
@@ -706,6 +715,16 @@ export default function CrawlerImport() {
     return map[flag] || flag;
   };
 
+  const shouldAbortBatchPublishForError = (codeOrMessage: string | null | undefined) => {
+    const code = String(codeOrMessage || "").trim();
+    return [
+      "unauthorized",
+      "invalid_l1_japan_id",
+      "invalid_l1_override",
+      "invalid_l1_override_hierarchy",
+    ].includes(code);
+  };
+
   const handleDosoImport = async () => {
     const selectedOption = getTargetOptionByUrl(selectedTargetPreset);
     const source = selectedOption?.source || "doso";
@@ -734,6 +753,7 @@ export default function CrawlerImport() {
     }
 
     setImportLoading(true);
+    setImportLoadingMode("sync");
     setProbeError(null);
     setImportLoadingMessage("");
     setCurrentSyncTargetUrl(targetUrl);
@@ -789,6 +809,7 @@ export default function CrawlerImport() {
       setProbeError(err instanceof Error ? err.message : "導入時發生錯誤");
     } finally {
       setImportLoading(false);
+      setImportLoadingMode(null);
       setImportLoadingMessage("");
       setCurrentSyncTargetUrl("");
     }
@@ -801,6 +822,7 @@ export default function CrawlerImport() {
     }
 
     setImportLoading(true);
+    setImportLoadingMode("import");
     setProbeError(null);
     setImportLoadingMessage("");
     setCurrentSyncTargetUrl(importSession.target_url || "");
@@ -844,6 +866,7 @@ export default function CrawlerImport() {
       setProbeError(err instanceof Error ? err.message : "續傳時發生錯誤");
     } finally {
       setImportLoading(false);
+      setImportLoadingMode(null);
       setImportLoadingMessage("");
       setCurrentSyncTargetUrl("");
     }
@@ -1738,19 +1761,22 @@ export default function CrawlerImport() {
     setShowBatchPriceAdjust(true);
   };
 
-  const batchPublish = async () => {
+  const batchPublish = async (skipConfirm = false) => {
     if (selectedCrawlerProducts.size === 0) {
       alert("請先選擇商品");
       return;
     }
 
-    if (!confirm(`確定要上架選中的 ${selectedCrawlerProducts.size} 件商品嗎？`)) return;
+    if (!skipConfirm && !confirm(`確定要上架選中的 ${selectedCrawlerProducts.size} 件商品嗎？`)) return;
+
+    setShowBatchPublishModal(false);
 
     setBatchPublishing(true);
     let successCount = 0;
     let failCount = 0;
     const publishedCodes: string[] = [];
     let mappingMissCount = 0;
+    let abortedReason: string | null = null;
     const reviewQueue: Array<{ payload: any; review: any; productCode: string }> = [];
 
     const toInt = (v: any) =>
@@ -1838,6 +1864,13 @@ export default function CrawlerImport() {
         });
         const previewData = await previewRes.json().catch(() => null);
         if (!previewRes.ok) {
+          const errorCode = previewData?.error || null;
+          setProbeError(mapDosoError(errorCode, `分類預檢失敗 (${previewRes.status})`));
+          if (shouldAbortBatchPublishForError(errorCode)) {
+            abortedReason = mapDosoError(errorCode, "批量上架已中止");
+            failCount++;
+            break;
+          }
           failCount++;
           continue;
         }
@@ -1855,6 +1888,12 @@ export default function CrawlerImport() {
           successCount++;
           publishedCodes.push(String(p.productCode || ""));
         } else {
+          setProbeError(mapDosoError(result.error, "上架失敗"));
+          if (shouldAbortBatchPublishForError(result.error)) {
+            abortedReason = mapDosoError(result.error, "批量上架已中止");
+            failCount++;
+            break;
+          }
           if (result.error === "missing_category_mapping") {
             mappingMissCount++;
           }
@@ -1863,6 +1902,12 @@ export default function CrawlerImport() {
       } catch (err) {
         failCount++;
       }
+    }
+
+    if (abortedReason) {
+      setBatchPublishing(false);
+      alert(`${abortedReason}\n批量上架已停止，請修正後重試。`);
+      return;
     }
 
     if (reviewQueue.length > 0) {
@@ -2086,7 +2131,7 @@ export default function CrawlerImport() {
 
         {selectedTargetOption?.manualUrlPlaceholder && (
           <div>
-            <label className="block text-sm font-medium text-text-primary-light mb-1">{selectedSourceLabel} 目標網址（可貼上）</label>
+            <label className="block text-sm font-medium text-text-primary-light mb-1">{manualUrlLabel}</label>
             <input
               type="text"
               value={manualTargetUrl}
@@ -2164,7 +2209,7 @@ export default function CrawlerImport() {
         </div>
 
         <div className="rounded-lg border border-border-light bg-background-light p-3 space-y-3">
-          <div className="text-sm font-bold text-text-primary-light">Step 2. 導入（依目前選擇 Session）</div>
+          <div className="text-sm font-bold text-text-primary-light">{`Step 2. 導入（當前:${currentSessionName}）`}</div>
           <div className="flex flex-wrap items-center gap-3">
             <div className="inline-flex items-center gap-2 text-xs text-text-secondary-light">
               <span>批次大小</span>
@@ -2277,120 +2322,6 @@ export default function CrawlerImport() {
         </div>
       )}
 
-      {/* 上架前：預設分類與標籤 */}
-      <div className="rounded-xl border border-border-light bg-card-light p-4">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h3 className="text-lg font-bold text-text-primary-light">上架前：預設分類與標籤</h3>
-            <p className="text-xs text-text-secondary-light mt-1">分類由來源自動判定，點擊上架後才會進行分類確認</p>
-          </div>
-        </div>
-        <div className="rounded-lg border border-border-light bg-background-light p-3 text-sm text-text-secondary-light">
-          <div className="font-medium text-text-primary-light">分類模式：來源自動判定</div>
-          <div className="mt-3 grid gap-2 md:grid-cols-[100px_minmax(0,220px)] md:items-center">
-            <label className="text-text-primary-light">L1</label>
-            <select
-              value={publishL1Id ?? ""}
-              onChange={(e) => setPublishL1Id(e.target.value ? Number(e.target.value) : null)}
-              className="rounded border border-border-light bg-white px-3 py-2 text-sm text-text-primary-light"
-            >
-              {l1Categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="mt-2 text-xs">L2/L3 仍由來源分類與目錄推導，若需調整會在上架時進行分類確認。</div>
-        </div>
-        <div className="mt-3">
-          <div className="flex items-center justify-between mb-2">
-            <label className="block text-sm font-medium text-text-primary-light">標籤（可多選）</label>
-            <input 
-              type="text" 
-              placeholder="搜尋標籤..." 
-              value={tagSearchTerm}
-              onChange={(e) => setTagSearchTerm(e.target.value)}
-              className="text-xs px-2 py-1 rounded border border-border-light bg-background-light"
-            />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-h-60 overflow-y-auto border border-border-light rounded-lg p-2 bg-background-light">
-            {/* A1: Brand */}
-            <div>
-              <div className="text-xs font-bold text-text-secondary-light mb-2 sticky top-0 bg-background-light py-1 z-10 border-b border-border-light">品牌分類 (A1)</div>
-              <div className="space-y-1">
-                {tags
-                  .filter(t => (t.category === 'A1') && (t.name.toLowerCase().includes(tagSearchTerm.toLowerCase()) || t.slug.toLowerCase().includes(tagSearchTerm.toLowerCase())))
-                  .sort((a, b) => a.sort - b.sort)
-                  .map(tag => (
-                    <label key={tag.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-card-light cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={selectedCrawlerTags.includes(tag.id)}
-                        onChange={(e) => {
-                          setSelectedCrawlerTags((prev) =>
-                            e.target.checked ? [...prev, tag.id] : prev.filter((id) => id !== tag.id)
-                          );
-                        }}
-                        className="rounded border-gray-300 text-primary focus:ring-primary"
-                      />
-                      <span className="text-sm text-text-primary-light">{tag.name}</span>
-                    </label>
-                  ))}
-              </div>
-            </div>
-            {/* A2: Attributes */}
-            <div>
-              <div className="text-xs font-bold text-text-secondary-light mb-2 sticky top-0 bg-background-light py-1 z-10 border-b border-border-light">商品屬性 (A2)</div>
-              <div className="space-y-1">
-                {tags
-                  .filter(t => (!t.category || t.category === 'A2') && (t.name.toLowerCase().includes(tagSearchTerm.toLowerCase()) || t.slug.toLowerCase().includes(tagSearchTerm.toLowerCase())))
-                  .sort((a, b) => a.sort - b.sort)
-                  .map(tag => (
-                    <label key={tag.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-card-light cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={selectedCrawlerTags.includes(tag.id)}
-                        onChange={(e) => {
-                          setSelectedCrawlerTags((prev) =>
-                            e.target.checked ? [...prev, tag.id] : prev.filter((id) => id !== tag.id)
-                          );
-                        }}
-                        className="rounded border-gray-300 text-primary focus:ring-primary"
-                      />
-                      <span className="text-sm text-text-primary-light">{tag.name}</span>
-                    </label>
-                  ))}
-              </div>
-            </div>
-            {/* A3: Activity */}
-            <div>
-              <div className="text-xs font-bold text-text-secondary-light mb-2 sticky top-0 bg-background-light py-1 z-10 border-b border-border-light">活動分類 (A3)</div>
-              <div className="space-y-1">
-                {tags
-                  .filter(t => (t.category === 'A3') && (t.name.toLowerCase().includes(tagSearchTerm.toLowerCase()) || t.slug.toLowerCase().includes(tagSearchTerm.toLowerCase())))
-                  .sort((a, b) => a.sort - b.sort)
-                  .map(tag => (
-                    <label key={tag.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-card-light cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={selectedCrawlerTags.includes(tag.id)}
-                        onChange={(e) => {
-                          setSelectedCrawlerTags((prev) =>
-                            e.target.checked ? [...prev, tag.id] : prev.filter((id) => id !== tag.id)
-                          );
-                        }}
-                        className="rounded border-gray-300 text-primary focus:ring-primary"
-                      />
-                      <span className="text-sm text-text-primary-light">{tag.name}</span>
-                    </label>
-                  ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
         <input
@@ -2462,7 +2393,7 @@ export default function CrawlerImport() {
                 批量翻譯
               </button>
               <button
-                onClick={batchPublish}
+                onClick={() => setShowBatchPublishModal(true)}
                 disabled={batchPublishing}
                 className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50"
               >
@@ -3014,7 +2945,11 @@ export default function CrawlerImport() {
                 disabled={publishing}
                 className="rounded-lg border border-border-light px-4 py-2 text-sm text-text-primary-light"
               >
-                {isBatchReviewMode ? `接受已選新增（${Math.max(batchReviewSelectedIndices.size, 1)}）` : "接受本次新增"}
+                {publishing
+                  ? "上架中,請稍後..."
+                  : isBatchReviewMode
+                    ? `用預設分類（${Math.max(batchReviewSelectedIndices.size, 1)}）`
+                    : "用預設分類"}
               </button>
               <button
                 type="button"
@@ -3022,7 +2957,11 @@ export default function CrawlerImport() {
                 disabled={publishing}
                 className="rounded-lg bg-primary px-4 py-2 text-sm text-white"
               >
-                {isBatchReviewMode ? `合併到既有分類（${Math.max(batchReviewSelectedIndices.size, 1)}）` : "合併到既有分類"}
+                {publishing
+                  ? "上架中,請稍後..."
+                  : isBatchReviewMode
+                    ? `改成既有分類（${Math.max(batchReviewSelectedIndices.size, 1)}）`
+                    : "改成既有分類"}
               </button>
             </div>
               </div>
@@ -3034,12 +2973,14 @@ export default function CrawlerImport() {
       {(importLoading || batchPublishing || publishing) && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 p-4">
           <div className="w-full max-w-md rounded-xl border border-border-light bg-card-light p-5 text-center space-y-3">
-            <div className="text-lg font-bold text-text-primary-light">處理中, 請勿關閉視窗</div>
+            <div className="text-lg font-bold text-text-primary-light">
+              {importLoadingMode === "sync" ? "同步中, 請勿關閉視窗" : importLoadingMode === "import" ? "導入中, 請勿關閉視窗" : "處理中, 請勿關閉視窗"}
+            </div>
             <div className="text-sm text-text-secondary-light">
               {importLoading
-                ? importLoadingMessage || `正在同步目錄:${currentSyncTargetUrl || importSession?.target_url || dosoTargetUrl.trim() || "-"}`
+                ? importLoadingMessage || (importLoadingMode === "import" ? "正在導入中..." : `正在同步中:${currentSyncTargetUrl || importSession?.target_url || dosoTargetUrl.trim() || "-"}`)
                 : batchPublishing || publishing
-                  ? "正在上架商品，請稍候..."
+                  ? "上架中,請稍後..."
                   : "正在處理中..."}
             </div>
           </div>
@@ -3098,6 +3039,150 @@ export default function CrawlerImport() {
               >
                 {batchTranslating ? "翻譯中..." : "開始翻譯"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showBatchPublishModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-4xl rounded-xl border border-border-light bg-card-light p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-text-primary-light">批量上架前設定</h3>
+              <button
+                type="button"
+                className="text-text-secondary-light"
+                onClick={() => setShowBatchPublishModal(false)}
+                disabled={batchPublishing}
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <div className="rounded-lg border border-border-light bg-background-light p-3 text-sm text-text-secondary-light">
+              <div className="font-medium text-text-primary-light">主分類國家</div>
+              <div className="mt-2 grid gap-2 md:grid-cols-[100px_minmax(0,220px)] md:items-center">
+                <label className="text-text-primary-light">L1</label>
+                <select
+                  value={publishL1Id ?? ""}
+                  onChange={(e) => setPublishL1Id(e.target.value ? Number(e.target.value) : null)}
+                  className="rounded border border-border-light bg-white px-3 py-2 text-sm text-text-primary-light"
+                >
+                  {l1Categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-text-primary-light">標籤（可多選）</label>
+                <input
+                  type="text"
+                  placeholder="搜尋標籤..."
+                  value={tagSearchTerm}
+                  onChange={(e) => setTagSearchTerm(e.target.value)}
+                  className="text-xs px-2 py-1 rounded border border-border-light bg-background-light"
+                />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-h-72 overflow-y-auto border border-border-light rounded-lg p-2 bg-background-light">
+                <div>
+                  <div className="text-xs font-bold text-text-secondary-light mb-2 sticky top-0 bg-background-light py-1 z-10 border-b border-border-light">品牌分類 (A1)</div>
+                  <div className="space-y-1">
+                    {tags
+                      .filter((t) => (t.category === "A1") && (t.name.toLowerCase().includes(tagSearchTerm.toLowerCase()) || t.slug.toLowerCase().includes(tagSearchTerm.toLowerCase())))
+                      .sort((a, b) => a.sort - b.sort)
+                      .map((tag) => (
+                        <label key={tag.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-card-light cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedCrawlerTags.includes(tag.id)}
+                            onChange={(e) => {
+                              setSelectedCrawlerTags((prev) =>
+                                e.target.checked ? [...prev, tag.id] : prev.filter((id) => id !== tag.id)
+                              );
+                            }}
+                            className="rounded border-gray-300 text-primary focus:ring-primary"
+                          />
+                          <span className="text-sm text-text-primary-light">{tag.name}</span>
+                        </label>
+                      ))}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-xs font-bold text-text-secondary-light mb-2 sticky top-0 bg-background-light py-1 z-10 border-b border-border-light">商品屬性 (A2)</div>
+                  <div className="space-y-1">
+                    {tags
+                      .filter((t) => (!t.category || t.category === "A2") && (t.name.toLowerCase().includes(tagSearchTerm.toLowerCase()) || t.slug.toLowerCase().includes(tagSearchTerm.toLowerCase())))
+                      .sort((a, b) => a.sort - b.sort)
+                      .map((tag) => (
+                        <label key={tag.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-card-light cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedCrawlerTags.includes(tag.id)}
+                            onChange={(e) => {
+                              setSelectedCrawlerTags((prev) =>
+                                e.target.checked ? [...prev, tag.id] : prev.filter((id) => id !== tag.id)
+                              );
+                            }}
+                            className="rounded border-gray-300 text-primary focus:ring-primary"
+                          />
+                          <span className="text-sm text-text-primary-light">{tag.name}</span>
+                        </label>
+                      ))}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-xs font-bold text-text-secondary-light mb-2 sticky top-0 bg-background-light py-1 z-10 border-b border-border-light">活動分類 (A3)</div>
+                  <div className="space-y-1">
+                    {tags
+                      .filter((t) => (t.category === "A3") && (t.name.toLowerCase().includes(tagSearchTerm.toLowerCase()) || t.slug.toLowerCase().includes(tagSearchTerm.toLowerCase())))
+                      .sort((a, b) => a.sort - b.sort)
+                      .map((tag) => (
+                        <label key={tag.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-card-light cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedCrawlerTags.includes(tag.id)}
+                            onChange={(e) => {
+                              setSelectedCrawlerTags((prev) =>
+                                e.target.checked ? [...prev, tag.id] : prev.filter((id) => id !== tag.id)
+                              );
+                            }}
+                            className="rounded border-gray-300 text-primary focus:ring-primary"
+                          />
+                          <span className="text-sm text-text-primary-light">{tag.name}</span>
+                        </label>
+                      ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-text-secondary-light">將上架 {selectedCrawlerProducts.size} 件商品</div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowBatchPublishModal(false)}
+                  disabled={batchPublishing}
+                  className="rounded-lg border border-border-light px-4 py-2 text-sm text-text-primary-light"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  onClick={() => batchPublish(true)}
+                  disabled={batchPublishing}
+                  className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {batchPublishing ? "上架中,請稍後..." : `確認上架（${selectedCrawlerProducts.size}）`}
+                </button>
+              </div>
             </div>
           </div>
         </div>
