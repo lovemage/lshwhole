@@ -2038,7 +2038,7 @@ export default function CrawlerImport() {
       <div className="rounded-xl border border-border-light bg-card-light p-4 space-y-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 className="text-lg font-bold text-text-primary-light">DOSO 目錄導入</h3>
+            <h3 className="text-lg font-bold text-text-primary-light">商品同步-導入[多平台]</h3>
           </div>
           <button
             type="button"
