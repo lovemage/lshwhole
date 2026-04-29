@@ -142,6 +142,9 @@ export default function CrawlerImport() {
   // Batch image editor
   const [showBatchImageEditor, setShowBatchImageEditor] = useState(false);
   const [showBatchPublishModal, setShowBatchPublishModal] = useState(false);
+  const [batchCategoryMode, setBatchCategoryMode] = useState<"default" | "merge_existing">("default");
+  const [batchMergeL2Id, setBatchMergeL2Id] = useState<number | null>(null);
+  const [batchMergeL3Id, setBatchMergeL3Id] = useState<number | null>(null);
   const [showBatchTranslate, setShowBatchTranslate] = useState(false);
   const [batchTranslateTitle, setBatchTranslateTitle] = useState(true);
   const [batchTranslateDescription, setBatchTranslateDescription] = useState(true);
@@ -700,6 +703,8 @@ export default function CrawlerImport() {
       missing_category_mapping: "部分商品沒有可用分類映射，請先補齊來源分類對應",
       invalid_l1_override: "指定的 L1 分類無效，請重新選擇",
       invalid_l1_override_hierarchy: "目前選擇的 L1 與來源自動判定分類不相容，請改用分類確認合併",
+      invalid_manual_merge_category: "手動合併的分類無效，請重新選擇 L2/L3",
+      invalid_manual_merge_hierarchy: "手動合併的分類階層不正確，請確認 L1/L2/L3 關係",
       unauthorized: "管理員登入已過期，請重新登入後再試",
     };
     return map[code] || code;
@@ -1761,7 +1766,10 @@ export default function CrawlerImport() {
     setShowBatchPriceAdjust(true);
   };
 
-  const batchPublish = async (skipConfirm = false) => {
+  const batchPublish = async (
+    skipConfirm = false,
+    manualMergeCategoryIds?: number[] | null
+  ) => {
     if (selectedCrawlerProducts.size === 0) {
       alert("請先選擇商品");
       return;
@@ -1776,8 +1784,8 @@ export default function CrawlerImport() {
     let failCount = 0;
     const publishedCodes: string[] = [];
     let mappingMissCount = 0;
+    let reviewRequiredCount = 0;
     let abortedReason: string | null = null;
-    const reviewQueue: Array<{ payload: any; review: any; productCode: string }> = [];
 
     const toInt = (v: any) =>
       v === null || v === undefined || v === "" ? null : Math.floor(Number(v));
@@ -1874,16 +1882,16 @@ export default function CrawlerImport() {
           failCount++;
           continue;
         }
-        if (previewData?.category_review?.needs_review) {
-          reviewQueue.push({
-            payload,
-            review: previewData.category_review,
-            productCode: String(p.productCode || ""),
-          });
-          continue;
+        const needsReview = Boolean(previewData?.category_review?.needs_review);
+        if (needsReview) {
+          reviewRequiredCount += 1;
         }
 
-        const result = await requestPublishConfirm(payload, null, accessToken);
+        const result = await requestPublishConfirm(
+          payload,
+          needsReview ? (manualMergeCategoryIds || null) : null,
+          accessToken
+        );
         if (result.ok) {
           successCount++;
           publishedCodes.push(String(p.productCode || ""));
@@ -1910,25 +1918,8 @@ export default function CrawlerImport() {
       return;
     }
 
-    if (reviewQueue.length > 0) {
-      setIsBatchReviewMode(true);
-      setBatchReviewQueue(reviewQueue);
-      setBatchReviewIndex(0);
-      setBatchReviewStats({ successCount, failCount, mappingMissCount });
-      setBatchPublishedCodes(publishedCodes);
-      setBatchReviewHandledIndices(new Set());
-      setBatchReviewSelectedIndices(new Set([0]));
-      setPendingPublishPayload(reviewQueue[0].payload);
-      setPendingCategoryReview(reviewQueue[0].review);
-      setMergeL2Id(null);
-      setMergeL3Id(null);
-      setShowCategoryReview(true);
-      setBatchPublishing(false);
-      return;
-    }
-
     setBatchPublishing(false);
-    finalizeBatchPublish(successCount, failCount, mappingMissCount, 0, publishedCodes);
+    finalizeBatchPublish(successCount, failCount, mappingMissCount, reviewRequiredCount, publishedCodes);
   };
 
   const removeCrawlerItem = (filteredIdx: number) => {
@@ -2393,7 +2384,12 @@ export default function CrawlerImport() {
                 批量翻譯
               </button>
               <button
-                onClick={() => setShowBatchPublishModal(true)}
+                onClick={() => {
+                  setBatchCategoryMode("default");
+                  setBatchMergeL2Id(null);
+                  setBatchMergeL3Id(null);
+                  setShowBatchPublishModal(true);
+                }}
                 disabled={batchPublishing}
                 className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50"
               >
@@ -2890,7 +2886,7 @@ export default function CrawlerImport() {
             </div>
 
             <div className="rounded border border-border-light p-3 space-y-3">
-              <div className="text-sm font-medium text-text-primary-light">改為合併到既有分類（本次）</div>
+              <div className="text-sm font-medium text-text-primary-light">改為合併到自定義分類（本次）</div>
               <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                 <div>
                   <label className="text-xs text-text-secondary-light">L2</label>
@@ -2948,8 +2944,8 @@ export default function CrawlerImport() {
                 {publishing
                   ? "上架中,請稍後..."
                   : isBatchReviewMode
-                    ? `用預設分類（${Math.max(batchReviewSelectedIndices.size, 1)}）`
-                    : "用預設分類"}
+                    ? `用自動分類（${Math.max(batchReviewSelectedIndices.size, 1)}）`
+                    : "用自動分類"}
               </button>
               <button
                 type="button"
@@ -2960,8 +2956,8 @@ export default function CrawlerImport() {
                 {publishing
                   ? "上架中,請稍後..."
                   : isBatchReviewMode
-                    ? `改成既有分類（${Math.max(batchReviewSelectedIndices.size, 1)}）`
-                    : "改成既有分類"}
+                    ? `改成自定義分類（${Math.max(batchReviewSelectedIndices.size, 1)}）`
+                    : "改成自定義分類"}
               </button>
             </div>
               </div>
@@ -3077,6 +3073,76 @@ export default function CrawlerImport() {
               </div>
             </div>
 
+            <div className="rounded-lg border border-border-light bg-background-light p-3 text-sm text-text-secondary-light space-y-3">
+              <div className="font-medium text-text-primary-light">分類策略</div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="batch-category-mode"
+                  checked={batchCategoryMode === "default"}
+                  onChange={() => setBatchCategoryMode("default")}
+                />
+                <span>用自動分類（自動判定）</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="batch-category-mode"
+                  checked={batchCategoryMode === "merge_existing"}
+                  onChange={() => setBatchCategoryMode("merge_existing")}
+                />
+                <span>合併到自定義分類（手動選 L2/L3）</span>
+              </label>
+
+              {batchCategoryMode === "merge_existing" && (
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                  <div>
+                    <label className="text-xs text-text-secondary-light">L2</label>
+                    <select
+                      value={batchMergeL2Id ?? ""}
+                      onChange={(e) => {
+                        setBatchMergeL2Id(e.target.value ? Number(e.target.value) : null);
+                        setBatchMergeL3Id(null);
+                      }}
+                      className="mt-1 w-full rounded border border-border-light bg-white px-2 py-2 text-sm text-text-primary-light"
+                    >
+                      <option value="">請選擇 L2</option>
+                      {categories
+                        .filter((c) => c.level === 2)
+                        .filter((l2) =>
+                          categoryRelations.some(
+                            (r: any) =>
+                              r.parent_category_id === Number(publishL1Id || 0) &&
+                              r.child_category_id === l2.id
+                          )
+                        )
+                        .sort((a, b) => a.sort - b.sort)
+                        .map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-text-secondary-light">L3（可選）</label>
+                    <select
+                      value={batchMergeL3Id ?? ""}
+                      onChange={(e) => setBatchMergeL3Id(e.target.value ? Number(e.target.value) : null)}
+                      className="mt-1 w-full rounded border border-border-light bg-white px-2 py-2 text-sm text-text-primary-light"
+                    >
+                      <option value="">不指定</option>
+                      {categories
+                        .filter((c) => c.level === 3)
+                        .filter((l3) => !batchMergeL2Id || categoryRelations.some((r: any) => r.parent_category_id === batchMergeL2Id && r.child_category_id === l3.id))
+                        .sort((a, b) => a.sort - b.sort)
+                        .map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-sm font-medium text-text-primary-light">標籤（可多選）</label>
@@ -3176,7 +3242,17 @@ export default function CrawlerImport() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => batchPublish(true)}
+                  onClick={() => {
+                    if (batchCategoryMode === "merge_existing" && !batchMergeL2Id) {
+                      alert("請先選擇要合併的 L2 分類");
+                      return;
+                    }
+                    const manualMergeCategoryIds =
+                      batchCategoryMode === "merge_existing" && publishL1Id && batchMergeL2Id
+                        ? [publishL1Id, batchMergeL2Id, batchMergeL3Id || null].filter(Boolean) as number[]
+                        : null;
+                    batchPublish(true, manualMergeCategoryIds);
+                  }}
                   disabled={batchPublishing}
                   className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50"
                 >

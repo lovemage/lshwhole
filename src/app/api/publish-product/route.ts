@@ -267,7 +267,8 @@ export async function POST(request: NextRequest) {
     }
 
     if (manualMergeCategoryIds.length > 0) {
-      const expectedL1Id = categoryL1IdOverride || Number(mappingConfig.l1_japan_id) || null;
+      // 手動合併以使用者在彈窗的選擇為主；僅在明確指定覆蓋 L1 時才強制同一個 L1。
+      const expectedL1Id = categoryL1IdOverride || null;
       const mergeValidation = await validateManualMergeCategoryIds(
         admin,
         manualMergeCategoryIds,
