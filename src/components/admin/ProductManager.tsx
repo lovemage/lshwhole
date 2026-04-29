@@ -21,6 +21,7 @@ interface Product {
   cover_image_url?: string | null;
   status: string;
   tags?: { id: number; name: string; category?: string }[];
+  category_ids?: number[];
 }
 
 interface Category {
@@ -45,7 +46,7 @@ export default function ProductManager() {
   const [productSearch, setProductSearch] = useState("");
   const [productPage, setProductPage] = useState(0);
   const [productTotal, setProductTotal] = useState(0);
-  const pageSize = 20;
+  const pageSize = 40;
   const [selectedProductIds, setSelectedProductIds] = useState<number[]>([]);
   const [bulkDeleteDays, setBulkDeleteDays] = useState(60);
   const [bulkDeleteMode, setBulkDeleteMode] = useState<"or" | "and">("or");
@@ -1040,6 +1041,15 @@ export default function ProductManager() {
               products.map((product) => {
                 const brandTag = product.tags?.find((t) => t.category === 'A1');
                 const otherTags = product.tags?.filter((t) => t.category !== 'A1').slice(0, 2) || [];
+                const categoryMap = new Map(
+                  categories.map((c) => [c.id, c] as const)
+                );
+                const productCategories = (product.category_ids || [])
+                  .map((id) => categoryMap.get(id))
+                  .filter(Boolean) as Category[];
+                const l1Name = productCategories.find((c) => c.level === 1)?.name || "-";
+                const l2Name = productCategories.find((c) => c.level === 2)?.name || "-";
+                const l3Name = productCategories.find((c) => c.level === 3)?.name || "-";
                 return (
                   <tr key={product.id} className="border-b border-border-light hover:bg-background-light">
                     <td className="px-4 py-3 text-sm"><input type="checkbox" checked={selectedProductIds.includes(product.id)} onChange={() => toggleSelectOne(product.id)} /></td>
@@ -1055,6 +1065,9 @@ export default function ProductManager() {
                     <td className="px-4 py-3 text-sm text-text-primary-light">{product.sku}</td>
                     <td className="px-4 py-3 text-sm text-text-primary-light max-w-[200px]">
                       <div className="line-clamp-2">{product.title_zh || product.title_original || '-'}</div>
+                      <div className="mt-1 text-xs text-text-secondary-light">
+                        {`L1: ${l1Name} / L2: ${l2Name} / L3: ${l3Name}`}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-sm">
                       <div className="flex flex-col gap-1">
@@ -1728,7 +1741,7 @@ export default function ProductManager() {
       {productTotal > pageSize && (
         <div className="flex items-center justify-between">
           <p className="text-sm text-text-secondary-light">
-            共 {productTotal} 件商品，第 {productPage + 1} 頁
+            共 {productTotal} 件商品，目前第 {productPage + 1} 頁 / 共 {Math.max(1, Math.ceil(productTotal / pageSize))} 頁
           </p>
           <div className="flex gap-2">
             <button
