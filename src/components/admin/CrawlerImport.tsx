@@ -142,9 +142,17 @@ export default function CrawlerImport() {
   // Batch image editor
   const [showBatchImageEditor, setShowBatchImageEditor] = useState(false);
   const [showBatchPublishModal, setShowBatchPublishModal] = useState(false);
-  const [batchCategoryMode, setBatchCategoryMode] = useState<"default" | "merge_existing">("default");
+  const [batchCategoryMode, setBatchCategoryMode] = useState<"auto" | "merge_existing">("merge_existing");
   const [batchMergeL2Id, setBatchMergeL2Id] = useState<number | null>(null);
   const [batchMergeL3Id, setBatchMergeL3Id] = useState<number | null>(null);
+  const [batchPublishProgress, setBatchPublishProgress] = useState({
+    current: 0,
+    total: 0,
+    success: 0,
+    fail: 0,
+    currentSku: "",
+  });
+  const [batchPublishFailures, setBatchPublishFailures] = useState<Array<{ sku: string; reason: string }>>([]);
   const [showBatchTranslate, setShowBatchTranslate] = useState(false);
   const [batchTranslateTitle, setBatchTranslateTitle] = useState(true);
   const [batchTranslateDescription, setBatchTranslateDescription] = useState(true);
@@ -1780,6 +1788,16 @@ export default function CrawlerImport() {
     setShowBatchPublishModal(false);
 
     setBatchPublishing(true);
+    setBatchPublishFailures([]);
+    const selectedIndexes = Array.from(selectedCrawlerProducts);
+    setBatchPublishProgress({
+      current: 0,
+      total: selectedIndexes.length,
+      success: 0,
+      fail: 0,
+      currentSku: "",
+    });
+    const useManualMergeForAll = Array.isArray(manualMergeCategoryIds) && manualMergeCategoryIds.length >= 2;
     let successCount = 0;
     let failCount = 0;
     const publishedCodes: string[] = [];
@@ -1797,9 +1815,15 @@ export default function CrawlerImport() {
       return;
     }
 
-    for (const idx of Array.from(selectedCrawlerProducts)) {
+    for (const [loopIndex, idx] of selectedIndexes.entries()) {
       const p = crawlerFiltered[idx];
       if (!p) continue;
+      const currentSku = String(p.productCode || "");
+      setBatchPublishProgress((prev) => ({
+        ...prev,
+        current: loopIndex + 1,
+        currentSku,
+      }));
 
       // Calculate prices
       let cost = getPriceTWD(p);
@@ -1853,6 +1877,33 @@ export default function CrawlerImport() {
       };
 
       try {
+        if (useManualMergeForAll) {
+          const result = await requestPublishConfirm(payload, manualMergeCategoryIds || null, accessToken);
+          if (result.ok) {
+            successCount++;
+            publishedCodes.push(String(p.productCode || ""));
+            setBatchPublishProgress((prev) => ({ ...prev, success: successCount }));
+          } else {
+            setProbeError(mapDosoError(result.error, "上架失敗"));
+            setBatchPublishFailures((prev) => [
+              ...prev,
+              { sku: currentSku, reason: mapDosoError(result.error, "上架失敗") },
+            ]);
+            if (shouldAbortBatchPublishForError(result.error)) {
+              abortedReason = mapDosoError(result.error, "批量上架已中止");
+              failCount++;
+              setBatchPublishProgress((prev) => ({ ...prev, fail: failCount }));
+              break;
+            }
+            if (result.error === "missing_category_mapping") {
+              mappingMissCount++;
+            }
+            failCount++;
+            setBatchPublishProgress((prev) => ({ ...prev, fail: failCount }));
+          }
+          continue;
+        }
+
         const previewRes = await fetch("/api/publish-product", {
           method: "POST",
           headers: {
@@ -1874,12 +1925,18 @@ export default function CrawlerImport() {
         if (!previewRes.ok) {
           const errorCode = previewData?.error || null;
           setProbeError(mapDosoError(errorCode, `分類預檢失敗 (${previewRes.status})`));
+          setBatchPublishFailures((prev) => [
+            ...prev,
+            { sku: currentSku, reason: mapDosoError(errorCode, `分類預檢失敗 (${previewRes.status})`) },
+          ]);
           if (shouldAbortBatchPublishForError(errorCode)) {
             abortedReason = mapDosoError(errorCode, "批量上架已中止");
             failCount++;
+            setBatchPublishProgress((prev) => ({ ...prev, fail: failCount }));
             break;
           }
           failCount++;
+          setBatchPublishProgress((prev) => ({ ...prev, fail: failCount }));
           continue;
         }
         const needsReview = Boolean(previewData?.category_review?.needs_review);
@@ -1895,20 +1952,32 @@ export default function CrawlerImport() {
         if (result.ok) {
           successCount++;
           publishedCodes.push(String(p.productCode || ""));
+          setBatchPublishProgress((prev) => ({ ...prev, success: successCount }));
         } else {
           setProbeError(mapDosoError(result.error, "上架失敗"));
+          setBatchPublishFailures((prev) => [
+            ...prev,
+            { sku: currentSku, reason: mapDosoError(result.error, "上架失敗") },
+          ]);
           if (shouldAbortBatchPublishForError(result.error)) {
             abortedReason = mapDosoError(result.error, "批量上架已中止");
             failCount++;
+            setBatchPublishProgress((prev) => ({ ...prev, fail: failCount }));
             break;
           }
           if (result.error === "missing_category_mapping") {
             mappingMissCount++;
           }
           failCount++;
+          setBatchPublishProgress((prev) => ({ ...prev, fail: failCount }));
         }
       } catch (err) {
         failCount++;
+        setBatchPublishFailures((prev) => [
+          ...prev,
+          { sku: currentSku, reason: "請求失敗或逾時" },
+        ]);
+        setBatchPublishProgress((prev) => ({ ...prev, fail: failCount }));
       }
     }
 
@@ -2385,7 +2454,7 @@ export default function CrawlerImport() {
               </button>
               <button
                 onClick={() => {
-                  setBatchCategoryMode("default");
+                  setBatchCategoryMode("merge_existing");
                   setBatchMergeL2Id(null);
                   setBatchMergeL3Id(null);
                   setShowBatchPublishModal(true);
@@ -3074,16 +3143,7 @@ export default function CrawlerImport() {
             </div>
 
             <div className="rounded-lg border border-border-light bg-background-light p-3 text-sm text-text-secondary-light space-y-3">
-              <div className="font-medium text-text-primary-light">分類策略</div>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="batch-category-mode"
-                  checked={batchCategoryMode === "default"}
-                  onChange={() => setBatchCategoryMode("default")}
-                />
-                <span>用自動分類（自動判定）</span>
-              </label>
+              <div className="font-medium text-text-primary-light">分類策略（預設）</div>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="radio"
@@ -3091,7 +3151,16 @@ export default function CrawlerImport() {
                   checked={batchCategoryMode === "merge_existing"}
                   onChange={() => setBatchCategoryMode("merge_existing")}
                 />
-                <span>合併到自定義分類（手動選 L2/L3）</span>
+                <span>預設：合併到自定義分類（手動選 L2/L3）</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="batch-category-mode"
+                  checked={batchCategoryMode === "auto"}
+                  onChange={() => setBatchCategoryMode("auto")}
+                />
+                <span>自動分類（依來源自動判定）</span>
               </label>
 
               {batchCategoryMode === "merge_existing" && (
@@ -3244,7 +3313,7 @@ export default function CrawlerImport() {
                   type="button"
                   onClick={() => {
                     if (batchCategoryMode === "merge_existing" && !batchMergeL2Id) {
-                      alert("請先選擇要合併的 L2 分類");
+                      alert("請先選擇 L2 分類（L3 可不選）");
                       return;
                     }
                     const manualMergeCategoryIds =
@@ -3259,6 +3328,47 @@ export default function CrawlerImport() {
                   {batchPublishing ? "上架中,請稍後..." : `確認上架（${selectedCrawlerProducts.size}）`}
                 </button>
               </div>
+            </div>
+
+            {batchPublishFailures.length > 0 && (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+                <div className="text-sm font-medium text-red-700">失敗明細（最近 20 筆）</div>
+                <div className="mt-2 max-h-44 overflow-y-auto text-xs text-red-700 space-y-1">
+                  {batchPublishFailures.slice(-20).map((item, idx) => (
+                    <div key={`${item.sku}-${idx}`}>
+                      SKU {item.sku || "-"}：{item.reason}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {batchPublishing && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 p-4">
+          <div className="w-full max-w-md rounded-xl border border-border-light bg-card-light p-5 space-y-3">
+            <div className="text-base font-bold text-text-primary-light">批量上架中，請稍後…</div>
+            <div className="text-sm text-text-secondary-light">
+              進度：{batchPublishProgress.current} / {batchPublishProgress.total}
+            </div>
+            <div className="h-2 rounded bg-border-light overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all"
+                style={{
+                  width:
+                    batchPublishProgress.total > 0
+                      ? `${Math.min(100, Math.round((batchPublishProgress.current / batchPublishProgress.total) * 100))}%`
+                      : "0%",
+                }}
+              />
+            </div>
+            <div className="text-xs text-text-secondary-light">
+              目前 SKU：{batchPublishProgress.currentSku || "-"}
+            </div>
+            <div className="text-xs text-text-secondary-light">
+              成功：{batchPublishProgress.success}，失敗：{batchPublishProgress.fail}
             </div>
           </div>
         </div>
