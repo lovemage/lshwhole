@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
 
     let query = admin
       .from("products")
-      .select("id, sku, title_zh, title_original, desc_zh, desc_original, retail_price_twd, wholesale_price_twd, cost_twd, status, created_at, product_images(url, sort), product_tag_map(tag_id, tags(id, name, slug, category, sort))", { count: "exact" })
+      .select("id, sku, title_zh, title_original, desc_zh, desc_original, retail_price_twd, wholesale_price_twd, cost_twd, status, created_at, product_images(url, sort), product_tag_map(tag_id, tags(id, name, slug, category, sort)), product_category_map(category_id)", { count: "exact" })
       .order("created_at", { ascending: false })
       .range(Number(offset), Number(offset) + Number(limit) - 1);
 
@@ -51,6 +51,27 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
+    // 穩定取分類關聯：避免某些環境下 nested relation 取不到 product_category_map
+    const productIds = (data || []).map((p: any) => Number(p.id)).filter((n: number) => Number.isInteger(n) && n > 0);
+    let categoryIdMap = new Map<number, number[]>();
+    if (productIds.length > 0) {
+      const { data: categoryRows, error: categoryMapError } = await admin
+        .from("product_category_map")
+        .select("product_id, category_id")
+        .in("product_id", productIds);
+      if (categoryMapError) {
+        return NextResponse.json({ error: categoryMapError.message }, { status: 400 });
+      }
+      for (const row of categoryRows || []) {
+        const productId = Number((row as any).product_id);
+        const categoryId = Number((row as any).category_id);
+        if (!Number.isInteger(productId) || !Number.isInteger(categoryId) || categoryId <= 0) continue;
+        const existing = categoryIdMap.get(productId) || [];
+        existing.push(categoryId);
+        categoryIdMap.set(productId, existing);
+      }
+    }
+
     // Process data to add cover_image_url and tags
     const processedData = (data || []).map((p: any) => {
       let coverImage = null;
@@ -69,8 +90,17 @@ export async function GET(request: NextRequest) {
         ...p,
         cover_image_url: coverImage,
         tags: tags,
+        category_ids: Array.from(
+          new Set([
+            ...((p.product_category_map || [])
+              .map((pc: any) => Number(pc.category_id))
+              .filter((n: number) => Number.isInteger(n) && n > 0)),
+            ...(categoryIdMap.get(Number(p.id)) || []),
+          ])
+        ),
         product_images: undefined, // Remove raw images array
-        product_tag_map: undefined // Remove raw tag map
+        product_tag_map: undefined, // Remove raw tag map
+        product_category_map: undefined, // Remove raw category map
       };
     });
 
