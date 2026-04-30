@@ -52,10 +52,12 @@ export default function ProductManager() {
   const [bulkDeleteMode, setBulkDeleteMode] = useState<"or" | "and">("or");
   const [bulkDeleteL1Id, setBulkDeleteL1Id] = useState<number | null>(null);
   const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
+  const [showOldProductDeletePanel, setShowOldProductDeletePanel] = useState(false);
   const [bulkCategoryL1Id, setBulkCategoryL1Id] = useState<number | null>(null);
   const [bulkCategoryL2Id, setBulkCategoryL2Id] = useState<number | null>(null);
   const [bulkCategoryL3Id, setBulkCategoryL3Id] = useState<number | null>(null);
   const [bulkCategoryLoading, setBulkCategoryLoading] = useState(false);
+  const [showBulkCategoryPanel, setShowBulkCategoryPanel] = useState(false);
   const [bulkSpecTemplateId, setBulkSpecTemplateId] = useState<string>("");
   const [bulkSpecTemplateLoading, setBulkSpecTemplateLoading] = useState(false);
   const [bulkRemoveTagId, setBulkRemoveTagId] = useState<number | null>(null);
@@ -963,8 +965,15 @@ export default function ProductManager() {
         </div>
 
         <div className="border-t border-border-light pt-4">
-          <div className="mb-2 text-xs font-semibold text-text-secondary-light">批量更新分類</div>
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <button
+            type="button"
+            onClick={() => setShowBulkCategoryPanel((v) => !v)}
+            className="mb-2 flex w-full items-center justify-between rounded-lg border border-border-light bg-background-light px-3 py-2 text-left"
+          >
+            <span className="text-xs font-semibold text-text-secondary-light">批量更新分類</span>
+            <span className="text-xs text-text-secondary-light">{showBulkCategoryPanel ? "收合" : "展開"}</span>
+          </button>
+          {showBulkCategoryPanel && <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 flex-1">
               <div>
                 <label className="text-xs text-text-secondary-light">L1</label>
@@ -1042,7 +1051,7 @@ export default function ProductManager() {
             >
               {bulkCategoryLoading ? "更新中..." : "批量更新分類"}
             </button>
-          </div>
+          </div>}
         </div>
 
         <div className="border-t border-border-light pt-4">
@@ -1117,8 +1126,15 @@ export default function ProductManager() {
         </div>
 
         <div className="border-t border-danger/20 pt-4">
-          <div className="mb-2 text-xs font-semibold text-danger">條件硬刪除（危險操作）</div>
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <button
+            type="button"
+            onClick={() => setShowOldProductDeletePanel((v) => !v)}
+            className="mb-2 flex w-full items-center justify-between rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-left"
+          >
+            <span className="text-xs font-semibold text-danger">舊商品刪除設置</span>
+            <span className="text-xs text-danger">{showOldProductDeletePanel ? "收合" : "展開"}</span>
+          </button>
+          {showOldProductDeletePanel && <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 flex-1">
               <div>
                 <label className="text-xs text-text-secondary-light">超過 X 天（created_at）</label>
@@ -1168,7 +1184,7 @@ export default function ProductManager() {
             >
               {bulkDeleteLoading ? "刪除中..." : "條件硬刪除"}
             </button>
-          </div>
+          </div>}
         </div>
       </div>
 
