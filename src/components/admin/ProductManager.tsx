@@ -957,19 +957,19 @@ export default function ProductManager() {
         />
         <button
           onClick={() => fetchProducts(0, selectedProductL1)}
-          className="px-4 py-2 rounded-lg bg-primary text-white font-medium hover:bg-primary/90"
+          className="px-4 py-2 rounded-lg bg-amber-500 text-white font-medium hover:bg-amber-600"
         >
           搜尋
         </button>
         <button
           onClick={openAddProduct}
-          className="px-4 py-2 rounded-lg bg-success text-white font-medium hover:bg-success/90"
+          className="px-4 py-2 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-700"
         >
           新增商品
         </button>
-        <button onClick={() => batchUpdateStatus('published')} className="px-3 py-2 rounded-lg border border-border-light text-sm hover:bg-background-light">批量上架</button>
-        <button onClick={() => batchUpdateStatus('draft')} className="px-3 py-2 rounded-lg border border-border-light text-sm hover:bg-background-light">批量下架</button>
-        <button onClick={batchDelete} className="px-3 py-2 rounded-lg border border-danger text-danger text-sm hover:bg-danger/10">批量刪除</button>
+        <button onClick={() => batchUpdateStatus('published')} className="px-3 py-2 rounded-lg bg-emerald-600 text-white text-sm hover:bg-emerald-700">批量上架</button>
+        <button onClick={() => batchUpdateStatus('draft')} className="px-3 py-2 rounded-lg bg-amber-500 text-white text-sm hover:bg-amber-600">批量下架</button>
+        <button onClick={batchDelete} className="px-3 py-2 rounded-lg bg-amber-500 text-white text-sm hover:bg-amber-600">批量刪除</button>
       </div>
 
       {/* 工具列：批量操作（集中） */}
@@ -981,7 +981,7 @@ export default function ProductManager() {
               <button
                 type="button"
                 onClick={() => setSelectedProductIds([])}
-                className="ml-2 text-xs text-danger hover:underline"
+                className="ml-2 rounded-md bg-amber-500 px-2 py-1 text-xs text-white hover:bg-amber-600"
               >
                 - 移除
               </button>
@@ -993,10 +993,10 @@ export default function ProductManager() {
           <button
             type="button"
             onClick={() => setShowBulkCategoryPanel((v) => !v)}
-            className="mb-2 flex w-full items-center justify-between rounded-lg border border-border-light bg-background-light px-3 py-2 text-left"
+            className="mb-2 flex w-full items-center justify-between rounded-lg bg-amber-500 px-3 py-2 text-left text-white hover:bg-amber-600"
           >
-            <span className="text-xs font-semibold text-text-secondary-light">批量更新分類</span>
-            <span className="text-xs text-text-secondary-light">{showBulkCategoryPanel ? "收合" : "展開"}</span>
+            <span className="text-xs font-semibold">批量更新分類</span>
+            <span className="text-xs">{showBulkCategoryPanel ? "收合" : "展開"}</span>
           </button>
           {showBulkCategoryPanel && <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 flex-1">
@@ -1072,7 +1072,7 @@ export default function ProductManager() {
             <button
               onClick={batchUpdateCategory}
               disabled={bulkCategoryLoading}
-              className="rounded-lg border border-primary bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {bulkCategoryLoading ? "更新中..." : "批量更新分類"}
             </button>
@@ -1101,7 +1101,7 @@ export default function ProductManager() {
             <button
               onClick={batchApplySpecTemplate}
               disabled={bulkSpecTemplateLoading}
-              className="rounded-lg border border-primary bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {bulkSpecTemplateLoading ? "套用中..." : "批量套用規格"}
             </button>
@@ -1114,7 +1114,7 @@ export default function ProductManager() {
             <button
               type="button"
               onClick={() => setShowBulkTagEditor((v) => !v)}
-              className="rounded-lg border border-border-light px-3 py-2 text-sm hover:bg-background-light"
+              className="rounded-lg bg-amber-500 px-3 py-2 text-sm text-white hover:bg-amber-600"
             >
               編輯標籤
             </button>
@@ -1158,14 +1158,14 @@ export default function ProductManager() {
                   <button
                     onClick={batchApplyTag}
                     disabled={bulkTagActionLoading}
-                    className="rounded-lg border border-primary bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {bulkTagActionLoading ? "處理中..." : "儲存（全部套用）"}
                   </button>
                   <button
                     onClick={batchRemoveTag}
                     disabled={bulkTagActionLoading}
-                    className="rounded-lg border border-danger px-4 py-2 text-sm font-medium text-danger hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {bulkTagActionLoading ? "處理中..." : "移除標籤"}
                   </button>
@@ -1179,10 +1179,10 @@ export default function ProductManager() {
           <button
             type="button"
             onClick={() => setShowOldProductDeletePanel((v) => !v)}
-            className="mb-2 flex w-full items-center justify-between rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-left"
+            className="mb-2 flex w-full items-center justify-between rounded-lg bg-amber-500 px-3 py-2 text-left text-white hover:bg-amber-600"
           >
-            <span className="text-xs font-semibold text-danger">舊商品刪除設置</span>
-            <span className="text-xs text-danger">{showOldProductDeletePanel ? "收合" : "展開"}</span>
+            <span className="text-xs font-semibold">舊商品刪除設置</span>
+            <span className="text-xs">{showOldProductDeletePanel ? "收合" : "展開"}</span>
           </button>
           {showOldProductDeletePanel && <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 flex-1">
@@ -1230,7 +1230,7 @@ export default function ProductManager() {
             <button
               onClick={conditionalHardDelete}
               disabled={bulkDeleteLoading}
-              className="rounded-lg border border-danger bg-danger px-4 py-2 text-sm font-medium text-white hover:bg-danger/90 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {bulkDeleteLoading ? "刪除中..." : "條件硬刪除"}
             </button>
