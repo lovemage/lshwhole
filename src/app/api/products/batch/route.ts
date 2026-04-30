@@ -155,6 +155,73 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
+    if (action === "add_brand") {
+      const brandTagId = Number(tag_id);
+      if (!Number.isInteger(brandTagId) || brandTagId <= 0) {
+        return NextResponse.json({ error: "缺少有效 tag_id" }, { status: 400 });
+      }
+
+      const { data: selectedTag, error: selectedTagErr } = await admin
+        .from("tags")
+        .select("id,category")
+        .eq("id", brandTagId)
+        .maybeSingle<{ id: number; category: string | null }>();
+
+      if (selectedTagErr) {
+        return NextResponse.json({ error: selectedTagErr.message }, { status: 400 });
+      }
+      if (!selectedTag || selectedTag.category !== "A1") {
+        return NextResponse.json({ error: "指定標籤不是品牌標籤" }, { status: 400 });
+      }
+
+      const { data: brandTags, error: brandTagErr } = await admin
+        .from("tags")
+        .select("id")
+        .eq("category", "A1");
+      if (brandTagErr) {
+        return NextResponse.json({ error: brandTagErr.message }, { status: 400 });
+      }
+
+      const brandTagIds = (brandTags || []).map((t: { id: number }) => t.id);
+      if (brandTagIds.length > 0) {
+        const { error: delError } = await admin
+          .from("product_tag_map")
+          .delete()
+          .in("product_id", ids)
+          .in("tag_id", brandTagIds);
+        if (delError) {
+          return NextResponse.json({ error: delError.message }, { status: 400 });
+        }
+      }
+
+      const rows = ids.map((productId: number) => ({ product_id: productId, tag_id: brandTagId }));
+      const { error: insertErr } = await admin
+        .from("product_tag_map")
+        .upsert(rows, { onConflict: "product_id,tag_id", ignoreDuplicates: true });
+      if (insertErr) {
+        return NextResponse.json({ error: insertErr.message }, { status: 400 });
+      }
+
+      return NextResponse.json({ success: true });
+    }
+
+    if (action === "add_tag") {
+      const targetTagId = Number(tag_id);
+      if (!Number.isInteger(targetTagId) || targetTagId <= 0) {
+        return NextResponse.json({ error: "缺少有效 tag_id" }, { status: 400 });
+      }
+
+      const rows = ids.map((productId: number) => ({ product_id: productId, tag_id: targetTagId }));
+      const { error: insertErr } = await admin
+        .from("product_tag_map")
+        .upsert(rows, { onConflict: "product_id,tag_id", ignoreDuplicates: true });
+      if (insertErr) {
+        return NextResponse.json({ error: insertErr.message }, { status: 400 });
+      }
+
+      return NextResponse.json({ success: true });
+    }
+
     if (action === "apply_spec_template") {
       const templateId = String(spec_template_id || "").trim();
       if (!templateId) {

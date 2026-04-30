@@ -60,8 +60,10 @@ export default function ProductManager() {
   const [showBulkCategoryPanel, setShowBulkCategoryPanel] = useState(false);
   const [bulkSpecTemplateId, setBulkSpecTemplateId] = useState<string>("");
   const [bulkSpecTemplateLoading, setBulkSpecTemplateLoading] = useState(false);
-  const [bulkRemoveTagId, setBulkRemoveTagId] = useState<number | null>(null);
-  const [bulkTagRemoveLoading, setBulkTagRemoveLoading] = useState(false);
+  const [showBulkTagEditor, setShowBulkTagEditor] = useState(false);
+  const [bulkTagCategory, setBulkTagCategory] = useState<string>("A1");
+  const [bulkEditTagId, setBulkEditTagId] = useState<number | null>(null);
+  const [bulkTagActionLoading, setBulkTagActionLoading] = useState(false);
   const [showProductEdit, setShowProductEdit] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
@@ -422,45 +424,48 @@ export default function ProductManager() {
     }
   };
 
-  const batchRemoveBrand = async () => {
+  const batchApplyTag = async () => {
     if (selectedProductIds.length === 0) return alert("請先選擇商品");
-    if (!confirm(`確定要移除這 ${selectedProductIds.length} 件商品的品牌標籤嗎？`)) return;
+    if (!bulkEditTagId) return alert("請先選擇要套用的標籤");
+    const tagName = tags.find((t) => t.id === bulkEditTagId)?.name || `#${bulkEditTagId}`;
+    if (!confirm(`確定要將標籤「${tagName}」套用到這 ${selectedProductIds.length} 件商品嗎？`)) return;
 
     try {
-      setBulkTagRemoveLoading(true);
+      setBulkTagActionLoading(true);
+      const action = bulkTagCategory === "A1" ? "add_brand" : "add_tag";
       const res = await fetch("/api/products/batch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "remove_brand", ids: selectedProductIds }),
+        body: JSON.stringify({ action, ids: selectedProductIds, tag_id: bulkEditTagId }),
       });
 
       if (res.ok) {
-        alert("批量移除品牌完成");
+        alert("批量套用標籤完成");
         fetchProducts(productPage, selectedProductL1);
       } else {
         const j = await res.json().catch(() => ({}));
-        alert(j?.error || "批量移除品牌失敗");
+        alert(j?.error || "批量套用標籤失敗");
       }
     } catch (err) {
-      console.error("batch remove brand failed:", err);
-      alert("批量移除品牌發生錯誤");
+      console.error("batch apply tag failed:", err);
+      alert("批量套用標籤發生錯誤");
     } finally {
-      setBulkTagRemoveLoading(false);
+      setBulkTagActionLoading(false);
     }
   };
 
   const batchRemoveTag = async () => {
     if (selectedProductIds.length === 0) return alert("請先選擇商品");
-    if (!bulkRemoveTagId) return alert("請先選擇要移除的標籤");
-    const tagName = tags.find((t) => t.id === bulkRemoveTagId)?.name || `#${bulkRemoveTagId}`;
+    if (!bulkEditTagId) return alert("請先選擇要移除的標籤");
+    const tagName = tags.find((t) => t.id === bulkEditTagId)?.name || `#${bulkEditTagId}`;
     if (!confirm(`確定要移除這 ${selectedProductIds.length} 件商品的標籤「${tagName}」嗎？`)) return;
 
     try {
-      setBulkTagRemoveLoading(true);
+      setBulkTagActionLoading(true);
       const res = await fetch("/api/products/batch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "remove_tag", ids: selectedProductIds, tag_id: bulkRemoveTagId }),
+        body: JSON.stringify({ action: "remove_tag", ids: selectedProductIds, tag_id: bulkEditTagId }),
       });
 
       if (res.ok) {
@@ -474,7 +479,7 @@ export default function ProductManager() {
       console.error("batch remove tag failed:", err);
       alert("批量移除標籤發生錯誤");
     } finally {
-      setBulkTagRemoveLoading(false);
+      setBulkTagActionLoading(false);
     }
   };
 
@@ -884,6 +889,17 @@ export default function ProductManager() {
     }
   };
 
+  const tagCategoryLabelMap: Record<string, string> = {
+    A1: "品牌",
+    A2: "屬性",
+    A3: "活動",
+  };
+  const tagCategoryOptions = Array.from(new Set(tags.map((t) => String(t.category || "")).filter(Boolean))).map((code) => ({
+    code,
+    label: tagCategoryLabelMap[code] || code,
+  }));
+  const filteredBulkTags = tags.filter((t) => String(t.category || "") === bulkTagCategory);
+
   return (
     <div className="py-6 space-y-6">
       {/* L1 分類分頁標籤 */}
@@ -1094,41 +1110,68 @@ export default function ProductManager() {
 
         <div className="border-t border-border-light pt-4">
           <div className="mb-2 text-xs font-semibold text-text-secondary-light">批量移除品牌/標籤</div>
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 flex-1">
-              <div>
-                <select
-                  value={bulkRemoveTagId ?? ""}
-                  onChange={(e) => setBulkRemoveTagId(e.target.value ? Number(e.target.value) : null)}
-                  className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-                >
-                  <option value="">請選擇標籤</option>
-                  {tags
-                    .filter((t) => t.category !== "A1")
-                    .map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                      </option>
-                    ))}
-                </select>
+          <div className="space-y-3">
+            <button
+              type="button"
+              onClick={() => setShowBulkTagEditor((v) => !v)}
+              className="rounded-lg border border-border-light px-3 py-2 text-sm hover:bg-background-light"
+            >
+              編輯標籤
+            </button>
+            {showBulkTagEditor && (
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 flex-1">
+                  <div>
+                    <label className="text-xs text-text-secondary-light">分類</label>
+                    <select
+                      value={bulkTagCategory}
+                      onChange={(e) => {
+                        setBulkTagCategory(e.target.value);
+                        setBulkEditTagId(null);
+                      }}
+                      className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                    >
+                      {tagCategoryOptions.map((cat) => (
+                        <option key={cat.code} value={cat.code}>
+                          {cat.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-text-secondary-light">標籤</label>
+                    <select
+                      value={bulkEditTagId ?? ""}
+                      onChange={(e) => setBulkEditTagId(e.target.value ? Number(e.target.value) : null)}
+                      className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                    >
+                      <option value="">請選擇標籤</option>
+                      {filteredBulkTags.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={batchApplyTag}
+                    disabled={bulkTagActionLoading}
+                    className="rounded-lg border border-primary bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {bulkTagActionLoading ? "處理中..." : "儲存（全部套用）"}
+                  </button>
+                  <button
+                    onClick={batchRemoveTag}
+                    disabled={bulkTagActionLoading}
+                    className="rounded-lg border border-danger px-4 py-2 text-sm font-medium text-danger hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {bulkTagActionLoading ? "處理中..." : "移除標籤"}
+                  </button>
+                </div>
               </div>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={batchRemoveBrand}
-                disabled={bulkTagRemoveLoading}
-                className="rounded-lg border border-amber-700 bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {bulkTagRemoveLoading ? "處理中..." : "批量移除品牌"}
-              </button>
-              <button
-                onClick={batchRemoveTag}
-                disabled={bulkTagRemoveLoading}
-                className="rounded-lg border border-border-light px-4 py-2 text-sm font-medium hover:bg-background-light disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {bulkTagRemoveLoading ? "處理中..." : "批量移除標籤"}
-              </button>
-            </div>
+            )}
           </div>
         </div>
 
