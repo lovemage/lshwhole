@@ -56,6 +56,8 @@ export default function ProductManager() {
   const [bulkCategoryL2Id, setBulkCategoryL2Id] = useState<number | null>(null);
   const [bulkCategoryL3Id, setBulkCategoryL3Id] = useState<number | null>(null);
   const [bulkCategoryLoading, setBulkCategoryLoading] = useState(false);
+  const [bulkSpecTemplateId, setBulkSpecTemplateId] = useState<string>("");
+  const [bulkSpecTemplateLoading, setBulkSpecTemplateLoading] = useState(false);
   const [bulkRemoveTagId, setBulkRemoveTagId] = useState<number | null>(null);
   const [bulkTagRemoveLoading, setBulkTagRemoveLoading] = useState(false);
   const [showProductEdit, setShowProductEdit] = useState(false);
@@ -471,6 +473,39 @@ export default function ProductManager() {
       alert("批量移除標籤發生錯誤");
     } finally {
       setBulkTagRemoveLoading(false);
+    }
+  };
+
+  const batchApplySpecTemplate = async () => {
+    if (selectedProductIds.length === 0) return alert("請先選擇商品");
+    if (!bulkSpecTemplateId) return alert("請先選擇規格範本");
+    const templateName = specTemplates.find((t) => t.id === bulkSpecTemplateId)?.name || bulkSpecTemplateId;
+    if (!confirm(`確定要對 ${selectedProductIds.length} 件商品套用規格範本「${templateName}」嗎？`)) return;
+
+    try {
+      setBulkSpecTemplateLoading(true);
+      const res = await fetch("/api/products/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "apply_spec_template",
+          ids: selectedProductIds,
+          spec_template_id: bulkSpecTemplateId,
+        }),
+      });
+
+      if (res.ok) {
+        alert("批量套用規格範本完成");
+        fetchProducts(productPage, selectedProductL1);
+      } else {
+        const j = await res.json().catch(() => ({}));
+        alert(j?.error || "批量套用規格範本失敗");
+      }
+    } catch (err) {
+      console.error("batch apply spec template failed:", err);
+      alert("批量套用規格範本發生錯誤");
+    } finally {
+      setBulkSpecTemplateLoading(false);
     }
   };
 
@@ -1005,6 +1040,36 @@ export default function ProductManager() {
             className="rounded-lg border border-primary bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {bulkCategoryLoading ? "更新中..." : "批量更新分類"}
+          </button>
+        </div>
+      </div>
+
+      {/* 工具列：批量套用規格範本 */}
+      <div className="rounded-xl border border-border-light bg-card-light p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 flex-1">
+            <div>
+              <label className="text-xs text-text-secondary-light">規格範本</label>
+              <select
+                value={bulkSpecTemplateId}
+                onChange={(e) => setBulkSpecTemplateId(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+              >
+                <option value="">請選擇規格範本</option>
+                {specTemplates.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <button
+            onClick={batchApplySpecTemplate}
+            disabled={bulkSpecTemplateLoading}
+            className="rounded-lg border border-primary bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {bulkSpecTemplateLoading ? "套用中..." : "批量套用規格"}
           </button>
         </div>
       </div>
