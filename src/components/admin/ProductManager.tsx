@@ -951,222 +951,224 @@ export default function ProductManager() {
         </button>
       </div>
 
-      {/* 工具列：批量操作 */}
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-text-secondary-light">已選 {selectedProductIds.length} 項</p>
-        <div className="flex gap-2">
-          <button onClick={() => batchUpdateStatus('published')} className="px-3 py-1 rounded-lg border border-border-light text-sm hover:bg-background-light">批量上架</button>
-          <button onClick={() => batchUpdateStatus('draft')} className="px-3 py-1 rounded-lg border border-border-light text-sm hover:bg-background-light">批量下架</button>
-          <button onClick={batchDelete} className="px-3 py-1 rounded-lg border border-danger text-danger text-sm hover:bg-danger/10">批量刪除</button>
-        </div>
-      </div>
-
-      {/* 工具列：批量更新分類 */}
-      <div className="rounded-xl border border-border-light bg-card-light p-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 flex-1">
-            <div>
-              <label className="text-xs text-text-secondary-light">L1</label>
-              <select
-                value={bulkCategoryL1Id ?? ""}
-                onChange={(e) => setBulkCategoryL1Id(e.target.value ? Number(e.target.value) : null)}
-                className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-              >
-                <option value="">請選擇</option>
-                {categories
-                  .filter((c) => c.level === 1)
-                  .sort((a, b) => a.sort - b.sort)
-                  .map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-text-secondary-light">L2（可不選）</label>
-              <select
-                value={bulkCategoryL2Id ?? ""}
-                onChange={(e) => setBulkCategoryL2Id(e.target.value ? Number(e.target.value) : null)}
-                className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-              >
-                <option value="">未指定</option>
-                {categories
-                  .filter((c) => c.level === 2)
-                  .filter(
-                    (l2) =>
-                      !bulkCategoryL1Id ||
-                      categoryRelations.some(
-                        (r: any) => r.parent_category_id === bulkCategoryL1Id && r.child_category_id === l2.id
-                      )
-                  )
-                  .sort((a, b) => a.sort - b.sort)
-                  .map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-text-secondary-light">L3（可不選）</label>
-              <select
-                value={bulkCategoryL3Id ?? ""}
-                onChange={(e) => setBulkCategoryL3Id(e.target.value ? Number(e.target.value) : null)}
-                className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-              >
-                <option value="">未指定</option>
-                {categories
-                  .filter((c) => c.level === 3)
-                  .filter(
-                    (l3) =>
-                      !bulkCategoryL2Id ||
-                      categoryRelations.some(
-                        (r: any) => r.parent_category_id === bulkCategoryL2Id && r.child_category_id === l3.id
-                      )
-                  )
-                  .sort((a, b) => a.sort - b.sort)
-                  .map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-              </select>
-            </div>
-          </div>
-          <button
-            onClick={batchUpdateCategory}
-            disabled={bulkCategoryLoading}
-            className="rounded-lg border border-primary bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {bulkCategoryLoading ? "更新中..." : "批量更新分類"}
-          </button>
-        </div>
-      </div>
-
-      {/* 工具列：批量套用規格範本 */}
-      <div className="rounded-xl border border-border-light bg-card-light p-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 flex-1">
-            <div>
-              <label className="text-xs text-text-secondary-light">規格範本</label>
-              <select
-                value={bulkSpecTemplateId}
-                onChange={(e) => setBulkSpecTemplateId(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-              >
-                <option value="">請選擇規格範本</option>
-                {specTemplates.map((template) => (
-                  <option key={template.id} value={template.id}>
-                    {template.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <button
-            onClick={batchApplySpecTemplate}
-            disabled={bulkSpecTemplateLoading}
-            className="rounded-lg border border-primary bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {bulkSpecTemplateLoading ? "套用中..." : "批量套用規格"}
-          </button>
-        </div>
-      </div>
-
-      {/* 工具列：批量移除品牌/標籤 */}
-      <div className="rounded-xl border border-border-light bg-card-light p-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 flex-1">
-            <div>
-              <label className="text-xs text-text-secondary-light">指定移除標籤</label>
-              <select
-                value={bulkRemoveTagId ?? ""}
-                onChange={(e) => setBulkRemoveTagId(e.target.value ? Number(e.target.value) : null)}
-                className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-              >
-                <option value="">請選擇標籤</option>
-                {tags
-                  .filter((t) => t.category !== "A1")
-                  .map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-              </select>
-            </div>
-          </div>
+      {/* 工具列：批量操作（集中） */}
+      <div className="rounded-xl border border-border-light bg-card-light p-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-text-secondary-light">已選 {selectedProductIds.length} 項</p>
           <div className="flex gap-2">
+            <button onClick={() => batchUpdateStatus('published')} className="px-3 py-1 rounded-lg border border-border-light text-sm hover:bg-background-light">批量上架</button>
+            <button onClick={() => batchUpdateStatus('draft')} className="px-3 py-1 rounded-lg border border-border-light text-sm hover:bg-background-light">批量下架</button>
+            <button onClick={batchDelete} className="px-3 py-1 rounded-lg border border-danger text-danger text-sm hover:bg-danger/10">批量刪除</button>
+          </div>
+        </div>
+
+        <div className="border-t border-border-light pt-4">
+          <div className="mb-2 text-xs font-semibold text-text-secondary-light">批量更新分類</div>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 flex-1">
+              <div>
+                <label className="text-xs text-text-secondary-light">L1</label>
+                <select
+                  value={bulkCategoryL1Id ?? ""}
+                  onChange={(e) => setBulkCategoryL1Id(e.target.value ? Number(e.target.value) : null)}
+                  className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                >
+                  <option value="">請選擇</option>
+                  {categories
+                    .filter((c) => c.level === 1)
+                    .sort((a, b) => a.sort - b.sort)
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-text-secondary-light">L2（可不選）</label>
+                <select
+                  value={bulkCategoryL2Id ?? ""}
+                  onChange={(e) => setBulkCategoryL2Id(e.target.value ? Number(e.target.value) : null)}
+                  className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                >
+                  <option value="">未指定</option>
+                  {categories
+                    .filter((c) => c.level === 2)
+                    .filter(
+                      (l2) =>
+                        !bulkCategoryL1Id ||
+                        categoryRelations.some(
+                          (r: any) => r.parent_category_id === bulkCategoryL1Id && r.child_category_id === l2.id
+                        )
+                    )
+                    .sort((a, b) => a.sort - b.sort)
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-text-secondary-light">L3（可不選）</label>
+                <select
+                  value={bulkCategoryL3Id ?? ""}
+                  onChange={(e) => setBulkCategoryL3Id(e.target.value ? Number(e.target.value) : null)}
+                  className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                >
+                  <option value="">未指定</option>
+                  {categories
+                    .filter((c) => c.level === 3)
+                    .filter(
+                      (l3) =>
+                        !bulkCategoryL2Id ||
+                        categoryRelations.some(
+                          (r: any) => r.parent_category_id === bulkCategoryL2Id && r.child_category_id === l3.id
+                        )
+                    )
+                    .sort((a, b) => a.sort - b.sort)
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            </div>
             <button
-              onClick={batchRemoveBrand}
-              disabled={bulkTagRemoveLoading}
-              className="rounded-lg border border-warning bg-warning px-4 py-2 text-sm font-medium text-white hover:bg-warning/90 disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={batchUpdateCategory}
+              disabled={bulkCategoryLoading}
+              className="rounded-lg border border-primary bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {bulkTagRemoveLoading ? "處理中..." : "批量移除品牌"}
-            </button>
-            <button
-              onClick={batchRemoveTag}
-              disabled={bulkTagRemoveLoading}
-              className="rounded-lg border border-border-light px-4 py-2 text-sm font-medium hover:bg-background-light disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {bulkTagRemoveLoading ? "處理中..." : "批量移除標籤"}
+              {bulkCategoryLoading ? "更新中..." : "批量更新分類"}
             </button>
           </div>
         </div>
-      </div>
 
-      {/* 工具列：條件硬刪除 */}
-      <div className="rounded-xl border border-danger/30 bg-danger/5 p-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 flex-1">
-            <div>
-              <label className="text-xs text-text-secondary-light">超過 X 天（created_at）</label>
-              <input
-                type="number"
-                min={1}
-                step={1}
-                value={bulkDeleteDays}
-                onChange={(e) => setBulkDeleteDays(Math.max(1, Math.floor(Number(e.target.value || 1))))}
-                className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-text-secondary-light">條件模式</label>
-              <select
-                value={bulkDeleteMode}
-                onChange={(e) => setBulkDeleteMode((e.target.value === "and" ? "and" : "or") as "or" | "and")}
-                className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-              >
-                <option value="or">OR（任一條件）</option>
-                <option value="and">AND（同時符合）</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-text-secondary-light">L1 分類（可不選）</label>
-              <select
-                value={bulkDeleteL1Id ?? ""}
-                onChange={(e) => setBulkDeleteL1Id(e.target.value ? Number(e.target.value) : null)}
-                className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
-              >
-                <option value="">未指定</option>
-                {categories
-                  .filter((c) => c.level === 1)
-                  .sort((a, b) => a.sort - b.sort)
-                  .map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
+        <div className="border-t border-border-light pt-4">
+          <div className="mb-2 text-xs font-semibold text-text-secondary-light">批量套用規格範本</div>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 flex-1">
+              <div>
+                <label className="text-xs text-text-secondary-light">規格範本</label>
+                <select
+                  value={bulkSpecTemplateId}
+                  onChange={(e) => setBulkSpecTemplateId(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                >
+                  <option value="">請選擇規格範本</option>
+                  {specTemplates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.name}
                     </option>
                   ))}
-              </select>
+                </select>
+              </div>
+            </div>
+            <button
+              onClick={batchApplySpecTemplate}
+              disabled={bulkSpecTemplateLoading}
+              className="rounded-lg border border-primary bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {bulkSpecTemplateLoading ? "套用中..." : "批量套用規格"}
+            </button>
+          </div>
+        </div>
+
+        <div className="border-t border-border-light pt-4">
+          <div className="mb-2 text-xs font-semibold text-text-secondary-light">批量移除品牌/標籤</div>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 flex-1">
+              <div>
+                <label className="text-xs text-text-secondary-light">指定移除標籤</label>
+                <select
+                  value={bulkRemoveTagId ?? ""}
+                  onChange={(e) => setBulkRemoveTagId(e.target.value ? Number(e.target.value) : null)}
+                  className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                >
+                  <option value="">請選擇標籤</option>
+                  {tags
+                    .filter((t) => t.category !== "A1")
+                    .map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={batchRemoveBrand}
+                disabled={bulkTagRemoveLoading}
+                className="rounded-lg border border-amber-700 bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {bulkTagRemoveLoading ? "處理中..." : "批量移除品牌"}
+              </button>
+              <button
+                onClick={batchRemoveTag}
+                disabled={bulkTagRemoveLoading}
+                className="rounded-lg border border-border-light px-4 py-2 text-sm font-medium hover:bg-background-light disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {bulkTagRemoveLoading ? "處理中..." : "批量移除標籤"}
+              </button>
             </div>
           </div>
-          <button
-            onClick={conditionalHardDelete}
-            disabled={bulkDeleteLoading}
-            className="rounded-lg border border-danger bg-danger px-4 py-2 text-sm font-medium text-white hover:bg-danger/90 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {bulkDeleteLoading ? "刪除中..." : "條件硬刪除"}
-          </button>
+        </div>
+
+        <div className="border-t border-danger/20 pt-4">
+          <div className="mb-2 text-xs font-semibold text-danger">條件硬刪除（危險操作）</div>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 flex-1">
+              <div>
+                <label className="text-xs text-text-secondary-light">超過 X 天（created_at）</label>
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={bulkDeleteDays}
+                  onChange={(e) => setBulkDeleteDays(Math.max(1, Math.floor(Number(e.target.value || 1))))}
+                  className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-text-secondary-light">條件模式</label>
+                <select
+                  value={bulkDeleteMode}
+                  onChange={(e) => setBulkDeleteMode((e.target.value === "and" ? "and" : "or") as "or" | "and")}
+                  className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                >
+                  <option value="or">OR（任一條件）</option>
+                  <option value="and">AND（同時符合）</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-text-secondary-light">L1 分類（可不選）</label>
+                <select
+                  value={bulkDeleteL1Id ?? ""}
+                  onChange={(e) => setBulkDeleteL1Id(e.target.value ? Number(e.target.value) : null)}
+                  className="mt-1 w-full rounded-lg border border-border-light bg-background-light px-3 py-2 text-sm"
+                >
+                  <option value="">未指定</option>
+                  {categories
+                    .filter((c) => c.level === 1)
+                    .sort((a, b) => a.sort - b.sort)
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            </div>
+            <button
+              onClick={conditionalHardDelete}
+              disabled={bulkDeleteLoading}
+              className="rounded-lg border border-danger bg-danger px-4 py-2 text-sm font-medium text-white hover:bg-danger/90 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {bulkDeleteLoading ? "刪除中..." : "條件硬刪除"}
+            </button>
+          </div>
         </div>
       </div>
 
