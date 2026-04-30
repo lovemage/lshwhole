@@ -22,6 +22,7 @@ const MAX_IMPORT_ROWS_PER_TARGET = 20000;
 const IMPORT_BATCH_SIZE = 20;
 const CATALOG_API_TIMEOUT_MS = 45000;
 const CATALOG_API_RETRY_TIMES = 2;
+const KRW_TO_TWD_RATE = 0.024;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -63,15 +64,15 @@ const extractToyboxCodeFromUrl = (rawUrl: string, fallback?: string) => {
   try {
     const u = new URL(rawUrl);
     const branduid = u.searchParams.get("branduid");
-    if (branduid && /^\d+$/.test(branduid)) return `toybox-${branduid}`;
+    if (branduid && /^\d+$/.test(branduid)) return `tb-${branduid}`;
     const uid = u.searchParams.get("uid");
-    if (uid && /^\d+$/.test(uid)) return `toybox-${uid}`;
+    if (uid && /^\d+$/.test(uid)) return `tb-${uid}`;
     const productNo = u.searchParams.get("product_no");
-    if (productNo && /^\d+$/.test(productNo)) return `toybox-${productNo}`;
+    if (productNo && /^\d+$/.test(productNo)) return `tb-${productNo}`;
   } catch {
     // noop
   }
-  return fallback || `toybox-${Date.now()}`;
+  return fallback || `tb-${Date.now()}`;
 };
 
 const isRequestTimeoutError = (err: unknown) => {
@@ -1232,15 +1233,20 @@ const parseWonNumber = (raw: string | null | undefined) => {
   return Math.floor(n);
 };
 
+const wonToTwd = (krw: number | null | undefined) => {
+  if (typeof krw !== "number" || !Number.isFinite(krw) || krw <= 0) return null;
+  return Math.round(krw * KRW_TO_TWD_RATE);
+};
+
 const extractKidsVillageCodeFromUrl = (rawUrl: string, fallback?: string) => {
   try {
     const u = new URL(rawUrl);
     const itId = u.searchParams.get("it_id");
-    if (itId) return `kidsvillage-${itId}`;
+    if (itId) return `kv-${itId}`;
   } catch {
     // noop
   }
-  return fallback || `kidsvillage-${Date.now()}`;
+  return fallback || `kv-${Date.now()}`;
 };
 
 const collectKidsVillageListRowsFromCurrentPage = async (page: any): Promise<KidsVillageListRow[]> => {
@@ -1446,11 +1452,11 @@ const collectToyboxListRowsFromCurrentPage = async (page: any) => {
         detailUrl,
         title: row.title || fallbackTitle || "",
         image: row.image || "",
-        wholesalePriceTWD: wholesale,
+        wholesalePriceKRW: wholesale,
         sourceCategoryId,
       };
     })
-    .filter((x): x is { detailUrl: string; title: string; image: string; wholesalePriceTWD: number | null; sourceCategoryId: string | null } => Boolean(x));
+    .filter((x): x is { detailUrl: string; title: string; image: string; wholesalePriceKRW: number | null; sourceCategoryId: string | null } => Boolean(x));
 
   return mapped;
 };
@@ -1458,7 +1464,7 @@ const collectToyboxListRowsFromCurrentPage = async (page: any) => {
 const collectToyboxListRows = async (page: any, targetUrl: string) => {
   await page.goto(targetUrl, { waitUntil: "networkidle", timeout: 45000 });
   await page.waitForTimeout(1200);
-  const dedup = new Map<string, { detailUrl: string; title: string; image: string; wholesalePriceTWD: number | null; sourceCategoryId: string | null }>();
+  const dedup = new Map<string, { detailUrl: string; title: string; image: string; wholesalePriceKRW: number | null; sourceCategoryId: string | null }>();
 
   const rows = await collectToyboxListRowsFromCurrentPage(page);
   for (const row of rows) {
@@ -1668,7 +1674,7 @@ const probeSingleToyboxTarget = async (
       total_count: rows.length,
       estimated_sessions: rows.length > 0 ? Math.ceil(rows.length / IMPORT_BATCH_SIZE) : 0,
       samples: sampleRows.map((row, idx) => ({
-        id: extractToyboxCodeFromUrl(row.detailUrl, `toybox-sample-${idx + 1}`),
+        id: extractToyboxCodeFromUrl(row.detailUrl, `tb-sample-${idx + 1}`),
         title: row.title || "",
         detail_url: row.detailUrl,
       })),
@@ -1710,7 +1716,7 @@ const probeSingleKidsVillageTarget = async (
       total_count: rows.length,
       estimated_sessions: rows.length > 0 ? Math.ceil(rows.length / IMPORT_BATCH_SIZE) : 0,
       samples: sampleRows.map((row, idx) => ({
-        id: extractKidsVillageCodeFromUrl(row.detailUrl, `kidsvillage-sample-${idx + 1}`),
+        id: extractKidsVillageCodeFromUrl(row.detailUrl, `kv-sample-${idx + 1}`),
         title: row.title,
         price_twd: null,
         price_jpy: null,
@@ -1749,12 +1755,12 @@ const runToyboxImportPreview = async (
 
       for (let i = 0; i < rows.length; i += 1) {
         const row = rows[i];
-        const code = extractToyboxCodeFromUrl(row.detailUrl, `toybox-${i + 1}`);
+          const code = extractToyboxCodeFromUrl(row.detailUrl, `tb-${i + 1}`);
 
         let title = row.title || code;
         let description = "";
         let images: string[] = row.image ? [row.image] : [];
-        let wholesalePriceTWD = row.wholesalePriceTWD;
+        let wholesalePriceKRW = row.wholesalePriceKRW;
         let sourceCategoryName: string | null = null;
 
         if (includeDetails) {
@@ -1763,7 +1769,7 @@ const runToyboxImportPreview = async (
           description = detail.description || "";
           images = detail.images.length > 0 ? detail.images : images;
           const sellPrice = parseWonNumber(detail.sellPriceText);
-          wholesalePriceTWD = sellPrice || wholesalePriceTWD;
+          wholesalePriceKRW = sellPrice || wholesalePriceKRW;
           const categoryTrail = detail.breadcrumb
             ?.map((item: { text: string }) => item.text)
             .filter(Boolean)
@@ -1778,7 +1784,7 @@ const runToyboxImportPreview = async (
           description,
           url: row.detailUrl,
           images,
-          wholesalePriceTWD,
+          wholesalePriceTWD: wonToTwd(wholesalePriceKRW),
           sourceDirectoryUrl: target,
           sourceCategoryId: row.sourceCategoryId,
           sourceCategoryName,
@@ -1835,7 +1841,7 @@ const runKidsVillageImportPreview = async (
 
         for (let i = 0; i < rows.length; i += 1) {
           const row = rows[i];
-          const code = extractKidsVillageCodeFromUrl(row.detailUrl, `kidsvillage-${i + 1}`);
+          const code = extractKidsVillageCodeFromUrl(row.detailUrl, `kv-${i + 1}`);
           let titleValue = row.title || code;
           let description = "";
           let images: string[] = row.image ? [row.image] : [];
@@ -1846,7 +1852,7 @@ const runKidsVillageImportPreview = async (
             titleValue = detail.title || titleValue;
             description = detail.descriptionHtml || detail.description || "";
             images = detail.images.length > 0 ? detail.images : images;
-            const priceTwd = detail.price_krw ? Math.round(detail.price_krw * 0.024) : null;
+            const priceTwd = wonToTwd(detail.price_krw);
             wholesalePriceTWD = priceTwd;
           }
 

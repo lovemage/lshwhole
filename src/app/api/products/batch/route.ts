@@ -5,7 +5,7 @@ export async function POST(request: NextRequest) {
   try {
     const admin = supabaseAdmin();
     const body = await request.json();
-    const { action, ids, status, category_ids } = body || {};
+    const { action, ids, status, category_ids, tag_id } = body || {};
 
     if (!Array.isArray(ids) || ids.length === 0) {
       return NextResponse.json({ error: "缺少 ids" }, { status: 400 });
@@ -64,6 +64,53 @@ export async function POST(request: NextRequest) {
         if (insError) {
           return NextResponse.json({ error: insError.message }, { status: 400 });
         }
+      }
+
+      return NextResponse.json({ success: true });
+    }
+
+    if (action === "remove_brand") {
+      const { data: brandTags, error: brandTagErr } = await admin
+        .from("tags")
+        .select("id")
+        .eq("category", "A1");
+
+      if (brandTagErr) {
+        return NextResponse.json({ error: brandTagErr.message }, { status: 400 });
+      }
+
+      const brandTagIds = (brandTags || []).map((t: { id: number }) => t.id);
+      if (brandTagIds.length === 0) {
+        return NextResponse.json({ success: true });
+      }
+
+      const { error: delError } = await admin
+        .from("product_tag_map")
+        .delete()
+        .in("product_id", ids)
+        .in("tag_id", brandTagIds);
+
+      if (delError) {
+        return NextResponse.json({ error: delError.message }, { status: 400 });
+      }
+
+      return NextResponse.json({ success: true });
+    }
+
+    if (action === "remove_tag") {
+      const tagId = Number(tag_id);
+      if (!Number.isInteger(tagId) || tagId <= 0) {
+        return NextResponse.json({ error: "缺少有效 tag_id" }, { status: 400 });
+      }
+
+      const { error: delError } = await admin
+        .from("product_tag_map")
+        .delete()
+        .in("product_id", ids)
+        .eq("tag_id", tagId);
+
+      if (delError) {
+        return NextResponse.json({ error: delError.message }, { status: 400 });
       }
 
       return NextResponse.json({ success: true });
