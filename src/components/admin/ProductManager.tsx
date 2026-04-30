@@ -951,17 +951,26 @@ export default function ProductManager() {
         >
           新增商品
         </button>
+        <button onClick={() => batchUpdateStatus('published')} className="px-3 py-2 rounded-lg border border-border-light text-sm hover:bg-background-light">批量上架</button>
+        <button onClick={() => batchUpdateStatus('draft')} className="px-3 py-2 rounded-lg border border-border-light text-sm hover:bg-background-light">批量下架</button>
+        <button onClick={batchDelete} className="px-3 py-2 rounded-lg border border-danger text-danger text-sm hover:bg-danger/10">批量刪除</button>
       </div>
 
       {/* 工具列：批量操作（集中） */}
       <div className="rounded-xl border border-border-light bg-card-light p-4 space-y-4">
         <div className="flex items-center justify-between">
-          <p className="text-sm text-text-secondary-light">已選 {selectedProductIds.length} 項</p>
-          <div className="flex gap-2">
-            <button onClick={() => batchUpdateStatus('published')} className="px-3 py-1 rounded-lg border border-border-light text-sm hover:bg-background-light">批量上架</button>
-            <button onClick={() => batchUpdateStatus('draft')} className="px-3 py-1 rounded-lg border border-border-light text-sm hover:bg-background-light">批量下架</button>
-            <button onClick={batchDelete} className="px-3 py-1 rounded-lg border border-danger text-danger text-sm hover:bg-danger/10">批量刪除</button>
-          </div>
+          <p className="text-sm text-text-secondary-light">
+            已選 {selectedProductIds.length} 項
+            {selectedProductIds.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setSelectedProductIds([])}
+                className="ml-2 text-xs text-danger hover:underline"
+              >
+                - 移除
+              </button>
+            )}
+          </p>
         </div>
 
         <div className="border-t border-border-light pt-4">
@@ -1059,7 +1068,6 @@ export default function ProductManager() {
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 flex-1">
               <div>
-                <label className="text-xs text-text-secondary-light">規格範本</label>
                 <select
                   value={bulkSpecTemplateId}
                   onChange={(e) => setBulkSpecTemplateId(e.target.value)}
@@ -1089,7 +1097,6 @@ export default function ProductManager() {
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 flex-1">
               <div>
-                <label className="text-xs text-text-secondary-light">指定移除標籤</label>
                 <select
                   value={bulkRemoveTagId ?? ""}
                   onChange={(e) => setBulkRemoveTagId(e.target.value ? Number(e.target.value) : null)}
