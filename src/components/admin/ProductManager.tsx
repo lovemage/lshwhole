@@ -993,10 +993,10 @@ export default function ProductManager() {
           <button
             type="button"
             onClick={() => setShowBulkCategoryPanel((v) => !v)}
-            className="mb-2 flex w-full items-center justify-between rounded-lg bg-amber-500 px-3 py-2 text-left text-white hover:bg-amber-600"
+            className="mb-2 flex w-full items-center justify-between rounded-lg border border-border-light bg-background-light px-3 py-2 text-left"
           >
-            <span className="text-xs font-semibold">批量更新分類</span>
-            <span className="text-xs">{showBulkCategoryPanel ? "收合" : "展開"}</span>
+            <span className="text-xs font-semibold text-text-secondary-light">批量更新分類</span>
+            <span className="text-xs text-text-secondary-light">{showBulkCategoryPanel ? "收合" : "展開"}</span>
           </button>
           {showBulkCategoryPanel && <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 flex-1">
@@ -1179,10 +1179,10 @@ export default function ProductManager() {
           <button
             type="button"
             onClick={() => setShowOldProductDeletePanel((v) => !v)}
-            className="mb-2 flex w-full items-center justify-between rounded-lg bg-amber-500 px-3 py-2 text-left text-white hover:bg-amber-600"
+            className="mb-2 flex w-full items-center justify-between rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-left"
           >
-            <span className="text-xs font-semibold">舊商品刪除設置</span>
-            <span className="text-xs">{showOldProductDeletePanel ? "收合" : "展開"}</span>
+            <span className="text-xs font-semibold text-danger">舊商品刪除設置</span>
+            <span className="text-xs text-danger">{showOldProductDeletePanel ? "收合" : "展開"}</span>
           </button>
           {showOldProductDeletePanel && <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 flex-1">

@@ -8,6 +8,30 @@ import {
 } from "@/lib/doso/sourceCategoryStore";
 import { supabaseAdmin } from "@/lib/supabase";
 
+const KRW_TO_TWD_RATE = 0.024;
+const JPY_TO_TWD_RATE = 0.22;
+
+const parseMoneyToTwdInt = (value: unknown) => {
+  if (value === null || value === undefined || value === "") return null;
+
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? Math.floor(value) : null;
+  }
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  const isKRW = /₩|KRW|원/i.test(raw);
+  const isJPY = /¥|JPY|円|日圓/i.test(raw);
+  const numeric = Number(raw.replace(/[^0-9.-]/g, ""));
+
+  if (!Number.isFinite(numeric)) return null;
+
+  if (isKRW) return Math.floor(numeric * KRW_TO_TWD_RATE);
+  if (isJPY) return Math.floor(numeric * JPY_TO_TWD_RATE);
+  return Math.floor(numeric);
+};
+
 const detectDosoDirectoryUrl = (originalUrl?: string | null) => {
   const value = String(originalUrl || "").trim();
   if (!value) return null;
@@ -176,8 +200,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 保證 TWD 為整數
-    const toInt = (v: any) => (v === null || v === undefined || v === "" ? null : Math.floor(Number(v)));
     const mappingConfig = await getDosoSourceCategoryMapping();
 
     let resolvedCategoryIds = (Array.isArray(category_ids) ? category_ids.filter((x: any) => !!x) : []) as number[];
@@ -315,9 +337,9 @@ export async function POST(request: NextRequest) {
       title_zh: String(title),
       desc_zh: description ? String(description) : null,
       status: status === "published" ? "published" : "draft",
-      cost_twd: toInt(cost_twd),
-      wholesale_price_twd: toInt(wholesale_price_twd),
-      retail_price_twd: toInt(retail_price_twd),
+      cost_twd: parseMoneyToTwdInt(cost_twd),
+      wholesale_price_twd: parseMoneyToTwdInt(wholesale_price_twd),
+      retail_price_twd: parseMoneyToTwdInt(retail_price_twd),
       specs: specs,
       original_url: original_url ? String(original_url) : null,
     };
@@ -385,8 +407,8 @@ export async function POST(request: NextRequest) {
         product_id: productId,
         name: v.name,
         options: v.options,
-        price: toInt(v.price),
-        stock: toInt(v.stock),
+        price: parseMoneyToTwdInt(v.price),
+        stock: parseMoneyToTwdInt(v.stock),
         sku: v.sku
       }));
       const { error: vErr } = await admin.from("product_variants").insert(rows);
