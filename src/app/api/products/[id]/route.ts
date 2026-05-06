@@ -3,6 +3,8 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { createClient } from "@supabase/supabase-js";
 
  const ensureHttps = (url: string) => (url ? url.replace(/^http:/, "https:") : url);
+const isMissingVariantNameColumnError = (error: { code?: string; message?: string } | null | undefined) =>
+  error?.code === "PGRST204" && (error?.message || "").includes("'name' column");
 
 export async function GET(
   request: NextRequest,
@@ -150,10 +152,26 @@ export async function GET(
     }
 
     // 獲取變體
-    const { data: variants, error: vError } = await admin
+    let { data: variants, error: vError } = await admin
       .from("product_variants")
       .select("id, name, options, price, stock, sku")
       .eq("product_id", productId);
+    if (vError && isMissingVariantNameColumnError(vError)) {
+      const fallback = await admin
+        .from("product_variants")
+        .select("id, spec_name, options, price, stock, sku")
+        .eq("product_id", productId);
+      if (!fallback.error) {
+        variants = (fallback.data || []).map((v: any) => ({
+          ...v,
+          name: v.spec_name || "",
+        }));
+        vError = null;
+      }
+    }
+    if (vError) {
+      console.error("Error fetching product variants:", vError);
+    }
 
     // 將圖片資料添加到商品資料中（包含完整圖片資訊）
     const productWithImages = {
@@ -252,9 +270,23 @@ export async function PUT(
           sku: v.sku
         }));
         
-        const { error: vInsError } = await admin
+        let { error: vInsError } = await admin
           .from("product_variants")
           .insert(variantInserts);
+        if (vInsError && isMissingVariantNameColumnError(vInsError)) {
+          const fallbackInserts = variants.map((v: any) => ({
+            product_id: productId,
+            spec_name: v.name,
+            options: v.options,
+            price: v.price,
+            stock: v.stock,
+            sku: v.sku
+          }));
+          const fallbackInsertRes = await admin
+            .from("product_variants")
+            .insert(fallbackInserts);
+          vInsError = fallbackInsertRes.error;
+        }
 
         if (vInsError) {
            console.error("Error inserting new variants:", vInsError);

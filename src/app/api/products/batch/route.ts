@@ -40,6 +40,9 @@ const buildVariantOptions = (specs: TemplateSpec[]) => {
   return combinations;
 };
 
+const isMissingVariantNameColumnError = (error: { code?: string; message?: string } | null | undefined) =>
+  error?.code === "PGRST204" && (error?.message || "").includes("'name' column");
+
 export async function POST(request: NextRequest) {
   try {
     const admin = supabaseAdmin();
@@ -283,10 +286,10 @@ export async function POST(request: NextRequest) {
       }
 
       if (optionCombos.length > 0) {
-        const variantRows = targetProducts.flatMap((product) =>
+        const variantRowsBase = targetProducts.flatMap((product) =>
           optionCombos.map((options, index) => ({
             product_id: product.id,
-            name: Object.values(options).join(" / "),
+            variantLabel: Object.values(options).join(" / "),
             options,
             price: Number.isFinite(Number(product.retail_price_twd)) ? Math.floor(Number(product.retail_price_twd)) : 0,
             stock: 10,
@@ -294,9 +297,30 @@ export async function POST(request: NextRequest) {
           }))
         );
 
-        if (variantRows.length > 0) {
-          const { error: variantInsertErr } = await admin.from("product_variants").insert(variantRows);
-          if (variantInsertErr) {
+        if (variantRowsBase.length > 0) {
+          const variantRowsWithName = variantRowsBase.map((row) => ({
+            product_id: row.product_id,
+            name: row.variantLabel,
+            options: row.options,
+            price: row.price,
+            stock: row.stock,
+            sku: row.sku,
+          }));
+          const { error: variantInsertErr } = await admin.from("product_variants").insert(variantRowsWithName);
+          if (variantInsertErr && isMissingVariantNameColumnError(variantInsertErr)) {
+            const variantRowsWithSpecName = variantRowsBase.map((row) => ({
+              product_id: row.product_id,
+              spec_name: row.variantLabel,
+              options: row.options,
+              price: row.price,
+              stock: row.stock,
+              sku: row.sku,
+            }));
+            const { error: fallbackVariantInsertErr } = await admin.from("product_variants").insert(variantRowsWithSpecName);
+            if (fallbackVariantInsertErr) {
+              return NextResponse.json({ error: fallbackVariantInsertErr.message }, { status: 400 });
+            }
+          } else if (variantInsertErr) {
             return NextResponse.json({ error: variantInsertErr.message }, { status: 400 });
           }
         }

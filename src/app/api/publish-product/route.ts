@@ -32,6 +32,9 @@ const parseMoneyToTwdInt = (value: unknown) => {
   return Math.floor(numeric);
 };
 
+const isMissingVariantNameColumnError = (error: { code?: string; message?: string } | null | undefined) =>
+  error?.code === "PGRST204" && (error?.message || "").includes("'name' column");
+
 const detectDosoDirectoryUrl = (originalUrl?: string | null) => {
   const value = String(originalUrl || "").trim();
   if (!value) return null;
@@ -403,16 +406,37 @@ export async function POST(request: NextRequest) {
 
     // 變體
     if (Array.isArray(variants) && variants.length > 0) {
-      const rows = variants.map((v: any) => ({
+      const rowsBase = variants.map((v: any) => ({
         product_id: productId,
-        name: v.name,
+        variantLabel: v.name,
         options: v.options,
         price: parseMoneyToTwdInt(v.price),
         stock: parseMoneyToTwdInt(v.stock),
         sku: v.sku
       }));
-      const { error: vErr } = await admin.from("product_variants").insert(rows);
-      if (vErr) {
+      const rowsWithName = rowsBase.map((row) => ({
+        product_id: row.product_id,
+        name: row.variantLabel,
+        options: row.options,
+        price: row.price,
+        stock: row.stock,
+        sku: row.sku,
+      }));
+      const { error: vErr } = await admin.from("product_variants").insert(rowsWithName);
+      if (vErr && isMissingVariantNameColumnError(vErr)) {
+        const rowsWithSpecName = rowsBase.map((row) => ({
+          product_id: row.product_id,
+          spec_name: row.variantLabel,
+          options: row.options,
+          price: row.price,
+          stock: row.stock,
+          sku: row.sku,
+        }));
+        const { error: fallbackVErr } = await admin.from("product_variants").insert(rowsWithSpecName);
+        if (fallbackVErr) {
+          return NextResponse.json({ error: fallbackVErr.message }, { status: 400 });
+        }
+      } else if (vErr) {
         return NextResponse.json({ error: vErr.message }, { status: 400 });
       }
     }
