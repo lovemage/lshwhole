@@ -6,6 +6,7 @@ const CREDENTIALS_KEYS: Record<DosoCredentialSource, string> = {
   doso: "doso_credentials_v1",
   toybox: "toybox_credentials_v1",
   kidsvillage: "kidsvillage_credentials_v1",
+  cheonyu: "cheonyu_credentials_v1",
 };
 
 export type CredentialSource = DosoCredentialSource;

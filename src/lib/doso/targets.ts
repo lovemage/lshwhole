@@ -1,4 +1,4 @@
-export type DosoCredentialSource = "doso" | "toybox" | "kidsvillage";
+export type DosoCredentialSource = "doso" | "toybox" | "kidsvillage" | "cheonyu";
 
 export interface DosoTargetOption {
   url: string;
@@ -34,6 +34,12 @@ export const DOSO_SOURCE_OPTIONS: DosoSourceOption[] = [
     usernamePlaceholder: "Kids Village 帳號",
     loginUrl: "https://www.kidsvillage.co.kr/bbs/login.php?url=%2Fshop%2Fbrand.php",
   },
+  {
+    source: "cheonyu",
+    label: "Cheonyu 雜貨",
+    usernamePlaceholder: "Cheonyu 帳號",
+    loginUrl: "https://cheonyu.com/member/login.html",
+  },
 ];
 
 export const DEFAULT_DOSO_TARGETS = [
@@ -48,6 +54,7 @@ export const DEFAULT_DOSO_TARGETS = [
   "https://www.doso.net/onlineMall/gomen",
   "https://www.toybox.kr/",
   "https://www.kidsvillage.co.kr/shop/list.php",
+  "https://cheonyu.com/product/list.html?cateIDX=1",
 ];
 
 export const DOSO_TARGET_OPTIONS: DosoTargetOption[] = [
@@ -74,6 +81,13 @@ export const DOSO_TARGET_OPTIONS: DosoTargetOption[] = [
     manualUrlPlaceholder: "https://www.kidsvillage.co.kr/shop/brand.php?sort_id=&br_id=346",
     manualUrlHelp: "建議直接貼上 Kids Village 分類或品牌網址進行同步。",
   },
+  {
+    url: "https://cheonyu.com/",
+    label: "Cheonyu 雜貨",
+    source: "cheonyu",
+    manualUrlPlaceholder: "https://cheonyu.com/product/list.html?cateIDX=1",
+    manualUrlHelp: "直接貼上 Cheonyu 韓文站分類或商品列表網址進行同步。",
+  },
 ];
 
 export const getSourceByTargetUrl = (value: string): DosoCredentialSource | null => {
@@ -83,7 +97,9 @@ export const getSourceByTargetUrl = (value: string): DosoCredentialSource | null
       const allowed = new URL(option.url);
       const allowedPath = allowed.pathname.replace(/\/$/, "");
       const inputPath = input.pathname.replace(/\/$/, "");
-      if (input.hostname !== allowed.hostname) return false;
+      const inputHost = input.hostname.replace(/^www\./, "");
+      const allowedHost = allowed.hostname.replace(/^www\./, "");
+      if (inputHost !== allowedHost) return false;
       if (!allowedPath) return true;
       return inputPath.startsWith(allowedPath);
     });
@@ -102,7 +118,9 @@ export const getTargetOptionByUrl = (value?: string | null) => {
       const allowed = new URL(option.url);
       const allowedPath = allowed.pathname.replace(/\/$/, "");
       const inputPath = input.pathname.replace(/\/$/, "");
-      if (input.hostname !== allowed.hostname) return false;
+      const inputHost = input.hostname.replace(/^www\./, "");
+      const allowedHost = allowed.hostname.replace(/^www\./, "");
+      if (inputHost !== allowedHost) return false;
       if (!allowedPath) return true;
       return inputPath.startsWith(allowedPath);
     }) || null;

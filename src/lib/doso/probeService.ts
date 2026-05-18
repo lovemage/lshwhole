@@ -1,6 +1,14 @@
 import { chromium } from "playwright";
 import { DEFAULT_DOSO_TARGETS } from "@/lib/doso/targets";
 import { getDosoCatalogListConfig } from "@/lib/doso/catalogConfigs";
+import {
+  extractCheonyuProductCode,
+  mapCheonyuListRowToProduct,
+  mergeCheonyuDetailIntoProduct,
+  parseCheonyuPriceKRW,
+  type CheonyuDetailSnapshot,
+  type CheonyuListRowSnapshot,
+} from "@/lib/doso/cheonyu";
 import type {
   DosoImportProduct,
   DosoImportResponse,
@@ -18,6 +26,7 @@ interface CapturedResponse {
 const LOGIN_URL = "https://www.doso.net/auth/login";
 const TOYBOX_LOGIN_URL = "https://www.toybox.kr/shop/member.html?type=login";
 const KIDSVILLAGE_LOGIN_URL = "https://www.kidsvillage.co.kr/bbs/login.php?url=%2Fshop%2Fbrand.php";
+const CHEONYU_LOGIN_URL = "https://cheonyu.com/member/login.html";
 const MAX_IMPORT_ROWS_PER_TARGET = 20000;
 const IMPORT_BATCH_SIZE = 20;
 const CATALOG_API_TIMEOUT_MS = 45000;
@@ -39,6 +48,15 @@ const isKidsVillageUrl = (value: string) => {
   try {
     const u = new URL(value);
     return u.hostname === "www.kidsvillage.co.kr" || u.hostname === "kidsvillage.co.kr";
+  } catch {
+    return false;
+  }
+};
+
+const isCheonyuUrl = (value: string) => {
+  try {
+    const u = new URL(value);
+    return u.hostname === "cheonyu.com" || u.hostname === "www.cheonyu.com";
   } catch {
     return false;
   }
@@ -1214,6 +1232,20 @@ const loginKidsVillage = async (page: any, username: string, password: string) =
   return !/login\.php|register\.php/.test(currentUrl) && !/로그인\s*실패|회원가입약관/.test(bodyText);
 };
 
+const loginCheonyu = async (page: any, username: string, password: string) => {
+  await page.goto(CHEONYU_LOGIN_URL, { waitUntil: "networkidle", timeout: 45000 });
+  await page.locator('input[type="text"], input[name="id"], input[name="user_id"]').first().fill(username);
+  await page.locator('input[type="password"], input[name="passwd"], input[name="password"]').first().fill(password);
+  await Promise.all([
+    page.waitForLoadState("networkidle", { timeout: 45000 }).catch(() => null),
+    page.locator('button[type="submit"], input[type="submit"]').first().click(),
+  ]);
+  await page.waitForTimeout(1200);
+  const currentUrl = page.url();
+  const bodyText = await page.locator("body").innerText({ timeout: 10000 }).catch(() => "");
+  return !/\/member\/login\.html/i.test(currentUrl) && !/아이디|비밀번호/.test(bodyText.slice(0, 300));
+};
+
 const normalizeToyboxCategoryId = (input: { xcode?: string | null; mcode?: string | null; scode?: string | null }) => {
   const x = String(input.xcode || "").trim();
   const m = String(input.mcode || "").trim();
@@ -1405,6 +1437,164 @@ const getNextKidsVillagePageUrlFromCurrentPage = async (page: any): Promise<stri
 
     return (prioritized || candidates[0])?.href || null;
   });
+};
+
+const normalizeCheonyuListUrl = (rawUrl: string) => {
+  const url = new URL(rawUrl);
+  if (url.hostname === "www.cheonyu.com") url.hostname = "cheonyu.com";
+  if (url.pathname === "/product/pdtList") url.pathname = "/product/list.html";
+  return url.toString();
+};
+
+const collectCheonyuListRowsFromCurrentPage = async (page: any): Promise<CheonyuListRowSnapshot[]> => {
+  return await page.evaluate(() => {
+    const clean = (value: string | null | undefined) => String(value || "").replace(/\s+/g, " ").trim();
+    const absolute = (href: string | null | undefined) => {
+      try {
+        return href ? new URL(href, location.href).toString() : null;
+      } catch {
+        return null;
+      }
+    };
+    const sourceCategoryId = (() => {
+      try {
+        const cateIDX = new URL(location.href).searchParams.get("cateIDX");
+        return cateIDX ? `cheonyu:category:${cateIDX}` : null;
+      } catch {
+        return null;
+      }
+    })();
+    const sourceCategoryName = clean(
+      document.querySelector(".cate-title")?.textContent ||
+        document.querySelector("#page_navi .dropdown > a")?.textContent ||
+        document.querySelector(".locationNew b")?.textContent ||
+        "Cheonyu"
+    );
+    const seen = new Set<string>();
+
+    return Array.from(document.querySelectorAll<HTMLElement>(".m_list li, .sum_box .box"))
+      .map((card) => {
+        const link = card.querySelector<HTMLAnchorElement>('a[href*="/product/view.html"][href*="qIDX="]');
+        const detailUrl = absolute(link?.getAttribute("href") || null);
+        if (!detailUrl || seen.has(detailUrl)) return null;
+        seen.add(detailUrl);
+
+        const titleNode = card.querySelector<HTMLElement>(".m_pdt_list_name, .text");
+        const titleClone = titleNode?.cloneNode(true) as HTMLElement | undefined;
+        titleClone?.querySelectorAll("span").forEach((span) => span.remove());
+        const title = clean(titleClone?.textContent || link?.getAttribute("title") || link?.textContent || "").replace(/바로가기$/, "").trim();
+        const image = absolute(card.querySelector<HTMLImageElement>("img")?.getAttribute("src") || null);
+        const priceText = clean(
+          card.querySelector<HTMLElement>(".m_pdt_list_price")?.textContent ||
+            card.querySelector<HTMLElement>(".price-dollar, .price")?.textContent ||
+            card.textContent ||
+            ""
+        );
+
+        return {
+          detailUrl,
+          title,
+          image,
+          priceText,
+          sourceCategoryId,
+          sourceCategoryName,
+        };
+      })
+      .filter(Boolean);
+  });
+};
+
+const getNextCheonyuPageUrlFromCurrentPage = async (page: any): Promise<string | null> => {
+  return await page.evaluate(() => {
+    const current = new URL(location.href);
+    const currentPage = Number(current.searchParams.get("page") || "1");
+    const candidates = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href*="page="]'))
+      .map((a) => {
+        try {
+          const url = new URL(a.href, location.href);
+          const pageNo = Number(url.searchParams.get("page") || "");
+          return Number.isFinite(pageNo) && pageNo > currentPage ? { href: url.toString(), pageNo } : null;
+        } catch {
+          return null;
+        }
+      })
+      .filter((item): item is { href: string; pageNo: number } => Boolean(item))
+      .sort((a, b) => a.pageNo - b.pageNo);
+    return candidates[0]?.href || null;
+  });
+};
+
+const collectCheonyuListRows = async (page: any, targetUrl: string, includeNextPages = true) => {
+  const rows: CheonyuListRowSnapshot[] = [];
+  const visitedProducts = new Set<string>();
+  const visitedPages = new Set<string>();
+  let nextUrl: string | null = normalizeCheonyuListUrl(targetUrl);
+
+  while (nextUrl && rows.length < MAX_IMPORT_ROWS_PER_TARGET) {
+    if (visitedPages.has(nextUrl)) break;
+    visitedPages.add(nextUrl);
+
+    await page.goto(nextUrl, { waitUntil: "networkidle", timeout: 45000 });
+    await page.waitForTimeout(800);
+    const currentRows = await collectCheonyuListRowsFromCurrentPage(page);
+    for (const row of currentRows) {
+      if (!row.detailUrl || visitedProducts.has(row.detailUrl)) continue;
+      visitedProducts.add(row.detailUrl);
+      rows.push(row);
+      if (rows.length >= MAX_IMPORT_ROWS_PER_TARGET) break;
+    }
+
+    nextUrl = includeNextPages ? await getNextCheonyuPageUrlFromCurrentPage(page) : null;
+  }
+
+  return rows;
+};
+
+const scrapeCheonyuDetail = async (page: any, detailUrl: string): Promise<CheonyuDetailSnapshot> => {
+  await page.goto(detailUrl, { waitUntil: "networkidle", timeout: 45000 });
+  if (/\/member\/login\.html/i.test(page.url())) {
+    throw new Error("Cheonyu 商品詳情需要登入後才能讀取");
+  }
+
+  return await page.evaluate(() => {
+    const clean = (value: string | null | undefined) => String(value || "").replace(/\s+/g, " ").trim();
+    const absolute = (href: string | null | undefined) => {
+      try {
+        return href ? new URL(href, location.href).toString() : null;
+      } catch {
+        return null;
+      }
+    };
+    const readImage = (img: HTMLImageElement) => absolute(img.getAttribute("src") || img.getAttribute("data-src") || null);
+    const title = clean(
+      document.querySelector<HTMLElement>(".pdt_name, .pdt_title, h3, h2")?.textContent ||
+        document.querySelector<HTMLImageElement>("#PhotoMain")?.alt ||
+        document.title.replace(/-B2B.*$/, "")
+    );
+    const priceText = clean(document.querySelector<HTMLElement>(".view-tb.ar-table")?.textContent || document.body.textContent || "");
+    const mainImages = Array.from(document.querySelectorAll<HTMLImageElement>("#PhotoMain, #viewSmallPhoto img"))
+      .map((img) => readImage(img))
+      .filter((src): src is string => Boolean(src))
+      .map((src) => src.replace("/thumb/", "/"));
+    const descriptionRoot = document.querySelector<HTMLElement>("#viewPcontent");
+    const descriptionImages = Array.from(descriptionRoot?.querySelectorAll<HTMLImageElement>("img") || [])
+      .map((img) => readImage(img))
+      .filter((src): src is string => Boolean(src));
+
+    return {
+      title,
+      priceText,
+      mainImages: Array.from(new Set(mainImages)),
+      descriptionHtml: descriptionRoot?.innerHTML || "",
+      descriptionImages: Array.from(new Set(descriptionImages)),
+    };
+  }).then((detail: CheonyuDetailSnapshot & { priceText?: string }) => ({
+    title: detail.title,
+    priceKRW: parseCheonyuPriceKRW(detail.priceText || ""),
+    mainImages: detail.mainImages,
+    descriptionHtml: detail.descriptionHtml,
+    descriptionImages: detail.descriptionImages,
+  }));
 };
 
 const collectToyboxListRowsFromCurrentPage = async (page: any) => {
@@ -1740,6 +1930,57 @@ const probeSingleKidsVillageTarget = async (
   }
 };
 
+const probeSingleCheonyuTarget = async (
+  page: any,
+  targetUrl: string
+): Promise<DosoProbeTargetResult> => {
+  try {
+    const rows = await collectCheonyuListRows(page, targetUrl, false);
+    const title = (await page.title().catch(() => "")) || "Cheonyu";
+    const sampleRows = rows.slice(0, 3);
+    let detailFields = { title: false, price: false, images: false, description: false, specs: false };
+    if (sampleRows[0]?.detailUrl) {
+      const detail = await scrapeCheonyuDetail(page, sampleRows[0].detailUrl);
+      detailFields = {
+        title: Boolean(detail.title),
+        price: Boolean(detail.priceKRW),
+        images: detail.mainImages.length > 0,
+        description: Boolean(detail.descriptionHtml || detail.descriptionImages.length > 0),
+        specs: true,
+      };
+    }
+
+    return {
+      url: targetUrl,
+      title,
+      list_ok: rows.length > 0,
+      total_count: rows.length,
+      estimated_sessions: rows.length > 0 ? Math.ceil(rows.length / IMPORT_BATCH_SIZE) : 0,
+      samples: sampleRows.map((row, idx) => ({
+        id: extractCheonyuProductCode(row.detailUrl, `cy-sample-${idx + 1}`),
+        title: row.title,
+        price_twd: null,
+        price_jpy: parseCheonyuPriceKRW(row.priceText || ""),
+        detail_url: row.detailUrl,
+      })),
+      detail_ok: detailFields.title && detailFields.price && detailFields.images,
+      detail_fields_presence: detailFields,
+    };
+  } catch (err) {
+    return {
+      url: targetUrl,
+      title: "Cheonyu",
+      list_ok: false,
+      total_count: 0,
+      estimated_sessions: 0,
+      samples: [],
+      detail_ok: false,
+      detail_fields_presence: { title: false, price: false, images: false, description: false, specs: false },
+      error: err instanceof Error ? err.message : "Cheonyu target probe failed",
+    };
+  }
+};
+
 const runToyboxImportPreview = async (
   page: any,
   targets: string[],
@@ -1898,6 +2139,55 @@ const runKidsVillageImportPreview = async (
   }
 };
 
+const runCheonyuImportPreview = async (
+  page: any,
+  targets: string[],
+  includeDetails: boolean
+) => {
+  const products: DosoImportProduct[] = [];
+  const targetResults: DosoImportTargetResult[] = [];
+
+  for (const target of targets) {
+    try {
+      const rows = await collectCheonyuListRows(page, target, true);
+      const title = (await page.title().catch(() => "")) || "Cheonyu";
+      const mapped: DosoImportProduct[] = [];
+
+      for (const row of rows) {
+        const product = mapCheonyuListRowToProduct(target, row);
+        if (!product) continue;
+        if (includeDetails && row.detailUrl) {
+          const detail = await scrapeCheonyuDetail(page, row.detailUrl);
+          mapped.push(mergeCheonyuDetailIntoProduct(product, detail));
+        } else {
+          mapped.push(product);
+        }
+      }
+
+      products.push(...mapped);
+      targetResults.push({ url: target, title, count: mapped.length });
+    } catch (err) {
+      targetResults.push({
+        url: target,
+        title: "Cheonyu",
+        count: 0,
+        error: err instanceof Error ? err.message : "Cheonyu target import preview failed",
+      });
+    }
+  }
+
+  const dedup = new Map<string, DosoImportProduct>();
+  for (const p of products) {
+    dedup.set(p.productCode, p);
+  }
+
+  return {
+    login_ok: true,
+    products: Array.from(dedup.values()),
+    targets: targetResults,
+  } satisfies DosoImportResponse;
+};
+
 export async function runDosoProbe(input: {
   username: string;
   password: string;
@@ -1924,6 +2214,7 @@ export async function runDosoProbe(input: {
     const targets = (input.targets && input.targets.length > 0 ? input.targets : DEFAULT_DOSO_TARGETS).slice(0, 20);
     const allToybox = targets.length > 0 && targets.every((target) => isToyboxUrl(target));
     const allKidsVillage = targets.length > 0 && targets.every((target) => isKidsVillageUrl(target));
+    const allCheonyu = targets.length > 0 && targets.every((target) => isCheonyuUrl(target));
 
     if (allToybox) {
       const loginOk = await loginToybox(page, input.username, input.password);
@@ -1959,6 +2250,27 @@ export async function runDosoProbe(input: {
       const results: DosoProbeTargetResult[] = [];
       for (const target of targets) {
         results.push(await probeSingleKidsVillageTarget(page, target));
+      }
+
+      return {
+        login_ok: true,
+        targets: results,
+      };
+    }
+
+    if (allCheonyu) {
+      const loginOk = await loginCheonyu(page, input.username, input.password);
+      if (!loginOk) {
+        return {
+          login_ok: false,
+          targets: [],
+          error: "Cheonyu 登入失敗，用戶名稱或密碼錯誤",
+        };
+      }
+
+      const results: DosoProbeTargetResult[] = [];
+      for (const target of targets) {
+        results.push(await probeSingleCheonyuTarget(page, target));
       }
 
       return {
@@ -2033,6 +2345,7 @@ export async function runDosoImportPreview(input: {
     const includeDetails = input.includeDetails !== false;
     const allToybox = targets.length > 0 && targets.every((target) => isToyboxUrl(target));
     const allKidsVillage = targets.length > 0 && targets.every((target) => isKidsVillageUrl(target));
+    const allCheonyu = targets.length > 0 && targets.every((target) => isCheonyuUrl(target));
 
     if (allToybox) {
       const loginOk = await loginToybox(page, input.username, input.password);
@@ -2060,6 +2373,20 @@ export async function runDosoImportPreview(input: {
       }
 
       return await runKidsVillageImportPreview(page, targets, includeDetails);
+    }
+
+    if (allCheonyu) {
+      const loginOk = await loginCheonyu(page, input.username, input.password);
+      if (!loginOk) {
+        return {
+          login_ok: false,
+          products: [],
+          targets: [],
+          error: "Cheonyu 登入失敗，用戶名稱或密碼錯誤",
+        };
+      }
+
+      return await runCheonyuImportPreview(page, targets, includeDetails);
     }
 
     await page.goto(LOGIN_URL, { waitUntil: "networkidle", timeout: 45000 });
@@ -2336,6 +2663,36 @@ const extractKidsVillageSourceCategories = async (page: any, directoryUrl: strin
   });
 };
 
+const extractCheonyuSourceCategories = async (page: any, directoryUrl: string) => {
+  await page.goto(normalizeCheonyuListUrl(directoryUrl), { waitUntil: "networkidle", timeout: 45000 });
+  return await page.evaluate(() => {
+    const clean = (value: string | null | undefined) => String(value || "").replace(/\s+/g, " ").trim();
+    const nodes: DosoSourceCategoryNode[] = [];
+    const seen = new Set<string>();
+    for (const a of Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href*="/product/list.html?cateIDX="]'))) {
+      try {
+        const url = new URL(a.href, location.href);
+        const cateIDX = url.searchParams.get("cateIDX") || "";
+        const name = clean(a.textContent || "");
+        if (!cateIDX || !name) continue;
+        const sourceId = `cheonyu:category:${cateIDX}`;
+        if (seen.has(sourceId)) continue;
+        seen.add(sourceId);
+        nodes.push({
+          source_category_id: sourceId,
+          name,
+          parent_id: null,
+          level: 1,
+          directory_url: "https://cheonyu.com/product/list.html",
+        });
+      } catch {
+        // noop
+      }
+    }
+    return nodes;
+  });
+};
+
 export async function runDosoSourceCategoryRefresh(input: {
   username: string;
   password: string;
@@ -2349,6 +2706,7 @@ export async function runDosoSourceCategoryRefresh(input: {
     const targets = (input.targets && input.targets.length > 0 ? input.targets : DEFAULT_DOSO_TARGETS).slice(0, 20);
     const allToybox = targets.length > 0 && targets.every((target) => isToyboxUrl(target));
     const allKidsVillage = targets.length > 0 && targets.every((target) => isKidsVillageUrl(target));
+    const allCheonyu = targets.length > 0 && targets.every((target) => isCheonyuUrl(target));
 
     if (allToybox) {
       const loginOk = await loginToybox(page, input.username, input.password);
@@ -2391,6 +2749,31 @@ export async function runDosoSourceCategoryRefresh(input: {
       for (const target of targets) {
         try {
           directories[target] = await extractKidsVillageSourceCategories(page, target);
+        } catch {
+          directories[target] = [];
+        }
+      }
+
+      return {
+        login_ok: true,
+        directories,
+      };
+    }
+
+    if (allCheonyu) {
+      const loginOk = await loginCheonyu(page, input.username, input.password);
+      if (!loginOk) {
+        return {
+          login_ok: false,
+          directories: {},
+          error: "Cheonyu 登入失敗，用戶名稱或密碼錯誤",
+        };
+      }
+
+      const directories: Record<string, DosoSourceCategoryNode[]> = {};
+      for (const target of targets) {
+        try {
+          directories[target] = await extractCheonyuSourceCategories(page, target);
         } catch {
           directories[target] = [];
         }

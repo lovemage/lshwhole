@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
 
     // 穩定取分類關聯：避免某些環境下 nested relation 取不到 product_category_map
     const productIds = (data || []).map((p: any) => Number(p.id)).filter((n: number) => Number.isInteger(n) && n > 0);
-    let categoryIdMap = new Map<number, number[]>();
+    const categoryIdMap = new Map<number, number[]>();
     if (productIds.length > 0) {
       const { data: categoryRows, error: categoryMapError } = await admin
         .from("product_category_map")

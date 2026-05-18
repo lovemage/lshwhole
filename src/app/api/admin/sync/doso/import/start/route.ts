@@ -33,7 +33,9 @@ const parseSingleTarget = (input: unknown) => {
         const allowed = new URL(option.url);
         const allowedPath = allowed.pathname.replace(/\/$/, "");
         const inputPath = url.pathname.replace(/\/$/, "");
-        if (url.hostname !== allowed.hostname) return false;
+        const inputHost = url.hostname.replace(/^www\./, "");
+        const allowedHost = allowed.hostname.replace(/^www\./, "");
+        if (inputHost !== allowedHost) return false;
         if (!allowedPath) return true;
         return inputPath.startsWith(allowedPath);
       } catch {
@@ -117,7 +119,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const includeDetails = source === "kidsvillage";
+    const includeDetails = source === "kidsvillage" || source === "cheonyu";
 
     const preview = await runDosoImportPreview({
       username: credentials.username,

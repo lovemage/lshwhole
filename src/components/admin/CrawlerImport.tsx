@@ -55,6 +55,7 @@ const emptyCredentialForms = (): Record<DosoCredentialSource, CredentialFormStat
   doso: { username: "", password: "", hasSavedPassword: false },
   toybox: { username: "", password: "", hasSavedPassword: false },
   kidsvillage: { username: "", password: "", hasSavedPassword: false },
+  cheonyu: { username: "", password: "", hasSavedPassword: false },
 });
 
 export default function CrawlerImport() {

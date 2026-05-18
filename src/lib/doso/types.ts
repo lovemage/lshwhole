@@ -42,6 +42,7 @@ export interface DosoImportProduct {
   images: string[];
   wholesalePriceTWD?: number | null;
   wholesalePriceJPY?: number | null;
+  wholesalePriceKRW?: number | null;
   sourceCategoryId?: string | null;
   sourceCategoryName?: string | null;
   sourceDirectoryUrl?: string | null;

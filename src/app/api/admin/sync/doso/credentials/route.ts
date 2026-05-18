@@ -13,12 +13,13 @@ const CREDENTIAL_LABELS: Record<CredentialSource, string> = {
   doso: "DOSO",
   toybox: "Toybox",
   kidsvillage: "Kids Village",
+  cheonyu: "Cheonyu 雜貨",
 };
 
 const parseCredentialSource = (request: NextRequest, bodySource?: unknown): CredentialSource => {
   const sourceFromQuery = request.nextUrl.searchParams.get("source");
   const raw = (typeof bodySource === "string" ? bodySource : sourceFromQuery || "doso").toLowerCase();
-  if (raw === "toybox" || raw === "kidsvillage") return raw;
+  if (raw === "toybox" || raw === "kidsvillage" || raw === "cheonyu") return raw;
   return "doso";
 };
 

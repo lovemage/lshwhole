@@ -34,7 +34,9 @@ export async function POST(request: NextRequest) {
               const allowed = new URL(option.url);
               const allowedPath = allowed.pathname.replace(/\/$/, "");
               const inputPath = inputUrl.pathname.replace(/\/$/, "");
-              if (inputUrl.hostname !== allowed.hostname) return false;
+              const inputHost = inputUrl.hostname.replace(/^www\./, "");
+              const allowedHost = allowed.hostname.replace(/^www\./, "");
+              if (inputHost !== allowedHost) return false;
               if (!allowedPath) return true;
               return inputPath.startsWith(allowedPath);
             } catch {
