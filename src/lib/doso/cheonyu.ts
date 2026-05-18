@@ -2,6 +2,8 @@ import type { DosoImportProduct } from "@/lib/doso/types";
 
 const KRW_TO_TWD_RATE = 0.024;
 
+export const CHEONYU_LOGIN_SUBMIT_SELECTOR = 'button[type="submit"], input[type="submit"], input[type="image"], .newloginbtn';
+
 export interface CheonyuListRowSnapshot {
   detailUrl: string;
   title: string;

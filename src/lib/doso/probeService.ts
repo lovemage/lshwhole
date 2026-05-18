@@ -2,6 +2,7 @@ import { chromium } from "playwright";
 import { DEFAULT_DOSO_TARGETS } from "@/lib/doso/targets";
 import { getDosoCatalogListConfig } from "@/lib/doso/catalogConfigs";
 import {
+  CHEONYU_LOGIN_SUBMIT_SELECTOR,
   extractCheonyuProductCode,
   mapCheonyuListRowToProduct,
   mergeCheonyuDetailIntoProduct,
@@ -1238,7 +1239,7 @@ const loginCheonyu = async (page: any, username: string, password: string) => {
   await page.locator('input[type="password"], input[name="passwd"], input[name="password"]').first().fill(password);
   await Promise.all([
     page.waitForLoadState("networkidle", { timeout: 45000 }).catch(() => null),
-    page.locator('button[type="submit"], input[type="submit"]').first().click(),
+    page.locator(CHEONYU_LOGIN_SUBMIT_SELECTOR).first().click(),
   ]);
   await page.waitForTimeout(1200);
   const currentUrl = page.url();

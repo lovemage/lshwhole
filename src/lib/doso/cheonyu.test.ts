@@ -6,9 +6,14 @@ import {
   parseCheonyuPriceKRW,
   type CheonyuDetailSnapshot,
   type CheonyuListRowSnapshot,
+  CHEONYU_LOGIN_SUBMIT_SELECTOR,
   mapCheonyuListRowToProduct,
   mergeCheonyuDetailIntoProduct,
 } from "./cheonyu.ts";
+
+test("Cheonyu login submit selector includes image submit buttons", () => {
+  assert.match(CHEONYU_LOGIN_SUBMIT_SELECTOR, /input\[type="image"\]/);
+});
 
 test("extracts Cheonyu product code from detail URL", () => {
   assert.equal(extractCheonyuProductCode("https://cheonyu.com/product/view.html?qIDX=91879"), "cy-91879");
