@@ -40,6 +40,7 @@ export interface DosoImportProduct {
   description: string;
   url: string | null;
   images: string[];
+  descriptionImages?: string[];
   wholesalePriceTWD?: number | null;
   wholesalePriceJPY?: number | null;
   wholesalePriceKRW?: number | null;

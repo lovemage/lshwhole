@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import Script from "next/script";
 import { supabase } from "@/lib/supabase";
+import { mapRawCrawlerImportItem } from "@/lib/doso/importMapping";
 import {
   DEFAULT_DOSO_TARGETS,
   DOSO_SOURCE_OPTIONS,
@@ -533,38 +534,7 @@ export default function CrawlerImport() {
     e.target.value = "";
   };
 
-  const mapRawImportItem = (it: any) => {
-    const images = Array.isArray(it.images)
-      ? it.images
-      : Array.isArray(it.imgs)
-        ? it.imgs
-        : Array.isArray(it.imageUrls)
-          ? it.imageUrls
-          : it.image
-            ? [it.image]
-            : [];
-
-    const _images = images.map((url: string) => ({
-      url,
-      isProduct: true,
-      isDescription: false,
-    }));
-
-    return {
-      productCode: it.productCode || it.code || it.sku || it.id || "無代碼",
-      title: it.title || it.name || "無標題",
-      description: it.description || it.desc || "",
-      wholesalePriceJPY: it.wholesalePriceJPY || it.priceJPY || it.price_jpy || it.jpy || null,
-      wholesalePriceKRW: it.wholesalePriceKRW || it.priceKRW || it.price_krw || it.krw || null,
-      wholesalePriceTWD: it.wholesalePriceTWD || it.priceTWD || it.twd || null,
-      url: it.url || it.link || null,
-      sourceCategoryId: it.sourceCategoryId || it.source_category_id || it.category_id || null,
-      sourceCategoryName: it.sourceCategoryName || it.source_category_name || it.category_name || null,
-      sourceDirectoryUrl: it.sourceDirectoryUrl || it.source_directory_url || null,
-      images,
-      _images,
-    };
-  };
+  const mapRawImportItem = mapRawCrawlerImportItem;
 
   const parseJson = (input: any) => {
     const arr = Array.isArray(input) ? input : [input];
@@ -1187,12 +1157,10 @@ export default function CrawlerImport() {
     setSpecs([]);
     setVariants([]);
 
-    const images = Array.isArray(p.images) ? [...p.images] : [];
-    setCandidateImages(images.map((url: string) => ({
-      url,
-      isProduct: true, // Default to product image
-      isDescription: false
-    })));
+    const images = Array.isArray(p._images)
+      ? p._images
+      : mapRawCrawlerImportItem(p)._images;
+    setCandidateImages(images.map((img: CandidateImage) => ({ ...img })));
 
     setShowPublish(true);
   };

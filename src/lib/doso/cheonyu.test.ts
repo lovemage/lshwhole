@@ -47,12 +47,12 @@ test("maps a Cheonyu list card to import product shape", () => {
   });
 });
 
-test("merges Cheonyu detail data with main image and description long images", () => {
+test("merges Cheonyu detail data with description long images separated from product images", () => {
   const detail: CheonyuDetailSnapshot = {
     title: "초등 SKY 스카이 오답노트",
     priceKRW: 2520,
     mainImages: ["https://cheonyu.com/_DATA/product/91800/91879_1777879883.jpg"],
-    descriptionHtml: '<p><img src="https://image1.cheonyu.com/202605041777879897.jpg"></p>',
+    descriptionHtml: '<img src="https://image1.cheonyu.com/202605041777879897.jpg"><br style="clear:both;">',
     descriptionImages: ["https://image1.cheonyu.com/202605041777879897.jpg"],
   };
 
@@ -67,13 +67,34 @@ test("merges Cheonyu detail data with main image and description long images", (
   assert.deepEqual(mergeCheonyuDetailIntoProduct(product, detail), {
     ...product,
     title: "초등 SKY 스카이 오답노트",
-    description: '<p><img src="https://image1.cheonyu.com/202605041777879897.jpg"></p>',
+    description: "",
     images: [
       "https://cheonyu.com/_DATA/product/91800/thumb/91879_1777879883.jpg",
       "https://cheonyu.com/_DATA/product/91800/91879_1777879883.jpg",
-      "https://image1.cheonyu.com/202605041777879897.jpg",
     ],
+    descriptionImages: ["https://image1.cheonyu.com/202605041777879897.jpg"],
     wholesalePriceTWD: 60,
     wholesalePriceKRW: 2520,
   });
+});
+
+test("keeps Cheonyu textual detail description when present", () => {
+  const product = mapCheonyuListRowToProduct("https://cheonyu.com/product/list.html?cateIDX=1", {
+    detailUrl: "https://cheonyu.com/product/view.html?qIDX=91880",
+    title: "old title",
+    image: "https://cheonyu.com/_DATA/product/91800/thumb/91880.jpg",
+    priceText: "",
+  });
+
+  assert.ok(product);
+  assert.equal(
+    mergeCheonyuDetailIntoProduct(product, {
+      title: "상품명",
+      priceKRW: null,
+      mainImages: [],
+      descriptionHtml: "<p>상품 설명</p>",
+      descriptionImages: [],
+    }).description,
+    "<p>상품 설명</p>"
+  );
 });

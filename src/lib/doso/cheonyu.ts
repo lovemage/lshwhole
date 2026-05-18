@@ -23,6 +23,16 @@ export interface CheonyuDetailSnapshot {
 
 const unique = (values: string[]) => Array.from(new Set(values.map((x) => x.trim()).filter(Boolean)));
 
+const hasTextDescription = (html: string) => {
+  const text = html
+    .replace(/<img\b[^>]*>/gi, "")
+    .replace(/<br\b[^>]*>/gi, "")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .trim();
+  return Boolean(text);
+};
+
 const krwToTwd = (krw: number | null | undefined) => {
   if (typeof krw !== "number" || !Number.isFinite(krw) || krw <= 0) return null;
   return Math.round(krw * KRW_TO_TWD_RATE);
@@ -75,11 +85,13 @@ export const mergeCheonyuDetailIntoProduct = (
   detail: CheonyuDetailSnapshot
 ): DosoImportProduct => {
   const priceKRW = detail.priceKRW ?? product.wholesalePriceKRW ?? null;
+  const descriptionImages = unique([...(product.descriptionImages || []), ...detail.descriptionImages]);
   return {
     ...product,
     title: detail.title || product.title,
-    description: detail.descriptionHtml || product.description,
-    images: unique([...product.images, ...detail.mainImages, ...detail.descriptionImages]),
+    description: hasTextDescription(detail.descriptionHtml) ? detail.descriptionHtml : product.description,
+    images: unique([...product.images, ...detail.mainImages]),
+    descriptionImages,
     wholesalePriceTWD: krwToTwd(priceKRW) ?? product.wholesalePriceTWD,
     wholesalePriceKRW: priceKRW,
   };
