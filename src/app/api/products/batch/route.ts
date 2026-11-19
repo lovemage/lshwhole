@@ -42,6 +42,78 @@ const buildVariantOptions = (specs: TemplateSpec[]) => {
 
 const isMissingVariantNameColumnError = (error: { code?: string; message?: string } | null | undefined) =>
   error?.code === "PGRST204" && (error?.message || "").includes("'name' column");
+const isMissingVariantOptionsColumnError = (error: { code?: string; message?: string } | null | undefined) =>
+  error?.code === "PGRST204" && (error?.message || "").includes("'options' column");
+
+const insertVariantsWithFallback = async (
+  admin: ReturnType<typeof supabaseAdmin>,
+  variantRowsBase: Array<{
+    product_id: number;
+    variantLabel: string;
+    options: Record<string, string>;
+    price: number;
+    stock: number;
+    sku: string;
+  }>
+) => {
+  const rowsWithNameAndOptions = variantRowsBase.map((row) => ({
+    product_id: row.product_id,
+    name: row.variantLabel,
+    options: row.options,
+    price: row.price,
+    stock: row.stock,
+    sku: row.sku,
+  }));
+  const { error: firstErr } = await admin.from("product_variants").insert(rowsWithNameAndOptions);
+  if (!firstErr) return null;
+
+  if (isMissingVariantNameColumnError(firstErr)) {
+    const rowsWithSpecNameAndOptions = variantRowsBase.map((row) => ({
+      product_id: row.product_id,
+      spec_name: row.variantLabel,
+      options: row.options,
+      price: row.price,
+      stock: row.stock,
+      sku: row.sku,
+    }));
+    const { error: secondErr } = await admin.from("product_variants").insert(rowsWithSpecNameAndOptions);
+    if (!secondErr) return null;
+    if (!isMissingVariantOptionsColumnError(secondErr)) return secondErr;
+
+    const rowsWithSpecNameOnly = variantRowsBase.map((row) => ({
+      product_id: row.product_id,
+      spec_name: row.variantLabel,
+      price: row.price,
+      stock: row.stock,
+      sku: row.sku,
+    }));
+    const { error: thirdErr } = await admin.from("product_variants").insert(rowsWithSpecNameOnly);
+    return thirdErr || null;
+  }
+
+  if (!isMissingVariantOptionsColumnError(firstErr)) return firstErr;
+
+  const rowsWithNameOnly = variantRowsBase.map((row) => ({
+    product_id: row.product_id,
+    name: row.variantLabel,
+    price: row.price,
+    stock: row.stock,
+    sku: row.sku,
+  }));
+  const { error: fourthErr } = await admin.from("product_variants").insert(rowsWithNameOnly);
+  if (!fourthErr) return null;
+  if (!isMissingVariantNameColumnError(fourthErr)) return fourthErr;
+
+  const rowsWithSpecNameOnly = variantRowsBase.map((row) => ({
+    product_id: row.product_id,
+    spec_name: row.variantLabel,
+    price: row.price,
+    stock: row.stock,
+    sku: row.sku,
+  }));
+  const { error: fifthErr } = await admin.from("product_variants").insert(rowsWithSpecNameOnly);
+  return fifthErr || null;
+};
 
 export async function POST(request: NextRequest) {
   try {
@@ -298,31 +370,8 @@ export async function POST(request: NextRequest) {
         );
 
         if (variantRowsBase.length > 0) {
-          const variantRowsWithName = variantRowsBase.map((row) => ({
-            product_id: row.product_id,
-            name: row.variantLabel,
-            options: row.options,
-            price: row.price,
-            stock: row.stock,
-            sku: row.sku,
-          }));
-          const { error: variantInsertErr } = await admin.from("product_variants").insert(variantRowsWithName);
-          if (variantInsertErr && isMissingVariantNameColumnError(variantInsertErr)) {
-            const variantRowsWithSpecName = variantRowsBase.map((row) => ({
-              product_id: row.product_id,
-              spec_name: row.variantLabel,
-              options: row.options,
-              price: row.price,
-              stock: row.stock,
-              sku: row.sku,
-            }));
-            const { error: fallbackVariantInsertErr } = await admin.from("product_variants").insert(variantRowsWithSpecName);
-            if (fallbackVariantInsertErr) {
-              return NextResponse.json({ error: fallbackVariantInsertErr.message }, { status: 400 });
-            }
-          } else if (variantInsertErr) {
-            return NextResponse.json({ error: variantInsertErr.message }, { status: 400 });
-          }
+          const variantInsertErr = await insertVariantsWithFallback(admin, variantRowsBase);
+          if (variantInsertErr) return NextResponse.json({ error: variantInsertErr.message }, { status: 400 });
         }
       }
 

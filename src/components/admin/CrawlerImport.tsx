@@ -173,6 +173,7 @@ export default function CrawlerImport() {
   const [currentSyncTargetUrl, setCurrentSyncTargetUrl] = useState("");
   const [importSession, setImportSession] = useState<DosoImportSessionProgress | null>(null);
   const [importSessions, setImportSessions] = useState<DosoImportSessionProgress[]>([]);
+  const [refreshingSessions, setRefreshingSessions] = useState(false);
   const [runBatchSize, setRunBatchSize] = useState(20);
   const [importStorageKey, setImportStorageKey] = useState("dosoImport:anon");
   const selectedTargetOption = getTargetOptionByUrl(selectedTargetPreset);
@@ -567,6 +568,7 @@ export default function CrawlerImport() {
 
   const fetchImportSessions = async (keepCurrent = true, preferredSessionId?: number | null) => {
     try {
+      setRefreshingSessions(true);
       const accessToken = await getAdminAccessToken();
       if (!accessToken) return;
 
@@ -615,6 +617,8 @@ export default function CrawlerImport() {
       }
     } catch {
       // noop
+    } finally {
+      setRefreshingSessions(false);
     }
   };
 
@@ -2183,18 +2187,18 @@ export default function CrawlerImport() {
             <button
               onClick={handleDosoImport}
               disabled={importLoading}
-              className="inline-flex items-center gap-2 rounded-lg border border-border-light bg-card-light px-4 py-2 text-sm font-bold text-text-primary-light hover:bg-primary/10 disabled:opacity-50"
+              className="inline-flex h-10 items-center gap-2 rounded-lg border border-border-light bg-card-light px-4 text-sm font-bold text-text-primary-light hover:bg-primary/10 disabled:opacity-50"
             >
               <span className="material-symbols-outlined text-base">download</span>
               {importLoading ? "處理中..." : "同步商品（建立新任務）"}
             </button>
             <button
               onClick={() => fetchImportSessions(false)}
-              disabled={importLoading}
-              className="inline-flex items-center gap-2 rounded-lg border border-border-light bg-card-light px-4 py-2 text-sm font-bold text-text-primary-light hover:bg-primary/10 disabled:opacity-50"
+              disabled={importLoading || refreshingSessions}
+              className="inline-flex h-10 items-center gap-2 rounded-lg border border-border-light bg-card-light px-4 text-sm font-bold text-text-primary-light hover:bg-primary/10 disabled:opacity-50"
             >
-              <span className="material-symbols-outlined text-base">refresh</span>
-              重新整理任務
+              <span className={`material-symbols-outlined text-base ${refreshingSessions ? "animate-spin" : ""}`}>refresh</span>
+              {refreshingSessions ? "重新整理中..." : "重新整理任務"}
             </button>
           </div>
 

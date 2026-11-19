@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
+import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 
 export default function LoginClient() {
   const router = useRouter();
@@ -22,6 +22,11 @@ export default function LoginClient() {
     setError("");
 
     try {
+      if (!isSupabaseConfigured()) {
+        setError("系統登入設定異常，請聯絡管理員");
+        return;
+      }
+
       const { data, error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -86,7 +91,7 @@ export default function LoginClient() {
       router.push(nextPath);
     } catch (err) {
       console.error("login failed", err);
-      setError("登入失敗，請稍後重試");
+      setError("登入服務連線失敗，請稍後重試");
     } finally {
       setLoading(false);
     }
